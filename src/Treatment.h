@@ -18,6 +18,7 @@ using coviter = covmap::const_iterator;
 
 const fraglen FragDefLEN = 200;
 const coval CUTOFF_STRAND_EXT_RGN = 5;
+const SSpliner::slen_t ReadSplineBASE = 10;	//half-length of moving window for reads spline
 
 // Message verbose level
 static class Verb
@@ -574,7 +575,7 @@ public:
 	//	@param rgns: potential regions
 	//	@param redifRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifRgns, fraglen splineBase = SSpliner::ReadSplineBase);
+	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifRgns, fraglen splineBase);// = SSpliner::ReadSplineBase);
 
 	//void BuildSpline(const DataSet<TreatedCover>& cover, const DataFeatureVals& rgns, fraglen splineBase = SSpliner::ReadSplineBase);
 	
