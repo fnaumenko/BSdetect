@@ -3,6 +3,7 @@
 
 //const float PI = 3.14159265F;
 
+const eCurveType CurveTYPE = SPIKED;
 const char* Verb::ValTitles[] = { "SL","RES","RT","DBG" };
 const char* Verb::ValDescr = "set verbose level:\n?  -\tsilent mode (show critical messages only)\n? -\tshow result summary\n?  -\tshow run-time information\n? -\tshow debug messages";
 Verb::eVerb Verb::_level;
@@ -809,7 +810,7 @@ void ValuesMap::BuildRegionSpline(const TreatedCover& cover, const CoverRegion& 
 	// *** spline via covmap local copy, filtering unsignificant splines
 	chrlen pos = it0->first + 1, newPos = 0;
 	bool isZeroBefore = true;
-	SSpliner spliner(SSpliner::SPIKED, splineBase);
+	SSpliner<coval> spliner(CurveTYPE, splineBase);
 	Values vals;
 
 	// adds spline, eliminating unsignificant one
@@ -878,12 +879,12 @@ void ValuesMap::BuildSpline(const TreatedCover& cover, const CoverRegions& rgns,
 
 void ValuesMap::EliminateNonOverlaps()
 {
-	EliminateNonOverlapsRegions<ValuesMap>(this, SSpliner::SilentLength(SSpliner::SPIKED, ReadSplineBASE));
+	EliminateNonOverlapsRegions<ValuesMap>(this, SSpliner<coval>::SilentLength(CurveTYPE, ReadSplineBASE));
 }
 
 void ValuesMap::Numerate()
 {
-	const fraglen overLen = SSpliner::SilentLength(SSpliner::SPIKED, ReadSplineBASE) + 10;	// minimum overlap length; 10 - min BS length !!! - constanta?
+	const fraglen overLen = SSpliner<coval>::SilentLength(CurveTYPE, ReadSplineBASE) + 10;	// minimum overlap length; 10 - min BS length !!! - constanta?
 	ValuesMap::Iter it[2]	{ this[0].begin(),	this[1].begin() };
 	ValuesMap::Iter itEnd[2]{ this[0].end(),	this[1].end()	};
 	chrlen numb = 1;
