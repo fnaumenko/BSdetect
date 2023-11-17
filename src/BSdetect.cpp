@@ -140,7 +140,7 @@ void Detector::CallBS(chrid cID)
 
 	Verb::PrintMsg(Verb::DBG, "Locate binding sites");
 	rgns.SetPotentialRegions(fragCovers, cLen, 3, false);	
-	splines.BuildSpline(readCovers, rgns, true);	_rgns.WriteChrom(cID); _fragÑovers.WriteChrom(cID);
+	splines.BuildSpline(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID); _fragÑovers.WriteChrom(cID);
 	splines.Data()->EliminateNonOverlaps();
 	splines.Data()->PrintStat(cLen);
 	splines.Data()->Numerate();

@@ -878,12 +878,12 @@ void ValuesMap::BuildSpline(const TreatedCover& cover, const CoverRegions& rgns,
 
 void ValuesMap::EliminateNonOverlaps()
 {
-	EliminateNonOverlapsRegions<ValuesMap>(this, SSpliner::SilentLength(SSpliner::SPIKED));
+	EliminateNonOverlapsRegions<ValuesMap>(this, SSpliner::SilentLength(SSpliner::SPIKED, ReadSplineBASE));
 }
 
 void ValuesMap::Numerate()
 {
-	const fraglen overLen = SSpliner::SilentLength(SSpliner::SPIKED) + 10;	// minimum overlap length; 10 - min BS length !!! - constanta?
+	const fraglen overLen = SSpliner::SilentLength(SSpliner::SPIKED, ReadSplineBASE) + 10;	// minimum overlap length; 10 - min BS length !!! - constanta?
 	ValuesMap::Iter it[2]	{ this[0].begin(),	this[1].begin() };
 	ValuesMap::Iter itEnd[2]{ this[0].end(),	this[1].end()	};
 	chrlen numb = 1;
