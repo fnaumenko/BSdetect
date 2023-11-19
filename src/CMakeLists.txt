@@ -38,7 +38,7 @@ set(Header_Files
     ${BASIC_DIR}/DataInFile.h
     ${BASIC_DIR}/OrderedData.h
     ${BASIC_DIR}/TxtFile.h
-    ${BASIC_DIR}/Spline.h
+    ${BASIC_DIR}/spline.h
     BSdetect.h
     Treatment.h
 )
@@ -50,7 +50,7 @@ set(Source_Files
     ${BASIC_DIR}/DataInFile.cpp
     ${BASIC_DIR}/OrderedData.cpp
     ${BASIC_DIR}/TxtFile.cpp
-    # ${BASIC_DIR}Spline.cpp
+    # ${BASIC_DIR}spline.cpp
     BSdetect.cpp
     Treatment.cpp
 )

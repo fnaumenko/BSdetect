@@ -18,7 +18,7 @@ using coviter = covmap::const_iterator;
 
 const fraglen FragDefLEN = 200;
 const coval CUTOFF_STRAND_EXT_RGN = 5;
-const SSpliner::slen_t ReadSplineBASE = 10;	//half-length of moving window for reads spline
+const uint16_t ReadSplineBASE = 10;	//half-length of moving window for reads spline
 
 // Message verbose level
 static class Verb
