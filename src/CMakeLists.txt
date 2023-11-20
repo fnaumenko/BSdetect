@@ -4,7 +4,6 @@ set(PROJECT_NAME BSdetect)
 project(${PROJECT_NAME})
 
 add_compile_definitions(
-	_FEATURES
 	_READS
 	_PE_READ
 	_FILE_WRITE
