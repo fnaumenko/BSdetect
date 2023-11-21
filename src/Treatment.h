@@ -1,7 +1,7 @@
 #pragma once
 #include "common.h"
 #include "OrderedData.h"
-#include "Data.h"
+#include "ChromData.h"
 #include "Spline.h"
 //#include <memory>
 #include <fstream>
