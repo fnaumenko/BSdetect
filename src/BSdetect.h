@@ -40,7 +40,7 @@ class Detector
 	OLinearWriter	  _lineWriter;
 	OBS_Map			  _bss;
 
-	RBedInFile* _file;			// needs only in constructor
+	RBedReader* _file;			// needs only in constructor
 	Reads	_reads;
 	Timer	_timer;
 
@@ -60,7 +60,7 @@ public:
 	{
 		if (Verb::Level(Verb::RT))
 			dout << inFName << '\n';
-		RBedInFile file(inFName, &cSizes, Options::GetIVal(oDUP_LVL), info, false, false);
+		RBedReader file(inFName, &cSizes, Options::GetIVal(oDUP_LVL), info, false, false);
 		_file = &file;
 		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
 		file.Pass(*this);
