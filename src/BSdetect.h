@@ -69,6 +69,7 @@ public:
 	}
 
 	// treats current item
+	//	@return: true if item is accepted
 	bool operator()() {
 		auto& rgn = _file->ItemRegion();
 		bool reverse = !_file->ItemStrand();
