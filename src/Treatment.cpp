@@ -1,4 +1,5 @@
 #include "Treatment.h"
+#include "DataReader.h"
 #include <algorithm>
 
 //const float PI = 3.14159265F;

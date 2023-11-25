@@ -1,14 +1,13 @@
 /**********************************************************
-callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
-All rights reserved.
--------------------------
-Last modified: 14.03.2021
--------------------------
-Provides main functionality
+BSdetect.h
+main class Detector
+2021 Fedor Naumenko (fedor.naumenko@gmail.com)
+Last modified: 11/25/23
 ***********************************************************/
-
 #pragma once
+
 #include "Treatment.h"
+#include "DataReader.h"
 
 enum optValue {		// options id
 	oGEN,
