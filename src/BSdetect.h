@@ -59,7 +59,7 @@ public:
 	{
 		if (Verb::Level(Verb::RT))
 			dout << inFName << '\n';
-		RBedReader file(inFName, &cSizes, Options::GetIVal(oDUP_LVL), info, false, false);
+		RBedReader file(inFName, &cSizes, BYTE(Options::GetIVal(oDUP_LVL)), info, false, false);
 		_file = &file;
 		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
 		file.Pass(*this);
@@ -81,10 +81,10 @@ public:
 	}
 
 	// Closes current chrom, open next one
-	//	@cID: current chrom ID
-	//	@cLen: chrom length
-	//	@cnt: current chrom items count
-	//	@nextcID: next chrom ID
+	//	@param cID: current chrom ID
+	//	@param cLen: chrom length
+	//	@param cnt: current chrom items count
+	//	@param nextcID: next chrom ID
 	void operator()(chrid cID, chrlen cLen, size_t cnt, chrid nextcID) {
 		if (Verb::Level(Verb::RT))
 			dout << Chrom::ShortName(nextcID) << LF;
@@ -96,11 +96,11 @@ public:
 	}
 
 	// Closes last chrom
-	//	@cID: last chrom ID
-	//	@cLen: chrom length
-	//	@cnt: last chrom items count
-	//	@tCnt: total items count
-	void operator()(chrid cID, chrlen cLen, size_t cnt, ULONG tCnt)
+	//	@param cID: last chrom ID
+	//	@param cLen: chrom length
+	//	@param cnt: last chrom items count
+	//	@param tCnt: total items count
+	void operator()(chrid cID, chrlen cLen, size_t cnt, size_t tCnt)
 	{ 
 		if (cnt) {
 			_timer.Stop("Reading alignment: ");

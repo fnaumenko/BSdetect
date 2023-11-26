@@ -65,6 +65,12 @@ const BYTE Options::UsageCount = ArrCnt(Options::Usages);
 /*****************************************/
 int main(int argc, char* argv[])
 {
+	//const BYTE BYTE_UNDEF = BYTE(-1);
+	//BYTE a = BYTE_UNDEF;
+	//cout << int(a) << LF;
+	//if (a == BYTE_UNDEF)	cout << "GOOD\n";
+	//return 0;
+
 	int fileInd = Options::Parse(argc, argv, ProgParam);
 	if (fileInd < 0)	return 1;		// wrong option or tip output
 	int ret = 0;						// main() return code
