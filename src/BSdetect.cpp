@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 28.05.2021
+Last modified: 04.28.2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -47,7 +47,7 @@ Options::Option Options::List[] = {
 	{ 'i',"save-inter",tOpt::HIDDEN,tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save intermediate data", NULL },
 	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL,
 	"print each read ambiguity, if they exist" },
-	{ 'r',"rank-score",	tOpt::NONE,	tENUM,	gOTHER, TRUE, 0, 2, (char*)Options::Booleans,
+	{ 'r',"rank-score",	tOpt::NONE,	tENUM,	gOTHER, TRUE, 0, 2, (char*)Booleans,
 	"turn on/off rendering the main result score in greyscale", NULL },
 	{ 'o', sOutput,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF,	0,	0, NULL, "output files common name", NULL },
 	{ 't',	sTime,	tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL, 0, NULL, sPrTime, NULL },
@@ -69,6 +69,7 @@ int main(int argc, char* argv[])
 	if (fileInd < 0)	return 1;		// wrong option or tip output
 	int ret = 0;						// main() return code
 
+	Chrom::SetUserChrom(Options::GetSVal(oCHROM));
 	Mutex::Init(false);
 	Timer::Enabled = Options::GetBVal(oTIME);
 	Timer timer;
@@ -85,7 +86,7 @@ int main(int argc, char* argv[])
 		//	Err(Options::OptionToStr(oGEN) + " is required while file is not BAM",
 		//		iName).Throw();
 
-		ChromSizes cSizes(gName, oCHROM, true);
+		ChromSizes cSizes(gName, true);
 		//cSizes.Print();
 		//return 0;
 		BedWriter::SetRankScore(Options::GetBVal(oRANK_SCORE));

@@ -1,5 +1,6 @@
 #pragma once
 #include "common.h"
+#include "DataReader.h"
 #include "OrderedData.h"
 #include "ChromData.h"
 #include "Spline.h"

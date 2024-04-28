@@ -2,12 +2,13 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 14.03.2021
+Last modified: 04.28.2024
 -------------------------
 Provides main functionality
 ***********************************************************/
 
 #pragma once
+#include "Options.h"
 #include "Treatment.h"
 
 enum optValue {		// options id
@@ -101,7 +102,7 @@ public:
 	//	@cLen: chrom length
 	//	@cnt: last chrom items count
 	//	@tCnt: total items count
-	void operator()(chrid cID, chrlen cLen, size_t cnt, ULONG tCnt)
+	void operator()(chrid cID, chrlen cLen, size_t cnt, size_t)
 	{ 
 		if (cnt) {
 			_timer.Stop("Reading alignment: ");

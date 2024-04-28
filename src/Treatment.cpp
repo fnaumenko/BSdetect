@@ -589,8 +589,8 @@ BedWriter::tAddScore BedWriter::fLineAddScore = nullptr;
 
 void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 {
-	const rowlen colorLen = rowlen(strlen(sGRAY));
-	const rowlen offset = AddChromToLine(cID);
+	const reclen colorLen = reclen(strlen(sGRAY));
+	const reclen offset = AddChromToLine(cID);
 
 	for (const auto& rgn : rgns) {
 		LineAddInts(rgn.Start(), rgn.End(), rgn.value, false);
@@ -605,7 +605,7 @@ void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 
 void BedWriter::WriteChromData(chrid cID, BS_Map& bss)
 {
-	const rowlen offset = AddChromToLine(cID);
+	const reclen offset = AddChromToLine(cID);
 	bool lastSep[]{ false, false };
 	chrlen bsNumb = 0;
 
@@ -653,7 +653,7 @@ void BedWriter::WriteChromData(chrid cID, BS_Map& bss)
 void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 {
 	chrlen bsNumb = 0;
-	const rowlen offset = AddChromToLine(cID);
+	const reclen offset = AddChromToLine(cID);
 
 	bss.Do([&](const vector<BS_Map::ValPos>* VP) {
 		static const string colors[]{
@@ -698,10 +698,10 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 		if (color) {
 			LineAddChar(DOT, true);
 			LineAddInts(start->first, end->first, true);
-			LineAddChars(color, rowlen(strlen(darkRed)), true);
+			LineAddChars(color, reclen(strlen(darkRed)), true);
 		}
 		else
-			LineAddChars(delims, rowlen(strlen(delims)), false);
+			LineAddChars(delims, reclen(strlen(delims)), false);
 		LineAddFloat(end->second.Score, false);			// reverse/direct ratio
 		LineToIOBuff(offset);
 
@@ -711,7 +711,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 
 void BedWriter::WriteChromROI(chrid cID, const BS_Map& bss)
 {
-	const rowlen offset = AddChromToLine(cID);
+	const reclen offset = AddChromToLine(cID);
 	chrlen bsNumb = 0;
 
 	bss.DoBasic([&](BS_Map::citer start, BS_Map::citer end) {

@@ -35,6 +35,7 @@ set(Header_Files
     ${BASIC_DIR}/common.h
     ${BASIC_DIR}/ChromData.h
     ${BASIC_DIR}/DataReader.h
+    ${BASIC_DIR}/Options.h
     ${BASIC_DIR}/OrderedData.h
     ${BASIC_DIR}/TxtFile.h
     ${BASIC_DIR}/spline.h
@@ -47,6 +48,7 @@ set(Source_Files
     ${BASIC_DIR}/common.cpp
     ${BASIC_DIR}/ChromData.cpp
     ${BASIC_DIR}/DataReader.cpp
+    ${BASIC_DIR}/Options.cpp
     ${BASIC_DIR}/OrderedData.cpp
     ${BASIC_DIR}/TxtFile.cpp
     # ${BASIC_DIR}spline.cpp
