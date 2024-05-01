@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 04.28.2024
+Last modified: 05.01.2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -81,19 +81,17 @@ int main(int argc, char* argv[])
 #ifdef MY_DEBUG
 		TreatedCover::WriteDelim = true;
 #endif
-
 		//if (!gName && !FS::HasExt(iName, FT::Ext(FT::eType::BAM)))
 		//	Err(Options::OptionToStr(oGEN) + " is required while file is not BAM",
 		//		iName).Throw();
 
 		ChromSizes cSizes(gName, true);
-		//cSizes.Print();
 		//return 0;
 		BedWriter::SetRankScore(Options::GetBVal(oRANK_SCORE));
 		Verb::Set(Options::GetUIVal(oVERB));
 		Detector bsd(iName,
-			Options::GetPartFileName(oOUTFILE, iName),
-			cSizes, 
+			FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
+			cSizes,
 			Options::GetBVal(oCOVER),
 			Options::GetBVal(oINTERM),
 			eOInfo::LAC);
