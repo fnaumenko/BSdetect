@@ -593,7 +593,7 @@ void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 	const reclen offset = AddChromToLine(cID);
 
 	for (const auto& rgn : rgns) {
-		LineAddInts(rgn.Start(), rgn.End(), rgn.value, false);
+		LineAddUInts(rgn.Start(), rgn.End(), rgn.value, false);
 		if (!rgn.value) {		// discarded items
 			LineAddChars("\t.\t.\t", 5, false);
 			LineAddInts(rgn.Start(), rgn.End(), true);
@@ -614,7 +614,7 @@ void BedWriter::WriteChromData(chrid cID, BS_Map& bss)
 		const auto& itStart = VP[1].back().Iter;
 		const auto& itEnd = VP[0].front().Iter;
 
-		LineAddInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
+		LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
 		LineAddScore(itStart->second.Score, true);					// BS score
 		
 		// *** additional regions info
@@ -671,7 +671,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 		auto addExtraLines = [=, &bsNumb](const vector<BS_Map::ValPos>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
 			if (vp.size() == 1)	return;
 			for (auto it0 = vp.begin(), it = next(it0); it != vp.end(); it0++, it++) {
-				LineAddInts(it0->Iter->first, it->Iter->first, bsNumb, true);
+				LineAddUInts(it0->Iter->first, it->Iter->first, bsNumb, true);
 				LineAddFloat(start->second.Score, true);	// BS score
 				LineAddChar(DOT, true);
 				LineAddInts(it0->Iter->first, it->Iter->first, true);
@@ -691,7 +691,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 
 		addExtraLines(VP[1]);
 		// *** add basic feature
-		LineAddInts(start->first, end->first, bsNumb, true);
+		LineAddUInts(start->first, end->first, bsNumb, true);
 		LineAddFloat(start->second.Score, true);		// BS score
 		if (end->second.Score > 2.0)		color = darkRed;
 		else if (end->second.Score < 0.5)	color = "15,15,150";
@@ -715,7 +715,7 @@ void BedWriter::WriteChromROI(chrid cID, const BS_Map& bss)
 	chrlen bsNumb = 0;
 
 	bss.DoBasic([&](BS_Map::citer start, BS_Map::citer end) {
-		LineAddInts(
+		LineAddUInts(
 			start->first - Glob::ROI_ext,
 			end->first + Glob::ROI_ext,
 			++bsNumb,
