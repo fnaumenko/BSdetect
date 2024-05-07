@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 04.28.2024
+Last modified: 05.07.2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -41,7 +41,8 @@ class Detector
 	OLinearWriter	  _lineWriter;
 	OBS_Map			  _bss;
 
-	RBedReader* _file;			// needs only in constructor
+	RBedReader* _file;		// needs only in constructor
+	FragIdent _fIdent;		// needs only in constructor
 	Reads	_reads;
 	Timer	_timer;
 
@@ -58,6 +59,7 @@ public:
 		, _derivs	 (cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
 		, _lineWriter(cSizes, 2, saveInter, outFName + ".LINE", "linear regression")
 		, _bss		 (cSizes, 1, false,	outFName + ".BSs", "called binding sites")
+		, _fIdent(true)
 	{
 		if (Verb::Level(Verb::RT))
 			dout << inFName << '\n';
@@ -75,10 +77,20 @@ public:
 		auto& rgn = _file->ItemRegion();
 		bool reverse = !_file->ItemStrand();
 
-		_frag—overs.AddExtRead(rgn, reverse, _saveCover && !IsFragMeanUnset);
+		if (_file->IsPaired()) {
+			Region frag;
+			const Read read(*_file);
+
+			if (_fIdent(read, frag))
+				_frag—overs.AddFrag(frag);
+			IsFragMeanUnset = false;
+		}
+		else {
+			_frag—overs.AddExtRead(rgn, reverse, _saveCover && !IsFragMeanUnset);
+			if (IsFragMeanUnset)
+				_reads.AddRead(rgn, reverse);
+		}
 		_read—overs.AddRead(rgn, reverse);
-		if (IsFragMeanUnset)
-			_reads.AddRead(rgn, reverse);
 		return true;
 	}
 
