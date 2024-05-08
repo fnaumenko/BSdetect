@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05.08.2024
+Last modified: 05/08/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -86,9 +86,9 @@ int main(int argc, char* argv[])
 		//	Err(Options::OptionToStr(oGEN) + " is required while file is not BAM",
 		//		iName).Throw();
 
-		ChromSizes cSizes(gName, true);
 		BedWriter::SetRankScore(Options::GetBVal(oRANK_SCORE));
 		Verb::Set(Options::GetUIVal(oVERB));
+		ChromSizes cSizes(gName, true);
 
 		// pre-read first item to check for PE sequence
 		RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, false, false, true, true);
