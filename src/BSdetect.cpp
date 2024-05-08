@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05.01.2024
+Last modified: 05.08.2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -12,6 +12,7 @@ without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
 See GNU General Public License for more details.
 ************************************************************************************/
 
+#include "Options.h"
 #include "BSdetect.h"
 #include "Treatment.h"
 
@@ -86,15 +87,22 @@ int main(int argc, char* argv[])
 		//		iName).Throw();
 
 		ChromSizes cSizes(gName, true);
-		//return 0;
 		BedWriter::SetRankScore(Options::GetBVal(oRANK_SCORE));
 		Verb::Set(Options::GetUIVal(oVERB));
-		Detector bsd(iName,
+
+		// pre-read first item to check for PE sequence
+		RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, false, false, true, true);
+		file.GetNextItem();		// no need to check for empty sequence
+
+		// detect BS
+		Detector bsd(
+			file,
 			FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
 			cSizes,
 			Options::GetBVal(oCOVER),
-			Options::GetBVal(oINTERM),
-			eOInfo::LAC);
+			Options::GetBVal(oINTERM)
+		);
+
 	}
 	catch (const Err& e) { ret = 1; cerr << e.what() << endl; }
 	catch (const exception& e) { ret = 1; cerr << e.what() << endl; }
@@ -136,6 +144,10 @@ void Detector::CallBS(chrid cID)
 		IsFragMeanUnset = false;
 		_timer.Stop(0, false, true);
 	}
+
+	_fragÑovers.WriteChrom(cID);
+	_readÑovers.WriteChrom(cID);
+	return;
 
 	Verb::PrintMsg(Verb::DBG, "Locate binding sites");
 	rgns.SetPotentialRegions(fragCovers, cLen, 3, false);	

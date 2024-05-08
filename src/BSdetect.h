@@ -2,13 +2,12 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05.07.2024
+Last modified: 05.08.2024
 -------------------------
 Provides main functionality
 ***********************************************************/
 
 #pragma once
-#include "Options.h"
 #include "Treatment.h"
 
 enum optValue {		// options id
@@ -26,7 +25,8 @@ enum optValue {		// options id
 	oHELP,
 };
 
-bool IsFragMeanUnset = true;
+bool IsFragMeanUnset = true;	// common to the entire genome
+bool IsPEReads = false;			// common to the entire genome
 
 // BS detector
 class Detector
@@ -49,21 +49,24 @@ class Detector
 	void CallBS(chrid cID);
 
 public:
-	Detector(const char* inFName, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter, eOInfo info)
+	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
-		, _saveCover (saveCover)
-		, _frag—overs(cSizes, 2 + saveCover, saveCover, outFName + "_frag", "fragment coverage")
+		, _saveCover(saveCover)
+		, _frag—overs(
+			cSizes,
+			(IsPEReads = file.IsPaired()) ? 1 : 2 + saveCover,
+			saveCover,
+			outFName + "_frag", "fragment coverage"
+		)
 		, _read—overs(cSizes, 2, saveCover, outFName + "_read", "read coverage")
-		, _rgns		 (cSizes, 2, saveInter, outFName + ".RGNS", "potential regions")
-		, _splines	 (cSizes, 2, true, outFName + ".SPLINE", "read coverage spline")
-		, _derivs	 (cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
+		, _rgns(cSizes, 2, saveInter, outFName + ".RGNS", "potential regions")
+		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
+		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
 		, _lineWriter(cSizes, 2, saveInter, outFName + ".LINE", "linear regression")
-		, _bss		 (cSizes, 1, false,	outFName + ".BSs", "called binding sites")
+		, _bss(cSizes, 1, false, outFName + ".BSs", "called binding sites")
 		, _fIdent(true)
 	{
-		if (Verb::Level(Verb::RT))
-			dout << inFName << '\n';
-		RBedReader file(inFName, &cSizes, Options::GetIVal(oDUP_LVL), info, false, false);
+		IsFragMeanUnset = !IsPEReads;
 		_file = &file;
 		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
 		file.Pass(*this);
@@ -72,18 +75,17 @@ public:
 	}
 
 	// treats current item
-	//	@return: true if item is accepted
+	//	@returns: true if item is accepted
 	bool operator()() {
 		auto& rgn = _file->ItemRegion();
 		bool reverse = !_file->ItemStrand();
 
-		if (_file->IsPaired()) {
+		if (IsPEReads) {
 			Region frag;
 			const Read read(*_file);
 
 			if (_fIdent(read, frag))
 				_frag—overs.AddFrag(frag);
-			IsFragMeanUnset = false;
 		}
 		else {
 			_frag—overs.AddExtRead(rgn, reverse, _saveCover && !IsFragMeanUnset);
@@ -95,10 +97,10 @@ public:
 	}
 
 	// Closes current chrom, open next one
-	//	@cID: current chrom ID
-	//	@cLen: chrom length
-	//	@cnt: current chrom items count
-	//	@nextcID: next chrom ID
+	//	@param cID: current chrom ID
+	//	@param cLen: chrom length
+	//	@param cnt: current chrom items count
+	//	@param nextcID: next chrom ID
 	void operator()(chrid cID, chrlen cLen, size_t cnt, chrid nextcID) {
 		if (Verb::Level(Verb::RT))
 			dout << Chrom::ShortName(nextcID) << LF;
@@ -110,10 +112,10 @@ public:
 	}
 
 	// Closes last chrom
-	//	@cID: last chrom ID
-	//	@cLen: chrom length
-	//	@cnt: last chrom items count
-	//	@tCnt: total items count
+	//	@param cID: last chrom ID
+	//	@param cLen: chrom length
+	//	@param cnt: last chrom items count
+	//	@param tCnt: total items count
 	void operator()(chrid cID, chrlen cLen, size_t cnt, size_t)
 	{ 
 		if (cnt) {

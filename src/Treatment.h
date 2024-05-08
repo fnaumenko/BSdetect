@@ -215,11 +215,14 @@ class CombCover : public OrderedData<TreatedCover, BedGrWriter>
 public:
 	// Primer constructor
 	//	@param cSizes: chrom sizes
-	//	@param dim: number (dimension) of data
+	//	@param dim: number of data (dimension)
 	//	@param write: if true then data sould be save to output file
-	//	@param fields: BED/WIG track fields
+	//	@param fname: output common file name (without extention)
+	//	@param descr: 'description' field in BED/WIG track line
 	CombCover(const ChromSizes& cSizes, BYTE dim, bool write, const string& fname, const char* descr)
-		: _outFName(fname), OrderedData<TreatedCover, BedGrWriter>(cSizes, dim, write, fname, descr) {}
+		: _outFName(fname)
+		, OrderedData<TreatedCover, BedGrWriter>(cSizes, dim, write, fname, descr)
+	{}
 
 	//coval GetMaxVal() const { return _data->StrandData(POS).GetMaxVal(); }
 
