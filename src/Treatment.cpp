@@ -276,7 +276,7 @@ void EliminateMultiOverlapsRegions(T rgns[2])
 
 // prints regions before and after selection
 template<typename T>
-void PrintRegionStats(const T rgns[2], chrlen chrLen)
+void PrintRegionStats(const T* rgns, chrlen chrLen, bool isSE = true)
 {
 	const char* format[] = {
 		"%s:  %d (%2.2f%%)   %d (%2.2f%%)\n",	// features
@@ -288,24 +288,24 @@ void PrintRegionStats(const T rgns[2], chrlen chrLen)
 	};
 	const bool isFeatures = is_same<T, ValuesMap>::value;
 
-	printf("%s\nstrand     total           selected\n", title[isFeatures]);
+	printf("\n%s\nstrand     received        selected\n", title[isFeatures]);
 	printf("------------------------------------\n");
-	for (BYTE s = POS - 1; s < NEG; s++) {
+	for (BYTE s = 0; s < 1 + isSE; s++) {
 		chrlen rawLen = 0, refineLen = 0;
-		const auto itEnd = rgns[s].end();
+		const auto& rgn = rgns[s];
+		const auto itEnd = rgn.end();
 		size_t realCnt = 0;
 
-		for (auto it = rgns[s].begin(); it != itEnd; it++) {
+		for (auto it = rgn.begin(); it != itEnd; it++) {
 			const chrlen len = T::Length(it);
 			rawLen += len;
 			if (T::IsNotEmpty(it)) refineLen += len, realCnt++;
 		}
-		std::printf(format[isFeatures], sStrandTITLES[s],
-			rgns[s].size(), Percent(rawLen, chrLen),
+		std::printf(format[isFeatures], sStrandTITLES[s + isSE],
+			rgn.size(), Percent(rawLen, chrLen),
 			realCnt, Percent(refineLen, chrLen));
 	}
 }
-
 
 //===== CoverRegions
 
@@ -340,17 +340,26 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, size_t capacit
 bool PositiveVal(int16_t val) { return val > 0; }
 bool NegativeVal(int16_t val) { return val < 0; }
 
-void DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMulti)
+void DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
 {
 	size_t capacity = cLen / (Glob::FragLen * 100);
 	StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
 	StrandData(NEG).SetPotentialRegions(cover.StrandData(NEG), capacity, cutoff);
 
 	EliminateNonOverlapsRegions<CoverRegions>(Data(), Glob::FragLen);
-	if (noMulti)
+	if (noMultiOverl)
 		EliminateMultiOverlapsRegions<CoverRegions>(Data());
 	if (Verb::Level(Verb::DBG))
 		PrintRegionStats<CoverRegions>(Data(), cLen);
+}
+
+void DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff)
+{
+	size_t capacity = cLen / (Glob::FragLen * 100);
+	DataByInd().SetPotentialRegions(cover.DataByInd(), capacity, cutoff);
+
+	if (Verb::Level(Verb::DBG))
+		PrintRegionStats<CoverRegions>(Data(), cLen, false);
 }
 
 //fraglen DataCoverRegions::GetFragMean(const DataSet<TreatedCover>& cover) const
@@ -920,10 +929,18 @@ void ValuesMap::PrintStat(chrlen clen) const
 
 //===== DataValuesMap
 
-void DataValuesMap::BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifRgns, fraglen splineBase)
+void DataValuesMap::BuildSplineSE(
+	const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase)
 {
-	StrandData(POS).BuildSpline(cover.StrandData(POS), rgns.StrandData(POS), redifRgns, splineBase);
-	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.StrandData(NEG), redifRgns, splineBase);
+	StrandData(POS).BuildSpline(cover.StrandData(POS), rgns.StrandData(POS), redifineRgns, splineBase);
+	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.StrandData(NEG), redifineRgns, splineBase);
+}
+
+void DataValuesMap::BuildSplinePE(
+	const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase)
+{
+	StrandData(POS).BuildSpline(cover.StrandData(POS), rgns.DataByInd(), redifineRgns, splineBase);
+	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.DataByInd(), redifineRgns, splineBase);
 }
 
 fraglen DataValuesMap::GetFragMean() const

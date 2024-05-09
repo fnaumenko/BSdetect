@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/08/2024
+Last modified: 05/09/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -91,8 +91,10 @@ int main(int argc, char* argv[])
 		ChromSizes cSizes(gName, true);
 
 		// pre-read first item to check for PE sequence
-		RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, false, false, true, true);
+		RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, Verb::Level(Verb::DBG), false, true, true);
+		if (Verb::Level(Verb::DBG))	cout << LF;
 		file.GetNextItem();		// no need to check for empty sequence
+		Detector::IsPEReads = file.IsPaired();
 
 		// detect BS
 		Detector bsd(
@@ -106,11 +108,12 @@ int main(int argc, char* argv[])
 	}
 	catch (const Err& e) { ret = 1; cerr << e.what() << endl; }
 	catch (const exception& e) { ret = 1; cerr << e.what() << endl; }
-	timer.Stop("\nwall-clock: ", false, true);
+	timer.Stop();
 	return ret;
 }
 
 //===== Detector
+bool Detector::IsPEReads = false;
 
 void Detector::CallBS(chrid cID)
 {
@@ -122,36 +125,42 @@ void Detector::CallBS(chrid cID)
 	BS_Map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];	// !!! can be passed from Pass() methods?
 
+	_timer.Start();
+	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 	_lineWriter.SetChromID(cID);
-	if (IsFragMeanUnset) {
-		Glob::ReadLen = _file->ReadLength();
-		Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
-		_timer.Start();
-		coval maxVal = readCovers.StrandData(POS).GetMaxVal();
-		printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
-		rgns.SetPotentialRegions(fragCovers, cLen, maxVal/3, true);	//10
 
-		//auto flen = rgns.GetFragMean(fragCovers);
-		//printf("\nMass Mean fragment length: %d\n", flen);
+	if (!IsPEReads) {
+		if (IsFragMeanUnset) {
+			Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
+			_timer.Start();
+			coval maxVal = readCovers.StrandData(POS).GetMaxVal();
+			printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
+			rgns.SetPotentialRegions(fragCovers, cLen, maxVal / 3, true);	//10
 
-		splines.BuildSpline(fragCovers, rgns, false, 50);	_fragÑovers.Clear();	rgns.Clear();
-		Glob::FragLen = splines.GetFragMean();				splines.Clear();
-		printf("Mean fragment length: %d\n", Glob::FragLen);
+			//auto flen = rgns.GetFragMean(fragCovers);
+			//printf("\nMass Mean fragment length: %d\n", flen);
 
-		//_rgns.WriteChrom(cID); _fragÑovers.WriteChrom(cID); _splines.WriteChrom(cID);
-		//return;
-		_fragÑovers.Fill(_reads, _saveCover);				_reads.Clear();
-		IsFragMeanUnset = false;
-		_timer.Stop(0, false, true);
+			splines.BuildSplineSE(fragCovers, rgns, false, 50);	_fragÑovers.Clear();	rgns.Clear();
+			Glob::FragLen = splines.GetFragMean();				splines.Clear();
+			printf("Mean fragment length: %d\n", Glob::FragLen);
+
+			//_rgns.WriteChrom(cID); _fragÑovers.WriteChrom(cID); _splines.WriteChrom(cID);
+			//return;
+			_fragÑovers.Fill(_reads, _saveCover);				_reads.Clear();
+			IsFragMeanUnset = false;
+			_timer.Stop(0, false, true);
+		}
+
+		Verb::PrintMsg(Verb::DBG, "Locate binding sites");
+		rgns.SetPotentialRegions(fragCovers, cLen, 3, false);			 
+
+		splines.BuildSplineSE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID); _fragÑovers.WriteChrom(cID);
+	}
+	else {
+		rgns.SetPotentialRegions(fragCovers, cLen, 3);					_fragÑovers.WriteChrom(cID);
+		splines.BuildSplinePE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID);
 	}
 
-	_fragÑovers.WriteChrom(cID);
-	_readÑovers.WriteChrom(cID);
-	return;
-
-	Verb::PrintMsg(Verb::DBG, "Locate binding sites");
-	rgns.SetPotentialRegions(fragCovers, cLen, 3, false);	
-	splines.BuildSpline(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID); _fragÑovers.WriteChrom(cID);
 	splines.Data()->EliminateNonOverlaps();
 	splines.Data()->PrintStat(cLen);
 	splines.Data()->Numerate();
@@ -167,4 +176,7 @@ void Detector::CallBS(chrid cID)
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);
+
+	_timer.Stop("Threament: ");	cout << LF;
+
 }

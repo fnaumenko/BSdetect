@@ -286,12 +286,18 @@ public:
 class DataCoverRegions : public DataSet<CoverRegions>
 {
 public:
-	// Fills the instance by potential regions on extended read coverage
+	// Fills the instance by potential regions of extended SE read coverage
 	//	@param cover: fragment coverage
 	//	@param cLen: length of chromosome
 	//	@param cutoff: fragment coverage cut off value
-	//	@param noMulti: if true then eliminate multi overlaps regions as well
-	void SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMulti);
+	//	@param noMultiOverl: if true then eliminate multi overlaps regions as well
+	void SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl);
+
+	// Fills the instance by potential regions of fragment coverage
+	//	@param cover: fragment coverage
+	//	@param cLen: length of chromosome
+	//	@param cutoff: fragment coverage cut off value
+	void SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff);
 
 	// Returns mean fragment length based on cover regions mass centre comparison
 	//	@param cover: fragment coverage
@@ -574,12 +580,19 @@ public:
 class DataValuesMap : public DataSet<ValuesMap>
 {
 public:
-	// Filters and fill spline curve by read cover within potential regions
+	// Filters and fill spline curve by [extended] SE read cover within potential regions
 	//	@param cover: raw read/frag cover
 	//	@param rgns: potential regions
-	//	@param redifRgns: if true then redifine regions position
+	//	@param redifineRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifRgns, fraglen splineBase);// = SSpliner::ReadSplineBase);
+	void BuildSplineSE(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase);// = SSpliner::ReadSplineBase);
+
+	// Filters and fill spline curve by PE read cover within potential regions
+	//	@param cover: raw read/frag cover
+	//	@param rgns: potential regions
+	//	@param redifineRgns: if true then redifine regions position
+	//	@param splineBase: half-length of spliner moving window
+	void BuildSplinePE(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase);// = SSpliner::ReadSplineBase);
 
 	//void BuildSpline(const DataSet<TreatedCover>& cover, const DataFeatureVals& rgns, fraglen splineBase = SSpliner::ReadSplineBase);
 	

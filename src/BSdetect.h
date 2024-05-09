@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05/08/2024
+Last modified: 05/092024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -26,7 +26,6 @@ enum optValue {		// options id
 };
 
 bool IsFragMeanUnset = true;	// common to the entire genome
-bool IsPEReads = false;			// common to the entire genome
 
 // BS detector
 class Detector
@@ -49,24 +48,22 @@ class Detector
 	void CallBS(chrid cID);
 
 public:
+	static bool IsPEReads;			// common to the entire genome
+
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		, _frag—overs(
-			cSizes,
-			(IsPEReads = file.IsPaired()) ? 1 : 2 + saveCover,
-			saveCover,
-			outFName + "_frag", "fragment coverage"
-		)
-		, _read—overs(cSizes, 2, saveCover, outFName + "_read", "read coverage")
-		, _rgns(cSizes, 2, saveInter, outFName + ".RGNS", "potential regions")
-		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
-		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
-		, _lineWriter(cSizes, 2, saveInter, outFName + ".LINE", "linear regression")
-		, _bss(cSizes, 1, false, outFName + ".BSs", "called binding sites")
+		, _frag—overs(cSizes, IsPEReads ? 1 : 2+saveCover, saveCover, outFName + "_frag", "fragment coverage")
+		, _read—overs(cSizes,	2,	saveCover,	outFName + "_read"	, "read coverage")
+		, _rgns(cSizes,2-IsPEReads,	saveInter,	outFName + ".RGNS"	, "potential regions")
+		, _splines	(cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
+		, _derivs	(cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
+		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression")
+		, _bss		(cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
 	{
-		IsFragMeanUnset = !IsPEReads;
+		if (Verb::Level(Verb::DBG))
+			printf("%s-end sequencing\n", IsPEReads ? "paired" : "single");
 		_file = &file;
 		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
 		file.Pass(*this);
@@ -119,7 +116,7 @@ public:
 	void operator()(chrid cID, chrlen cLen, size_t cnt, size_t)
 	{ 
 		if (cnt) {
-			_timer.Stop("Reading alignment: ");
+			_timer.Stop("Reading alignment: ");	cout << LF;
 			CallBS(cID);
 		}
 	}
