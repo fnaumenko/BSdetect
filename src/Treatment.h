@@ -453,7 +453,7 @@ class BedWriters
 public:
 	BedWriters(eStrand strand, const TrackFields& fields, const string* commLine = nullptr)
 		: _main(strand, TrackFields(fields, false, BedWriter::RankScore(), "Black"))
-		, _ext (strand, TrackFields(fields, "_ext", "extended called binding sites", true, false, "0,100,0"))	// dark green
+		, _ext (strand, TrackFields(fields, "_ext", "extended called binding sites", true, false, "Black"))
 		, _roi (strand, TrackFields(fields, ".ROI", "IGV Region Navigator list", false, false))
 	{
 		_main.SetFloatFractDigits(3);

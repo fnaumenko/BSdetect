@@ -669,12 +669,11 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 	bss.Do([&](const vector<BS_Map::ValPos>* VP) {
 		static const string colors[]{
 			// color		 ind	feature_score/BS_score
-			"200,200,200",	// 0	>=0
-			"160,160,160",	// 1	>=0.2
-			"120,120,120",	// 2	>=0.4
-			"80,80,80",		// 3	>=0.6
-			"40,40,40",		// 4	>=0.8
-			"Black",		// 5	>=1
+			"140,30,30",	// 0	>=0		dark red
+			"140,85,30",	// 1	>=0.2	dark orange
+			"180,140,30",	// 2	>=0.4	dark yellow
+			"130,140,30",	// 3	>=0.6	dark yellow-green
+			"30,100,30",	// 4	>=0.8	dark green
 		};
 		const auto& start = VP[1].back().Iter;
 		const float score = VP[1].back().Val;
@@ -686,8 +685,8 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 				LineAddFloat(start->second.Score, true);	// BS score
 				LineAddChar(DOT, true);
 				LineAddInts(it0->Iter->first, it->Iter->first, true);
-				int ind = int(10 * it0->Val / score) / 2;
-				if (ind > 5)	ind = 5;
+				auto ind = BYTE(10 * it0->Val / score) / 2;
+				if (ind > 4)	ind = 4;
 				LineAddStr(colors[ind], false);
 				LineToIOBuff(offset);
 			}
@@ -695,8 +694,6 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 
 		const auto& end = VP[0].front().Iter;
 		const char* delims = ".\t.\t.\t.\t";
-		const char* color = NULL;
-		const char* darkRed = "150,15,15";
 
 		++bsNumb;
 
@@ -704,15 +701,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 		// *** add basic feature
 		LineAddUInts(start->first, end->first, bsNumb, true);
 		LineAddFloat(start->second.Score, true);		// BS score
-		if (end->second.Score > 2.0)		color = darkRed;
-		else if (end->second.Score < 0.5)	color = "15,15,150";
-		if (color) {
-			LineAddChar(DOT, true);
-			LineAddInts(start->first, end->first, true);
-			LineAddChars(color, reclen(strlen(darkRed)), true);
-		}
-		else
-			LineAddChars(delims, reclen(strlen(delims)), false);
+		LineAddChars(delims, reclen(strlen(delims)), false);
 		LineAddFloat(end->second.Score, false);			// reverse/direct ratio
 		LineToIOBuff(offset);
 
