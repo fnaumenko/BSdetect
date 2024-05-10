@@ -36,7 +36,7 @@ class Detector
 	CombCover		  _read—overs;
 	OCoverRegions	  _rgns;
 	OValuesMap		  _splines;
-	ORegionsValuesMap _derivs;
+	OBoundsValuesMap  _derivs;
 	OLinearWriter	  _lineWriter;
 	OBS_Map			  _bss;
 

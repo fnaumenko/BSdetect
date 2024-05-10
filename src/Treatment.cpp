@@ -358,8 +358,8 @@ void DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 	size_t capacity = cLen / (Glob::FragLen * 100);
 	DataByInd().SetPotentialRegions(cover.DataByInd(), capacity, cutoff);
 
-	if (Verb::Level(Verb::DBG))
-		PrintRegionStats<CoverRegions>(Data(), cLen, false);
+	//if (Verb::Level(Verb::DBG))
+	//	PrintRegionStats<CoverRegions>(Data(), cLen, false);
 }
 
 //fraglen DataCoverRegions::GetFragMean(const DataSet<TreatedCover>& cover) const
@@ -571,21 +571,23 @@ void BS_Map::CheckScoreHierarchy()
 void BS_Map::Print(chrid cID, bool real, chrlen stopPos) const
 {
 	const char* format[]{
-		"%d %4d  %d  %1.3f %4d   %s\n",	// odd group numb to left
-		"%d %-4d  %d  %1.3f %4d   %s\n"	// even group numb to right
-		//"%d %4d  %d  %1.3f  %s\n",	// odd group numb to left
-		//"%d %-4d  %d  %1.3f  %s\n"	// even group numb to right
+		"%d %4d  %c  %5.2f %4d   %s\n",	// odd group numb to left
+		"%d %-4d  %c  %5.2f %4d   %s\n"	// even group numb to right
 	};
+	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
-	printf("\npos\tgrp   R  score  pCnt  IGV view\n");
-	//printf("\npos\tgrp   R  score  IGV view\n");
+	printf("\npos\tgrp  bnd score  pCnt  IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
 		if (!real || x.second.Score)
 			printf(format[x.second.GrpNumb % 2],
-				x.first, x.second.GrpNumb, int(x.second.Reverse),
-				x.second.Score, x.second.PointCount, locus.Print(x.first));
+				x.first,
+				x.second.GrpNumb,
+				bound[x.second.Reverse],
+				x.second.Score,
+				x.second.PointCount, locus.Print(x.first)
+			);
 	}
 }
 #endif
@@ -784,7 +786,7 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 {
 	IGVlocus locus(cID);
 
-	printf("SPLINES %s\n", sStrandTITLES[reverse]);
+	printf("SPLINES %s\n", sStrandTITLES[reverse + 1]);
 	printf(" N start\tend\tval\tIGV view\n");
 	for (const auto& x : *this) {
 		if (stopNumb && x.second.GrpNumb > stopNumb)	break;
@@ -1002,17 +1004,23 @@ void DataValuesMap::Print(chrid cID, chrlen stopNumb) const
 }
 #endif
 
-//===== RegionsValues
+//===== BoundsValues
 
-void RegionsValues::AddBSpos(BYTE reverse, const PosVal& posVal, const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const
+void BoundsValues::AddBSpos(
+	BYTE reverse,
+	const TracedPosVal& posVal,
+	const TreatedCover& cover,
+	BS_Map& bs,
+	OLinearWriter& lwriter
+) const
 {
 	//chrlen pos[2];	// 0 - start, 1 - end
 	//pos[!reverse] = it->Start();	// right for direct, left for reverse
 	//pos[reverse]  = it->End();		// left for direct, right for reverse
 
-	const StrandOp& op = StrandOps[reverse];
+	const StrandOp& opDir = StrandOps[reverse];		// direct operations
 	const StrandOp& opInv = StrandOps[!reverse];	// inversed operations
-	auto itStart = op.GetPrev(cover.upper_bound(posVal.Pos(0)));	// min val: right for direct, left for reverse
+	auto itStart = opDir.GetPrev(cover.upper_bound(posVal.Pos(0)));	// min val: right for direct, left for reverse
 	auto itStop = itStart;									// max val: left for direct, right for reverse
 
 	// *** set itStop
@@ -1020,26 +1028,26 @@ void RegionsValues::AddBSpos(BYTE reverse, const PosVal& posVal, const TreatedCo
 	else			for (itStop--; itStop->first > posVal.Pos(1); itStop--);
 
 	// checking if there is an ordinary tag pool before the current start, masked by a spline
-	if (!op.GetPrev(itStart)->second)
-		op.Next(itStart);		// skip the gap after ordinary tag pool
+	if (!opDir.GetPrev(itStart)->second)
+		opDir.Next(itStart);		// skip the gap after ordinary tag pool
 
 	// *** it stop correction: calc the best BS position by successive linear regression approximations
 	LRegrResult result;
-	cover.LinearRegr(itStart, itStop, op, result);
+	cover.LinearRegr(itStart, itStop, opDir, result);
 	if (!result.Valid())	return;
 
 	coviter it0 = itStop;
 	LRegrResult result1{};
 	auto compare = [&](coviter& it) {
-		cover.LinearRegr(itStart, it, op, result1);
-		if (!result1.Valid() || op.EqLess(result.Pos, result1.Pos))	return true;
+		cover.LinearRegr(itStart, it, opDir, result1);
+		if (!result1.Valid() || opDir.EqLess(result.Pos, result1.Pos))	return true;
 		std::swap(result, result1);
 		itStop = it;
 		return false;
 	};
 
 	// iterate itStop opposed to start
-	for (auto it = it0; op.RetNext(it)->second > itStop->second || op.RetNext(it)->second > itStop->second;)
+	for (auto it = it0; opDir.RetNext(it)->second > itStop->second || opDir.RetNext(it)->second > itStop->second;)
 		if (compare(it))	break;
 	// iterate itStop towards start
 	bool nextStep = false;
@@ -1063,7 +1071,7 @@ void RegionsValues::AddBSpos(BYTE reverse, const PosVal& posVal, const TreatedCo
 	bs.AddPos(reverse, _grpNumb, result, posVal.Val(reverse));
 }
 
-void RegionsValues::AddRegion(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
+void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
 {
 	if (_maxVal < deriv.MaxVal())	_maxVal = deriv.MaxVal();
 	_grpNumb = spline.second.GrpNumb;
@@ -1075,45 +1083,45 @@ void RegionsValues::AddRegion(const tValuesMap::value_type& spline, chrlen relPo
 	);
 }
 
-void RegionsValues::SetDirectBSpos(const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const
+void BoundsValues::SetDirectBSpos(const TreatedCover& rCover, BS_Map& bs, OLinearWriter& lwriter) const
 {
-	PosVal posVal;
+	TracedPosVal posVal;
 
 	for (auto it = rbegin(); it != rend(); it++) {		// loop through derivatives
 		posVal.Set(0, it);
-		AddBSpos(0, posVal, cover, bs, lwriter);
-		posVal.Swap();
+		AddBSpos(0, posVal, rCover, bs, lwriter);
+		posVal.Trace();
 	}
 }
 
-void RegionsValues::SetReverseBSpos(const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const
+void BoundsValues::SetReverseBSpos(const TreatedCover& rCover, BS_Map& bs, OLinearWriter& lwriter) const
 {
-	PosVal posVal;
+	TracedPosVal posVal;
 
 	for (auto it = begin(); it != end(); it++) {		// loop through derivatives
 		posVal.Set(1, it);
-		AddBSpos(1, posVal, cover, bs, lwriter);
-		posVal.Swap();
+		AddBSpos(1, posVal, rCover, bs, lwriter);
+		posVal.Trace();
 	}
 }
 
 
-//===== RegionsValuesMap
+//===== BoundsValuesMap
 
-void RegionsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
+void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 {
 	for (const auto& spline : splines) {
 		if (!spline.second.MaxVal())	continue;
 
 		Values deriv;
-		RegionsValues derivSet;	derivSet.reserve(4);
+		BoundsValues derivSet;	derivSet.reserve(4);
 		fraglen pos = 0;
 
 		auto addRngsVals = [&]() {
 			if (!deriv.MaxVal())	return;
 			fraglen len = deriv.Length();	// because deriv will be cleared
 
-			derivSet.AddRegion(spline, pos, deriv);
+			derivSet.AddValues(spline, pos, deriv);
 			pos += len;
 			deriv.Reserve();
 		};
@@ -1137,20 +1145,20 @@ void RegionsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 	}
 }
 
-void RegionsValuesMap::SetBSpos(BYTE reverse, const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const
+void BoundsValuesMap::SetBSpos(BYTE reverse, const TreatedCover& rCover, BS_Map& bs, OLinearWriter& lwriter) const
 {
-	using tSetBSpos = void(RegionsValues::*)(const TreatedCover&, BS_Map&, OLinearWriter&) const;
+	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, BS_Map&, OLinearWriter&) const;
 	tSetBSpos SetBSpos = reverse ?
-		&RegionsValues::SetReverseBSpos	:
-		&RegionsValues::SetDirectBSpos	;
+		&BoundsValues::SetReverseBSpos	:
+		&BoundsValues::SetDirectBSpos	;
 
 	for (auto it = begin(); it != end(); it++) {		// loop through the derivative groups
-		(it->second.*SetBSpos)(cover, bs, lwriter);
+		(it->second.*SetBSpos)(rCover, bs, lwriter);
 	}
 }
 
 #ifdef MY_DEBUG
-void RegionsValuesMap::Print(eStrand strand, chrlen stopPos) const
+void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 {
 	//printf("\nDERIVS %s: %2.2f\n", sStrandTITLES[strand - 1], MaxVal);
 	printf("\nDERIVS %s\n", sStrandTITLES[strand - 1]);
@@ -1176,7 +1184,7 @@ void FixWigWriter::WriteChromData(chrid cID, const ValuesMap& vals)
 
 //===== FixWigWriterSet
 
-void FixWigWriterSet::WriteChromData(chrid cID, const RegionsValuesMap& set)
+void FixWigWriterSet::WriteChromData(chrid cID, const BoundsValuesMap& set)
 {
 	for (const auto& rvss : set)
 		for (const auto& rvs : rvss.second)

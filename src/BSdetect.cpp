@@ -121,7 +121,7 @@ void Detector::CallBS(chrid cID)
 	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
 	DataCoverRegions& rgns		 = static_cast<DataCoverRegions&>(_rgns.ChromData(cID));
 	DataValuesMap& splines		 = static_cast<DataValuesMap&>(_splines.ChromData(cID));
-	DataRegionsValuesMap& derivs = static_cast<DataRegionsValuesMap&>(_derivs.ChromData(cID));
+	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
 	BS_Map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];	// !!! can be passed from Pass() methods?
 
@@ -171,7 +171,7 @@ void Detector::CallBS(chrid cID)
 	bss.Refine();
 	bss.Normalize();
 #ifdef MY_DEBUG
-	//bss.Print(cID, true);
+	bss.Print(cID, true);
 	bss.CheckScoreHierarchy();
 #endif
 	bss.PrintStat();

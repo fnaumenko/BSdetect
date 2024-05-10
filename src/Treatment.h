@@ -55,7 +55,8 @@ struct StrandOp {
 	bool (*EqLess)(chrlen pos, chrlen lim);
 };
 
-static const StrandOp StrandOps[2]{	// 0 - direct, 1 - reversed
+// strand-dependent operations: 0 - direct, 1 - reversed
+static const StrandOp StrandOps[2]{
 	{-1,	
 	[](coviter& it) { it--; },
 	[](coviter& it) { return --it; },
@@ -347,8 +348,8 @@ public:
 		);	// !!! use hint?
 	}
 
-	// Marks BS positions that do not correspond to the rule
-	// "set of reverse positions"-"set of direct positions" as empty
+	// Marks as empty the BS positions that do not correspond to the rule
+	// "set of reverse positions"-"set of direct positions"
 	void Refine();
 
 	// Applies lambda to each group denotes the binding site, passing boundary collection
@@ -483,6 +484,7 @@ using OBS_Map = OrderedData<BS_Map, BedWriters>;
 
 //=== SPLINE & COLLECTION
 
+// Ñollection of sequential float values
 class Values : public vector<float>
 {
 	float _maxVal;
@@ -497,9 +499,10 @@ public:
 	// Returns region length
 	fraglen Length() const { return fraglen(size()); }
 
-	// Returns value for given relative position
+	// Returns value for given region relative position
 	float Val(chrlen relPos) const { return (*this)[relPos]; }
 
+	// Returns maximum region value
 	float MaxVal() const { return _maxVal; }
 
 	void MarkAsEmpty() { _maxVal = 0; }
@@ -508,6 +511,7 @@ public:
 
 	void Clear() { _maxVal = 0; clear(); }
 
+	// Adds calue to the instance
 	void AddVal(float val);
 
 	// Adds positions with local maximum value to the vector pos
@@ -520,6 +524,7 @@ public:
 
 using tValuesMap = map<chrlen, Values>;
 
+// Maped collections of float values
 class ValuesMap : public tValuesMap
 {
 	using Iter = map<chrlen, Values>::iterator;
@@ -577,6 +582,7 @@ public:
 	void PrintStat(chrlen clen) const;
 };
 
+// Datset of maped collections of float values
 class DataValuesMap : public DataSet<ValuesMap>
 {
 public:
@@ -596,6 +602,7 @@ public:
 
 	//void BuildSpline(const DataSet<TreatedCover>& cover, const DataFeatureVals& rgns, fraglen splineBase = SSpliner::ReadSplineBase);
 	
+	// Returns fragment's mean calculated by minimizing the difference between peak positions
 	fraglen GetFragMean() const;
 
 	void Clear();
@@ -606,54 +613,63 @@ public:
 };
 
 
-//=== DERIVATIVES  & COLLECTION
+//=== DERIVATIVES & COLLECTION
 
-class RegionValues : public Values
+// Ñollection of float values with its associated position and minimum/maximum value
+class BoundValues : public Values
 {
-	chrlen	_pos;	
-	float	_val[2];	// min, max
+	chrlen	_pos;		// region start position
+	float	_val[2];	// region min, max values
 public:
 
-	RegionValues(chrlen startPos, float valMin, float valMax, Values& vals) 
+	BoundValues(chrlen startPos, float valMin, float valMax, Values& vals) 
 		: _pos(startPos), _val{valMin,valMax}, Values(move(vals))
 	{}
 
 	chrlen	Start()	const { return _pos; }
 	chrlen	End()	const { return _pos + Length(); }
-	float	SplineVal(BYTE reverse) const { return _val[reverse]; }
-	void	GetSplineVal(float(&val)[2]) const { memcpy(val, _val, 2 * sizeof(float)); }
+	// Copies min, max values to the external pair
+	void	GetValues(float(&val)[2]) const { memcpy(val, _val, 2 * sizeof(float)); }
 };
 
-class RegionsValues : public vector<RegionValues>
+// BoundValues collection representing 
+// rising (for the right side of the peak) or falling (for the left side of the peak) derivatives
+class BoundsValues : public vector<BoundValues>
 {
-	using citer = vector<RegionValues>::const_iterator;
+	using citer = vector<BoundValues>::const_iterator;
 
-	class PosVal
+	// Start/end positions and min/max values with storage of previous ones
+	class TracedPosVal
 	{
-		chrlen	_pos[2], _pos0[2]{ 0,0 };
-		float	_val[2], _val0[2]{ 0,0 };
+		chrlen	_pos[2], _pos0[2]{ 0,0 };	// current, previous start/end positions
+		float	_val[2], _val0[2]{ 0,0 };	// current, previous min/max values 
 
 	public:
-		// Returns position
+		// Returns current position
+		//	@param reverse: 0 - start, 1 - end
+		chrlen	Pos(BYTE reverse) const { return _pos[reverse]; }
+
+		// Returns current value
 		//	@param lim: 0 - min, 1 - max
-		chrlen	Pos(BYTE lim) const { return _pos[lim]; }
+		float	Val(BYTE lim) const { return _val[lim]; }
 
-		float	Val(BYTE reverse) const { return _val[reverse]; }
-
-		// Set positions, values, and merge successive rises
+		// Set start/end positions and values by cover iterator, and merge successive raises
+		//	@param reverse: 0 for firect, 1 for reverse
+		//	@param it: direct/reverse cover iterator
 		template<typename T>
 		void Set(BYTE reverse, T it)
 		{
 			// set positions & values
-			_pos[!reverse] = it->Start();	// right for direct, left for reverse
-			_pos[reverse] = it->End();		// left for direct, right for reverse
-			it->GetSplineVal(_val);
-			// merge successive rises
+			_pos[!reverse] = it->Start();	// start: right for direct, left for reverse
+			_pos[reverse] = it->End();		// end: left for direct, right for reverse
+			it->GetValues(_val);
+			// merge successive raises
 			if (_val0[reverse] && _val[!reverse] / _val0[reverse] >= 0.9)
 				_pos[0] = _pos0[0];
 		}
 
-		void Swap()
+		// Saves previous positions/values (by swapping)
+		void Trace()
 		{
 			std::swap(_pos, _pos0);
 			std::swap(_val, _val0);
@@ -665,11 +681,17 @@ class RegionsValues : public vector<RegionValues>
 
 	// Calculates cover linear regression and adds BS position between start and stop
 	//	@param reverse: true if tag is reversed (neg strand)
-	//	@param posVal: positions and values
+	//	@param posVal: traced positions and values
 	//	@param cover: coverage on which the regression is calculated
 	//	@param bs: BS collection to which the new position is added
 	//	@param lwriter: writer to save linear regression representation
-	void AddBSpos(BYTE reverse, const PosVal& posVal, const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const;
+	void AddBSpos(
+		BYTE reverse,
+		const TracedPosVal& posVal,
+		const TreatedCover& cover,
+		BS_Map& bs,
+		OLinearWriter& lwriter
+	) const;
 
 public:
 	float	MaxVal()	const { return _maxVal; }
@@ -679,7 +701,7 @@ public:
 	//	@param spline: given spline
 	//	@param relPos: spline relative position
 	//	@param deriv: derivative values (will be moved)
-	void AddRegion(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv);
+	void AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv);
 
 	//using cIter = vector<ValuesMap>::const_iterator;
 	//using rIter = vector<ValuesMap>::reverse_iterator;
@@ -690,16 +712,16 @@ public:
 	void SetReverseBSpos(const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const;
 };
 
-class RegionsValuesMap : public map<chrlen, RegionsValues>
+class BoundsValuesMap : public map<chrlen, BoundsValues>
 {
 public:
-	using Iter = map<chrlen, RegionsValues>::iterator;
-	using cIter = map<chrlen, RegionsValues>::const_iterator;
+	using Iter = map<chrlen, BoundsValues>::iterator;
+	using cIter = map<chrlen, BoundsValues>::const_iterator;
 
 	// Adds values with given position
 	//	@param pos: starting position of values
 	//	@param vals: values (will be moved)
-	void AddRegions(chrlen pos, RegionsValues& vals) { emplace(pos, move(vals)); }
+	void AddRegions(chrlen pos, BoundsValues& vals) { emplace(pos, move(vals)); }
 
 	// Fill instance with derivatives of splines
 	//	@param splines: splines from which derivatives are built
@@ -713,7 +735,7 @@ public:
 #endif
 };
 
-class DataRegionsValuesMap : public DataSet<RegionsValuesMap>
+class DataBoundsValuesMap : public DataSet<BoundsValuesMap>
 {
 public:
 	void BuildDerivs(const DataValuesMap& splines)
@@ -722,10 +744,10 @@ public:
 		StrandData(NEG).BuildDerivs(StrandOps[1].Factor, splines.StrandData(NEG));
 	}
 
-	void SetBSpos(const DataSet<TreatedCover>& cover, BS_Map& bss, OLinearWriter& lwriter)
+	void SetBSpos(const DataSet<TreatedCover>& rCover, BS_Map& bss, OLinearWriter& lwriter)
 	{
-		StrandData(POS).SetBSpos(0, cover.StrandData(POS), bss, lwriter);
-		StrandData(NEG).SetBSpos(1, cover.StrandData(NEG), bss, lwriter);
+		StrandData(POS).SetBSpos(0, rCover.StrandData(POS), bss, lwriter);
+		StrandData(NEG).SetBSpos(1, rCover.StrandData(NEG), bss, lwriter);
 	}
 };
 
@@ -754,7 +776,7 @@ public:
 	FixWigWriterSet(eStrand strand, const TrackFields& fields)
 		: WigWriter(FT::eType::WIG_FIX, strand, fields) {}
 
-	void WriteChromData(chrid cID, const RegionsValuesMap& set);
+	void WriteChromData(chrid cID, const BoundsValuesMap& set);
 };
 
 //=====  ORDERED DATA
@@ -799,9 +821,9 @@ using OValuesMap = OrderedData<ValuesMap, FixWigWriter>;
 //		: OrderedData<ValuesMap, FixWigWriter>(cSizes, dim, write, TrackFields(fname, descr)) {}
 //};
 
-// Ordered RegionsValuesMap
-using ORegionsValuesMap = OrderedData<RegionsValuesMap, FixWigWriterSet>;
-//class ORegionsValuesMap : public OrderedData<RegionsValuesMap, FixWigWriterSet>
+// Ordered BoundsValuesMap (derivatives)
+using OBoundsValuesMap = OrderedData<BoundsValuesMap, FixWigWriterSet>;
+//class OBoundsValuesMap : public OrderedData<BoundsValuesMap, FixWigWriterSet>
 //{
 //public:
 //	// Primer constructor
@@ -810,8 +832,8 @@ using ORegionsValuesMap = OrderedData<RegionsValuesMap, FixWigWriterSet>;
 //	//	@param write: if true then data sould be save to output file
 //	//	@param fname: name of output file
 //	//	@param descr: track decsription in declaration line
-//	ORegionsValuesMap(const ChromSizes& cSizes, BYTE dim, bool write, const string& fname, const char* descr)
-//		: OrderedData<RegionsValuesMap, FixWigWriterSet>(cSizes, dim, write, TrackFields(fname, descr)) {}
-//	//ORegionsValuesMap(const ChromSizes& cSizes, BYTE dim, bool write, const TrackFields& fields)
-//	//	: OrderedData<RegionsValuesMap, FixWigWriterSet>(cSizes, dim, write, fields) {}
+//	OBoundsValuesMap(const ChromSizes& cSizes, BYTE dim, bool write, const string& fname, const char* descr)
+//		: OrderedData<BoundsValuesMap, FixWigWriterSet>(cSizes, dim, write, TrackFields(fname, descr)) {}
+//	//OBoundsValuesMap(const ChromSizes& cSizes, BYTE dim, bool write, const TrackFields& fields)
+//	//	: OrderedData<BoundsValuesMap, FixWigWriterSet>(cSizes, dim, write, fields) {}
 //};
