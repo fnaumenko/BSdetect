@@ -316,12 +316,15 @@ struct BS_PosVal
 	chrlen	GrpNumb;
 	coval	PointCount;
 	float	Score;
+	BYTE	Unreliable = 0;
+	bool	BS_NegWidth = false;
 
 	//BS_PosVal(BYTE reverse, chrlen grpNumb, coval pointCount, float deriv, float splineVal) :
 	//	Reverse(reverse), GrpNumb(grpNumb), PointCount(pointCount), Score(deriv* splineVal) {}
 
-	BS_PosVal(BYTE reverse, chrlen grpNumb, const LRegrResult& result, float splineVal) :
-		Reverse(reverse), GrpNumb(grpNumb), PointCount(result.PtCnt), Score(result.Deriv * splineVal) {}
+	BS_PosVal(BYTE reverse, chrlen grpNumb, const LRegrResult& result, float splineVal, BYTE unreliable) :
+		Reverse(reverse), GrpNumb(grpNumb), PointCount(result.PtCnt), Score(result.Deriv * splineVal),
+		Unreliable(unreliable) {}
 };
 
 class BS_Map : public map<chrlen, BS_PosVal>
@@ -342,17 +345,17 @@ public:
 	//void AddPos(BYTE reverse, chrlen grpNumb, chrlen pos, coval pointCount, float deriv, float splineVal) {
 	//	emplace(pos, BS_PosVal(reverse, grpNumb, pointCount, deriv, splineVal));	// !!! use hint?
 	//}
-	void AddPos(BYTE reverse, chrlen grpNumb, const LRegrResult& result, float splineVal) {
-		emplace(result.Pos + StrandOps[reverse].Factor * Glob::ReadLen,
-			BS_PosVal(reverse, grpNumb, result, splineVal)
+	void AddPos(BYTE reverse, chrlen grpNumb, const LRegrResult& result, float splineVal, BYTE unreliable) {
+		emplace(
+			result.Pos + StrandOps[reverse].Factor * Glob::ReadLen,
+			BS_PosVal(reverse, grpNumb, result, splineVal, unreliable)
 		);	// !!! use hint?
 	}
 
-	// Marks as empty the BS positions that do not correspond to the rule
-	// "set of reverse positions"-"set of direct positions"
+	// Brings the instance to canonical order of placing BS borders
 	void Refine();
 
-	// Applies lambda to each group denotes the binding site, passing boundary collection
+	// Applies lambda to each group of binding sites, passing borders collection
 	template<typename F>
 	void Do(F&& lambda)
 	{
@@ -382,7 +385,9 @@ public:
 				lambda(it0, it);
 	}
 
-	void Normalize();
+	void NormalizeScore();
+
+	void NormalizeBSwidth();
 
 	void PrintStat() const;
 
@@ -400,6 +405,7 @@ public:
 // 'BedWriter' implements methods for writing in ordinary bed format
 class BedWriter : public RegionWriter
 {
+	const BYTE MIN_BS_WIDTH = 5;
 	static bool rankScore;	// true if scores in the main bed should be normalized relative to 1000
 
 	void LineAddIntScore	(float score, bool delim) { LineAddInt(int(round(score * 1000)), delim); }
@@ -410,6 +416,12 @@ class BedWriter : public RegionWriter
 
 	void LineAddScore(float score, bool delim) { assert(fLineAddScore); (this->*fLineAddScore)(score, delim); }
 
+	// Adds BS start/end positions and number, correcting 'negative' BS width
+	void LineAddRegion(
+		//const BS_Map::iter& itStart, const BS_Map::iter& itEnd, chrlen bsNumb, bool addDelim, fraglen expLength = 0);
+		BS_Map::citer itStart, BS_Map::citer itEnd, chrlen bsNumb, bool addDelim, fraglen expLength = 0);
+
+	
 public:
 	static bool RankScore() { return rankScore; }
 
@@ -649,6 +661,10 @@ class BoundsValues : public vector<BoundValues>
 		//	@param reverse: 0 - start, 1 - end
 		chrlen	Pos(BYTE reverse) const { return _pos[reverse]; }
 
+		// Returns previous position
+		//	@param reverse: 0 - start, 1 - end
+		chrlen	PrevPos(BYTE reverse) const { return _pos0[reverse]; }
+
 		// Returns current value
 		//	@param lim: 0 - min, 1 - max
 		float	Val(BYTE lim) const { return _val[lim]; }
@@ -688,6 +704,8 @@ class BoundsValues : public vector<BoundValues>
 	void AddBSpos(
 		BYTE reverse,
 		const TracedPosVal& posVal,
+		chrlen& prevStart,
+		chrlen& prevBSpos,
 		const TreatedCover& cover,
 		BS_Map& bs,
 		OLinearWriter& lwriter
@@ -697,12 +715,6 @@ public:
 	float	MaxVal()	const { return _maxVal; }
 	//chrlen	GroupNumb()	const { return _grpNumb; }
 
-	// Adds derivative values for given spline relative position
-	//	@param spline: given spline
-	//	@param relPos: spline relative position
-	//	@param deriv: derivative values (will be moved)
-	void AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv);
-
 	//using cIter = vector<ValuesMap>::const_iterator;
 	//using rIter = vector<ValuesMap>::reverse_iterator;
 	//typedef vector<ValuesMap>::iterator iter_type;
@@ -710,6 +722,12 @@ public:
 	void SetDirectBSpos	(const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const;
 
 	void SetReverseBSpos(const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const;
+
+	// Adds derivative values for given spline relative position
+	//	@param spline: given spline
+	//	@param relPos: spline relative position
+	//	@param deriv: derivative values (will be moved)
+	void AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv);
 };
 
 class BoundsValuesMap : public map<chrlen, BoundsValues>
@@ -749,6 +767,15 @@ public:
 		StrandData(POS).SetBSpos(0, rCover.StrandData(POS), bss, lwriter);
 		StrandData(NEG).SetBSpos(1, rCover.StrandData(NEG), bss, lwriter);
 	}
+
+#ifdef MY_DEBUG
+	void Print(chrlen stopPos = 0) const
+	{
+		StrandData(POS).Print(POS, stopPos);
+		StrandData(NEG).Print(NEG, stopPos);
+	}
+#endif
+
 };
 
 

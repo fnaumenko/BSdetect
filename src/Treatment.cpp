@@ -409,51 +409,105 @@ void DataCoverRegions::Clear()
 
 
 //===== BS_Map
+
 void BS_Map::Refine()
 {
-	bool openedGroup = true;
-	BYTE posCnt = 0, negCnt = 0;
+	/*
+	BS Left entry (border): is formed by reverse reads; BS Right entry (border): is formed by direct reads
+	Group corresponds to potential region.
+
+	Options for placing borders in a group:
+	canonical:					[[L] [R]]
+	extra right/left borders:	[R] [[L] [R]] [L]
+	'negative' BS width:		[R] [L]
+
+	Method brings the instance to canonical form, resetting the score of all extra elements to zero,
+	and marking BSs with 'negative' width.
+	*/
+
+	auto lastExtraRight_it = end();	// iterator pointing to the last Right entry that starts the group 
+	uint16_t extraRightCnt = 0;		// count of Right entry that starts the group
+	uint16_t extraLeftCnt = 0;		// count of Left entry that ends the group
+	bool newBS = true;				// if true then new BS in the group is registered
+	bool raisedLeft = false;		// if true then at least one Left entry in the group is processed
+	bool someBS = false;			// if true then at least one BS in the group is registered
 	chrlen grpNumb = 1;
 
-	// 'close' unrelated positions
+	// resets extra ('false') entries
+	//	@param it: iterator pointing to the first extra entry
+	//	@param entryCnt: count of extra entries which should be reset; becomes zero
+	//	@returns: iterator pointing to the first non-extra entry
+	auto ResetExtraEntries = [](iter& it, uint16_t& entryCnt) {
+		for (; entryCnt; entryCnt--, --it)
+			it->second.Score = 0;
+		return it;
+	};
+
+	// reset right and left extra entries
+	auto ResetBothExtraEntries = [&](iter it) {
+		// reset extra right entries
+		if (lastExtraRight_it != end()) {
+			if (someBS)
+				ResetExtraEntries(lastExtraRight_it, extraRightCnt);
+			else {		// register 'negative' BS width
+				lastExtraRight_it->second.BS_NegWidth = true;				// set 'negative' flag to the last extra entry
+				lastExtraRight_it->second.Reverse = true;
+				ResetExtraEntries(--lastExtraRight_it, --extraRightCnt);	// reset other extra entries
+			}
+			lastExtraRight_it = end();
+		}
+		// reset extra left entries
+		if (someBS)
+			ResetExtraEntries(--it, extraLeftCnt);
+		else			// register 'negative' BS width
+			// set 'negative' flag to the first extra entry and reset other extra ones
+			//ResetExtraEntries(--it, --extraLeftCnt)->second.BS_NegWidth = true;
+		{
+			auto bs1 = ResetExtraEntries(--it, --extraLeftCnt);
+			bs1->second.BS_NegWidth = true;
+			bs1->second.Reverse = false;
+		}
+	};
+
 	for (auto it = begin(); it != end(); it++)
 	{
-		auto MarkSubseqAsEmpty = [&it](BYTE& entryCnt) {	// resets entryCnt
-			for (auto it1 = it; entryCnt; entryCnt--)
-				(--it1)->second.Score = 0;
-		};
 		const bool newGroup = grpNumb != it->second.GrpNumb;
 
 		if (newGroup) {
-			if (!openedGroup)
-				openedGroup = !(posCnt = 0);	// set to true
-			// mark last reverse positions in the previous group as empty
-			MarkSubseqAsEmpty(negCnt);
+			// 'close' previous group
+			ResetBothExtraEntries(it);	// set extraRightCnt to zero
+			// reset current group
+			if (!newBS)		newBS = true;
 			grpNumb = it->second.GrpNumb;
+			raisedLeft = someBS = false;
 		}
-		if (it->second.Reverse) {
-			// mark first direct positions in the current group as empty
-			if (openedGroup) {
-				if (!newGroup)
-					MarkSubseqAsEmpty(posCnt);
-				openedGroup = false;
-			}
-			posCnt = 0;
-			negCnt++;
+
+		if (it->second.Reverse) {	// Left border
+			extraLeftCnt++;
+			raisedLeft = true;
+			newBS = false;
 		}
-		else {
-			negCnt = 0;
-			posCnt++;
+		else {						// Right border
+			if (newBS && !extraLeftCnt)
+				if (!extraRightCnt || !newGroup)
+					lastExtraRight_it = it;
+			extraLeftCnt = 0;
+			if (raisedLeft)
+				someBS = true;
+			else 
+				extraRightCnt++;
 		}
 	}
+	// 'close' last group
+	ResetBothExtraEntries(end());
 }
 
-void BS_Map::Normalize()
+void BS_Map::NormalizeScore()
 {
 	float maxScore = 0;
 
 	// *** set direct&reversed position scores as sum of each other
-	Do([&maxScore](vector<ValPos>* VP) {
+	Do( [&maxScore](vector<ValPos>* VP) {
 		const float val[2]{ VP[0].front().Val ,VP[1].back().Val };	// first direct, last reversed
 		const float ratio = val[0] / val[1];						// direct/reversed score ratio
 
@@ -463,7 +517,7 @@ void BS_Map::Normalize()
 		};
 
 		setScore(VP[1], BYTE(VP[1].size() - 1), val[0]);	// set basic reverse score to sum of direct & reversed
-		VP[0].front().Iter->second.Score = ratio;	// set basic direct score to direct/reversed score ratio
+		VP[0].front().Iter->second.Score = ratio;			// set basic direct score to direct/reversed score ratio
 
 		for (BYTE s : {0, 1}) {
 			const BYTE vpLen = BYTE(VP[s].size() - 1);
@@ -471,20 +525,41 @@ void BS_Map::Normalize()
 			for (BYTE i = !s + 1; i < vpLen; i++)
 				setScore(vp, i, val[!s]);
 		}
-		});
+	} );
 
 	// *** normalize scores relative to maximum
 	bool reversed = false;
-	for (auto& x : *this) {
-		if (!x.second.Score)	continue;
-		if(x.second.Reverse)
-			reversed = true;
-		else if (reversed) {
-			reversed = false;
-			continue;		// skip basic direct score as it keeps direct/reversed ratio
+	for (auto& x : *this)
+		if (x.second.Score) {
+			if (x.second.Reverse)
+				reversed = true;
+			else if (reversed) {
+				reversed = false;
+				continue;		// skip basic direct score as it keeps direct/reversed ratio
+			}
+			x.second.Score /= maxScore;
 		}
-		x.second.Score /= maxScore;
-	}
+}
+
+void BS_Map::NormalizeBSwidth()
+{
+	Do([&](const vector<BS_Map::ValPos>* VP) {
+		// *** save basic info
+		const auto& itStart = VP[1].back().Iter;
+		const auto& itEnd = VP[0].front().Iter;
+		}
+	);
+	//	for (auto& x : *this)
+	//	if (x.second.Score) {
+	//		if (x.second.Reverse)
+	//			reversed = true;
+	//		else if (reversed) {
+	//			reversed = false;
+	//			continue;		// skip basic direct score as it keeps direct/reversed ratio
+	//		}
+	//		x.second.Score /= maxScore;
+	//	}
+
 }
 
 void BS_Map::PrintStat() const
@@ -514,7 +589,8 @@ void BS_Map::PrintStat() const
 		else
 			if (minPosRatio > val)		minPosRatio = val, minPosNumb = bsNumb;
 			else if (maxPosRatio < val)	maxPosRatio = val, maxPosNumb = bsNumb;
-		});
+		}
+	);
 
 	printf("\nBS count: %d\n", bsNumb);
 	if (!bsNumb) return;
@@ -571,13 +647,15 @@ void BS_Map::CheckScoreHierarchy()
 void BS_Map::Print(chrid cID, bool real, chrlen stopPos) const
 {
 	const char* format[]{
-		"%d %4d  %c  %5.2f %4d   %s\n",	// odd group numb to left
-		"%d %-4d  %c  %5.2f %4d   %s\n"	// even group numb to right
+		"%d %4d %c %c %s %5.2f %4d   %s\n",	// odd group numb to left
+		"%d %-4d %c %c %s %5.2f %4d   %s\n"	// even group numb to right
 	};
 	const char bound[]{ 'R','L' };
+	const char reliable[]{ ' ','?' };
+	const char* expand[]{ "   ","exp"};
 	IGVlocus locus(cID);
 
-	printf("\npos\tgrp  bnd score  pCnt  IGV view\n");
+	printf("\npos\tgrp  brd exp score  pCnt  IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
 		if (!real || x.second.Score)
@@ -585,6 +663,8 @@ void BS_Map::Print(chrid cID, bool real, chrlen stopPos) const
 				x.first,
 				x.second.GrpNumb,
 				bound[x.second.Reverse],
+				reliable[x.second.Unreliable],
+				expand[x.second.BS_NegWidth],
 				x.second.Score,
 				x.second.PointCount, locus.Print(x.first)
 			);
@@ -614,6 +694,21 @@ void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 	}
 }
 
+void BedWriter::LineAddRegion(
+	BS_Map::citer itStart, BS_Map::citer itEnd, chrlen bsNumb, bool addDelim, fraglen expLength)
+{
+	//if (itStart->second.BS_NegWidth) {
+	//	Region rgn(itEnd->first, itStart->first);
+	//	auto centre = rgn.Centre();
+	//	expLength += MIN_BS_WIDTH / 2;
+	//	LineAddUInts(centre - expLength, centre + expLength, bsNumb, addDelim);
+	//	printf(">> %d %d\n", centre - expLength, centre + expLength);
+	//}
+	//else
+		LineAddUInts(itStart->first - expLength, itEnd->first + expLength, bsNumb, addDelim);
+}
+
+
 void BedWriter::WriteChromData(chrid cID, BS_Map& bss)
 {
 	const reclen offset = AddChromToLine(cID);
@@ -625,7 +720,8 @@ void BedWriter::WriteChromData(chrid cID, BS_Map& bss)
 		const auto& itStart = VP[1].back().Iter;
 		const auto& itEnd = VP[0].front().Iter;
 
-		LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
+		//LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
+		LineAddRegion(itStart, itEnd, ++bsNumb, true);
 		LineAddScore(itStart->second.Score, true);					// BS score
 		
 		// *** additional regions info
@@ -699,7 +795,8 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 
 		addExtraLines(VP[1]);
 		// *** add basic feature
-		LineAddUInts(start->first, end->first, bsNumb, true);
+		//LineAddUInts(start->first, end->first, bsNumb, true);
+		LineAddRegion(start, end, bsNumb, true);
 		LineAddFloat(start->second.Score, true);		// BS score
 		LineAddChars(delims, reclen(strlen(delims)), false);
 		LineAddFloat(end->second.Score, false);			// reverse/direct ratio
@@ -715,6 +812,7 @@ void BedWriter::WriteChromROI(chrid cID, const BS_Map& bss)
 	chrlen bsNumb = 0;
 
 	bss.DoBasic([&](BS_Map::citer start, BS_Map::citer end) {
+		//LineAddRegion(start, end, ++bsNumb, false, Glob::ROI_ext);
 		LineAddUInts(
 			start->first - Glob::ROI_ext,
 			end->first + Glob::ROI_ext,
@@ -998,6 +1096,8 @@ void DataValuesMap::Print(chrid cID, chrlen stopNumb) const
 void BoundsValues::AddBSpos(
 	BYTE reverse,
 	const TracedPosVal& posVal,
+	chrlen& prevStart,
+	chrlen& prevBSpos,
 	const TreatedCover& cover,
 	BS_Map& bs,
 	OLinearWriter& lwriter
@@ -1053,32 +1153,41 @@ void BoundsValues::AddBSpos(
 	}
 
 	// *** add BS
-	if (lwriter.IsWriterSet()) {
-		opInv.Next(itStop);
-		lwriter.WriteOblique(reverse, result.Pos, itStop);
-	}
-	bs.AddPos(reverse, _grpNumb, result, posVal.Val(reverse));
-}
+	chrlen BSpos = result.Pos + StrandOps[reverse].Factor * Glob::ReadLen;
+	//if (reverse && prevBSpos)
+	//	printf(">%2d %d\t%d\t%c\n", _grpNumb, prevBSpos, BSpos, BSpos > prevBSpos ? '!' : ' ');
+	//if(!reverse)
+	//	printf(">%2d %d\t%d\t%c\n", _grpNumb, prevBSpos, BSpos, BSpos < prevBSpos ? '!':' ');
 
-void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
-{
-	if (_maxVal < deriv.MaxVal())	_maxVal = deriv.MaxVal();
-	_grpNumb = spline.second.GrpNumb;
-	emplace_back(
-		spline.first + relPos, 
-		spline.second.Val(relPos),
-		spline.second.Val(relPos + deriv.Length()),
-		deriv
-	);
+	//if (StrandOps[reverse].EqLess(BSpos, prevBSpos))
+	//if ((reverse && BSpos > prevBSpos) || (!reverse && BSpos < prevBSpos))
+
+	bool unreliable = (reverse && BSpos < prevBSpos && itStart->first > prevStart )
+		|| (!reverse && BSpos > prevBSpos && itStart->first < prevStart);
+	//if(reverse && unreliable)
+	//	cout << ">>>> " << _grpNumb << LF;
+	if(!unreliable)
+	{
+		if (lwriter.IsWriterSet()) {
+			opInv.Next(itStop);
+			lwriter.WriteOblique(reverse, result.Pos, itStop);
+		}
+		bs.AddPos(reverse, _grpNumb, result, posVal.Val(reverse), false);
+		//bs.AddPos(reverse, _grpNumb, result, posVal.Val(reverse), false);
+	}
+	prevBSpos = BSpos;
+	prevStart = itStart->first;
 }
 
 void BoundsValues::SetDirectBSpos(const TreatedCover& rCover, BS_Map& bs, OLinearWriter& lwriter) const
 {
 	TracedPosVal posVal;
+	chrlen prevBSpos = CHRLEN_MAX;
+	chrlen prevStart = 0;
 
 	for (auto it = rbegin(); it != rend(); it++) {		// loop through derivatives
 		posVal.Set(0, it);
-		AddBSpos(0, posVal, rCover, bs, lwriter);
+		AddBSpos(0, posVal, prevStart, prevBSpos, rCover, bs, lwriter);
 		posVal.Trace();
 	}
 }
@@ -1086,12 +1195,26 @@ void BoundsValues::SetDirectBSpos(const TreatedCover& rCover, BS_Map& bs, OLinea
 void BoundsValues::SetReverseBSpos(const TreatedCover& rCover, BS_Map& bs, OLinearWriter& lwriter) const
 {
 	TracedPosVal posVal;
+	chrlen prevBSpos = 0;
+	chrlen prevStart = CHRLEN_MAX;
 
 	for (auto it = begin(); it != end(); it++) {		// loop through derivatives
 		posVal.Set(1, it);
-		AddBSpos(1, posVal, rCover, bs, lwriter);
+		AddBSpos(1, posVal, prevStart, prevBSpos, rCover, bs, lwriter);
 		posVal.Trace();
 	}
+}
+
+void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
+{
+	if (_maxVal < deriv.MaxVal())	_maxVal = deriv.MaxVal();
+	_grpNumb = spline.second.GrpNumb;
+	emplace_back(
+		spline.first + relPos,
+		spline.second.Val(relPos),
+		spline.second.Val(relPos + deriv.Length()),
+		deriv
+	);
 }
 
 
@@ -1150,7 +1273,7 @@ void BoundsValuesMap::SetBSpos(BYTE reverse, const TreatedCover& rCover, BS_Map&
 void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 {
 	//printf("\nDERIVS %s: %2.2f\n", sStrandTITLES[strand - 1], MaxVal);
-	printf("\nDERIVS %s\n", sStrandTITLES[strand - 1]);
+	printf("\nDERIVS %s\n", sStrandTITLES[strand]);
 	for (const auto& rvss : *this) {
 		if (stopPos && rvss.first > stopPos)	break;
 		printf("%d: %2.2f\n", rvss.first, rvss.second.MaxVal());
