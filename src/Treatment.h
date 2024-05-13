@@ -1,10 +1,15 @@
+/**********************************************************
+Treatment.h
+Provides support for binding sites discovery
+Fedor Naumenko (fedor.naumenko@gmail.com)
+Last modified: 05/13/2024
+***********************************************************/
 #pragma once
 #include "common.h"
 #include "DataReader.h"
 #include "OrderedData.h"
 #include "ChromData.h"
 #include "Spline.h"
-//#include <memory>
 #include <fstream>
 #include <stdexcept>
 #include <iterator>
@@ -327,7 +332,7 @@ struct BS_PosVal
 		Unreliable(unreliable) {}
 };
 
-class BS_Map : public map<chrlen, BS_PosVal>
+class BS_map : public map<chrlen, BS_PosVal>
 {
 	//using iter = map<chrlen, BS_PosVal>::iterator;
 
@@ -384,9 +389,17 @@ public:
 			if (it->second.Score && !it->second.Reverse && it0->second.Reverse)
 				lambda(it0, it);
 	}
+	template<typename F>
+	void DoBasic(F&& lambda)
+	{
+		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
+			if (it->second.Score && !it->second.Reverse && it0->second.Reverse)
+				lambda(it0, it);
+	}
 
 	void NormalizeScore();
 
+	// Expands too narrow BSs to the minimum acceptable width
 	void NormalizeBSwidth();
 
 	void PrintStat() const;
@@ -416,12 +429,6 @@ class BedWriter : public RegionWriter
 
 	void LineAddScore(float score, bool delim) { assert(fLineAddScore); (this->*fLineAddScore)(score, delim); }
 
-	// Adds BS start/end positions and number, correcting 'negative' BS width
-	void LineAddRegion(
-		//const BS_Map::iter& itStart, const BS_Map::iter& itEnd, chrlen bsNumb, bool addDelim, fraglen expLength = 0);
-		BS_Map::citer itStart, BS_Map::citer itEnd, chrlen bsNumb, bool addDelim, fraglen expLength = 0);
-
-	
 public:
 	static bool RankScore() { return rankScore; }
 
@@ -443,17 +450,17 @@ public:
 	// Writes BSs as lines containing 7 or 11-fields feature; adds a gray color to feature with zero score
 	//	@param cID: chrom ID
 	//	@param bss: binding sites (const in fact)
-	void WriteChromData(chrid cID, BS_Map& bss);
+	void WriteChromData(chrid cID, BS_map& bss);
 
 	// Writes extended BSs; adds a gray color to feature with zero score
 	//	@param cID: chrom ID
 	//	@param bss: binding sites (const in fact)
-	void WriteChromExtData(chrid cID, BS_Map& bss);
+	void WriteChromExtData(chrid cID, BS_map& bss);
 
 	// Writes Regions of interest (extended binding sites) as a 4-fields features
 	//	@param cID: chrom ID
 	//	@param bss: binding sites
-	void WriteChromROI(chrid cID, const BS_Map& bss);
+	void WriteChromROI(chrid cID, const BS_map& bss);
 };
 
 class BedWriters
@@ -471,7 +478,7 @@ public:
 		_main.SetFloatFractDigits(3);
 	}
 
-	void WriteChromData(chrid cID, BS_Map& bss)
+	void WriteChromData(chrid cID, BS_map& bss)
 	{
 		_main.WriteChromData(cID, bss);
 		_ext.WriteChromExtData(cID, bss);
@@ -479,8 +486,8 @@ public:
 	}
 };
 
-using OBS_Map = OrderedData<BS_Map, BedWriters>;
-//class OBS_Map : public OrderedData<BS_Map, BedWriter>
+using OBS_Map = OrderedData<BS_map, BedWriters>;
+//class OBS_Map : public OrderedData<BS_map, BedWriter>
 //{
 //public:
 //	// Primer constructor
@@ -490,7 +497,7 @@ using OBS_Map = OrderedData<BS_Map, BedWriters>;
 //	//	@param fname: name of output file
 //	//	@param descr: track decsription in declaration line
 //	OBS_Map(const ChromSizes& cSizes, BYTE dim, bool write, const string& fname, const char* descr)
-//		: OrderedData<BS_Map, BedWriter>(cSizes, dim, write, TrackFields(fname, descr)) {}
+//		: OrderedData<BS_map, BedWriter>(cSizes, dim, write, TrackFields(fname, descr)) {}
 //};
 
 
@@ -707,7 +714,7 @@ class BoundsValues : public vector<BoundValues>
 		chrlen& prevStart,
 		chrlen& prevBSpos,
 		const TreatedCover& cover,
-		BS_Map& bs,
+		BS_map& bs,
 		OLinearWriter& lwriter
 	) const;
 
@@ -719,9 +726,9 @@ public:
 	//using rIter = vector<ValuesMap>::reverse_iterator;
 	//typedef vector<ValuesMap>::iterator iter_type;
 
-	void SetDirectBSpos	(const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const;
+	void SetDirectBSpos	(const TreatedCover& cover, BS_map& bs, OLinearWriter& lwriter) const;
 
-	void SetReverseBSpos(const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const;
+	void SetReverseBSpos(const TreatedCover& cover, BS_map& bs, OLinearWriter& lwriter) const;
 
 	// Adds derivative values for given spline relative position
 	//	@param spline: given spline
@@ -746,7 +753,7 @@ public:
 	//void BuildDerivs(BYTE reverse, const ValuesMap& splines);
 	void BuildDerivs(int factor, const ValuesMap& splines);
 
-	void SetBSpos(BYTE reverse, const TreatedCover& cover, BS_Map& bs, OLinearWriter& lwriter) const;
+	void SetBSpos(BYTE reverse, const TreatedCover& cover, BS_map& bs, OLinearWriter& lwriter) const;
 
 #ifdef MY_DEBUG
 	void Print(eStrand strand, chrlen stopPos = 0) const;
@@ -762,7 +769,7 @@ public:
 		StrandData(NEG).BuildDerivs(StrandOps[1].Factor, splines.StrandData(NEG));
 	}
 
-	void SetBSpos(const DataSet<TreatedCover>& rCover, BS_Map& bss, OLinearWriter& lwriter)
+	void SetBSpos(const DataSet<TreatedCover>& rCover, BS_map& bss, OLinearWriter& lwriter)
 	{
 		StrandData(POS).SetBSpos(0, rCover.StrandData(POS), bss, lwriter);
 		StrandData(NEG).SetBSpos(1, rCover.StrandData(NEG), bss, lwriter);

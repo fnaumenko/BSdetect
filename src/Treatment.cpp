@@ -408,9 +408,9 @@ void DataCoverRegions::Clear()
 }
 
 
-//===== BS_Map
+//===== BS_map
 
-void BS_Map::Refine()
+void BS_map::Refine()
 {
 	/*
 	BS Left entry (border): is formed by reverse reads; BS Right entry (border): is formed by direct reads
@@ -502,7 +502,7 @@ void BS_Map::Refine()
 	ResetBothExtraEntries(end());
 }
 
-void BS_Map::NormalizeScore()
+void BS_map::NormalizeScore()
 {
 	float maxScore = 0;
 
@@ -541,28 +541,34 @@ void BS_Map::NormalizeScore()
 		}
 }
 
-void BS_Map::NormalizeBSwidth()
+void BS_map::NormalizeBSwidth()
 {
-	Do([&](const vector<BS_Map::ValPos>* VP) {
-		// *** save basic info
-		const auto& itStart = VP[1].back().Iter;
-		const auto& itEnd = VP[0].front().Iter;
-		}
-	);
-	//	for (auto& x : *this)
-	//	if (x.second.Score) {
-	//		if (x.second.Reverse)
-	//			reversed = true;
-	//		else if (reversed) {
-	//			reversed = false;
-	//			continue;		// skip basic direct score as it keeps direct/reversed ratio
-	//		}
-	//		x.second.Score /= maxScore;
-	//	}
+	const BYTE MIN_BS_WIDTH = 5;
 
+	vector<BS_map::iter> toErase;
+	toErase.reserve(10);
+	// accumulate abd expand narrow BSs
+	DoBasic([&](iter& start, iter& end) {
+		if (start->second.GrpNumb != end->second.GrpNumb)	return;
+		const fraglen len = end->first - start->first;
+		if (len < MIN_BS_WIDTH) {
+			const auto diff = BYTE(MIN_BS_WIDTH - len);
+			auto Expand = [&](iter& it, chrlen pos) {
+				if (it->first != pos) {
+					emplace_hint(it, pos, it->second);
+					toErase.push_back(it);
+				}
+			};
+			Expand(start, start->first - diff / 2);
+			Expand(end, end->first + diff / 2 + diff % 2);
+		}
+	});
+	// erase narrow BSs
+	for (auto i = toErase.size(); i; i--)	// reverse bypass
+		erase(toErase[i - 1]);
 }
 
-void BS_Map::PrintStat() const
+void BS_map::PrintStat() const
 {
 	if (!Verb::Level(Verb::DBG))	return;
 
@@ -572,7 +578,7 @@ void BS_Map::PrintStat() const
 	float	minNegRatio, minPosRatio, minScore, maxNegRatio = 0, maxPosRatio = 0;
 	minNegRatio = minPosRatio = minScore = 1000;
 
-	DoBasic([&](citer start, citer end) {
+	DoBasic([&](citer& start, citer& end) {
 		const chrlen len = end->first - start->first;
 		++bsNumb;
 		if (minLen > len)		minLen = len, minNumb = bsNumb;
@@ -592,19 +598,45 @@ void BS_Map::PrintStat() const
 		}
 	);
 
-	printf("\nBS count: %d\n", bsNumb);
+	// collect items with min/max len
+	vector<chrlen> minLenNumbers, maxLenNumbers;
+	bsNumb = 0;
+	DoBasic([&](citer& start, citer& end) {
+		const chrlen len = end->first - start->first;
+		++bsNumb;
+		if (len == minLen)
+			minLenNumbers.push_back(bsNumb);
+		else if (len == maxLen)
+			maxLenNumbers.push_back(bsNumb);
+		}
+	);
+
+	std::printf("\nBS count: %d\n", bsNumb);
 	if (!bsNumb) return;
-	printf("shortest: %d (%d),  longest: %d (%d)\n", minNumb, minLen, maxNumb, maxLen);
-	printf("min score: %2.2f (%d)\n", minScore, minScoreNumb);
-	printf("----------------------------\n");
-	printf("RATIO:\tmin  (N)   max  (N)\n");
-	printf("----------------------------\n");
-	printf("reverse\t%2.2f (%d)  %2.2f (%d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
-	printf("direct\t%2.2f (%d)  %2.2f (%d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
+
+	// lengths
+	const char* line = "-----------------\n";
+	auto prLenNumbs = [](const char* title, chrlen len, vector<chrlen>& numbers) {
+		std::printf("%s %4d  %d", title, len, numbers[0]);
+		for (short i = 1; i < numbers.size(); i++)	std::printf(",%d", numbers[i]);
+		std::printf("\n");
+	};
+	std::printf("%s", line);
+	std::printf("   length numbers\n");
+	std::printf("%s", line);
+	prLenNumbs("min", minLen, minLenNumbers);
+	prLenNumbs("max", maxLen, maxLenNumbers);
+
+	std::printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
+	std::printf("----------------------------\n");
+	std::printf("RATIO:\tmin  (N)   max  (N)\n");
+	std::printf("----------------------------\n");
+	std::printf("reverse\t%2.2f (%d)  %2.2f (%d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
+	std::printf("direct\t%2.2f (%d)  %2.2f (%d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
 }
 
 #ifdef MY_DEBUG
-void BS_Map::CheckScoreHierarchy()
+void BS_map::CheckScoreHierarchy()
 {
 	chrlen bsNumb = 0;
 	bool issues = false;
@@ -644,7 +676,7 @@ void BS_Map::CheckScoreHierarchy()
 	if (!issues)	printf("OK\n");
 }
 
-void BS_Map::Print(chrid cID, bool real, chrlen stopPos) const
+void BS_map::Print(chrid cID, bool real, chrlen stopPos) const
 {
 	const char* format[]{
 		"%d %4d %c %c %s %5.2f %4d   %s\n",	// odd group numb to left
@@ -694,34 +726,18 @@ void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 	}
 }
 
-void BedWriter::LineAddRegion(
-	BS_Map::citer itStart, BS_Map::citer itEnd, chrlen bsNumb, bool addDelim, fraglen expLength)
-{
-	//if (itStart->second.BS_NegWidth) {
-	//	Region rgn(itEnd->first, itStart->first);
-	//	auto centre = rgn.Centre();
-	//	expLength += MIN_BS_WIDTH / 2;
-	//	LineAddUInts(centre - expLength, centre + expLength, bsNumb, addDelim);
-	//	printf(">> %d %d\n", centre - expLength, centre + expLength);
-	//}
-	//else
-		LineAddUInts(itStart->first - expLength, itEnd->first + expLength, bsNumb, addDelim);
-}
-
-
-void BedWriter::WriteChromData(chrid cID, BS_Map& bss)
+void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 {
 	const reclen offset = AddChromToLine(cID);
 	bool lastSep[]{ false, false };
 	chrlen bsNumb = 0;
 
-	bss.Do([&](const vector<BS_Map::ValPos>* VP) {
+	bss.Do([&](const vector<BS_map::ValPos>* VP) {
 		// *** save basic info
 		const auto& itStart = VP[1].back().Iter;
 		const auto& itEnd = VP[0].front().Iter;
 
-		//LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
-		LineAddRegion(itStart, itEnd, ++bsNumb, true);
+		LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
 		LineAddScore(itStart->second.Score, true);					// BS score
 		
 		// *** additional regions info
@@ -757,12 +773,12 @@ void BedWriter::WriteChromData(chrid cID, BS_Map& bss)
 		});
 }
 
-void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
+void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 {
 	chrlen bsNumb = 0;
 	const reclen offset = AddChromToLine(cID);
 
-	bss.Do([&](const vector<BS_Map::ValPos>* VP) {
+	bss.Do([&](const vector<BS_map::ValPos>* VP) {
 		static const string colors[]{
 			// color		 ind	feature_score/BS_score
 			"140,30,30",	// 0	>=0		dark red
@@ -774,7 +790,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 		const auto& start = VP[1].back().Iter;
 		const float score = VP[1].back().Val;
 
-		auto addExtraLines = [=, &bsNumb](const vector<BS_Map::ValPos>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
+		auto addExtraLines = [=, &bsNumb](const vector<BS_map::ValPos>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
 			if (vp.size() == 1)	return;
 			for (auto it0 = vp.begin(), it = next(it0); it != vp.end(); it0++, it++) {
 				LineAddUInts(it0->Iter->first, it->Iter->first, bsNumb, true);
@@ -795,8 +811,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 
 		addExtraLines(VP[1]);
 		// *** add basic feature
-		//LineAddUInts(start->first, end->first, bsNumb, true);
-		LineAddRegion(start, end, bsNumb, true);
+		LineAddUInts(start->first, end->first, bsNumb, true);
 		LineAddFloat(start->second.Score, true);		// BS score
 		LineAddChars(delims, reclen(strlen(delims)), false);
 		LineAddFloat(end->second.Score, false);			// reverse/direct ratio
@@ -806,13 +821,12 @@ void BedWriter::WriteChromExtData(chrid cID, BS_Map& bss)
 		});
 }
 
-void BedWriter::WriteChromROI(chrid cID, const BS_Map& bss)
+void BedWriter::WriteChromROI(chrid cID, const BS_map& bss)
 {
 	const reclen offset = AddChromToLine(cID);
 	chrlen bsNumb = 0;
 
-	bss.DoBasic([&](BS_Map::citer start, BS_Map::citer end) {
-		//LineAddRegion(start, end, ++bsNumb, false, Glob::ROI_ext);
+	bss.DoBasic([&](BS_map::citer& start, BS_map::citer& end) {
 		LineAddUInts(
 			start->first - Glob::ROI_ext,
 			end->first + Glob::ROI_ext,
@@ -822,7 +836,6 @@ void BedWriter::WriteChromROI(chrid cID, const BS_Map& bss)
 		LineToIOBuff(offset);
 		});
 }
-
 
 //===== BedWriters
 
@@ -1099,7 +1112,7 @@ void BoundsValues::AddBSpos(
 	chrlen& prevStart,
 	chrlen& prevBSpos,
 	const TreatedCover& cover,
-	BS_Map& bs,
+	BS_map& bs,
 	OLinearWriter& lwriter
 ) const
 {
@@ -1179,7 +1192,7 @@ void BoundsValues::AddBSpos(
 	prevStart = itStart->first;
 }
 
-void BoundsValues::SetDirectBSpos(const TreatedCover& rCover, BS_Map& bs, OLinearWriter& lwriter) const
+void BoundsValues::SetDirectBSpos(const TreatedCover& rCover, BS_map& bs, OLinearWriter& lwriter) const
 {
 	TracedPosVal posVal;
 	chrlen prevBSpos = CHRLEN_MAX;
@@ -1192,7 +1205,7 @@ void BoundsValues::SetDirectBSpos(const TreatedCover& rCover, BS_Map& bs, OLinea
 	}
 }
 
-void BoundsValues::SetReverseBSpos(const TreatedCover& rCover, BS_Map& bs, OLinearWriter& lwriter) const
+void BoundsValues::SetReverseBSpos(const TreatedCover& rCover, BS_map& bs, OLinearWriter& lwriter) const
 {
 	TracedPosVal posVal;
 	chrlen prevBSpos = 0;
@@ -1257,9 +1270,9 @@ void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 	}
 }
 
-void BoundsValuesMap::SetBSpos(BYTE reverse, const TreatedCover& rCover, BS_Map& bs, OLinearWriter& lwriter) const
+void BoundsValuesMap::SetBSpos(BYTE reverse, const TreatedCover& rCover, BS_map& bs, OLinearWriter& lwriter) const
 {
-	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, BS_Map&, OLinearWriter&) const;
+	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, BS_map&, OLinearWriter&) const;
 	tSetBSpos SetBSpos = reverse ?
 		&BoundsValues::SetReverseBSpos	:
 		&BoundsValues::SetDirectBSpos	;
