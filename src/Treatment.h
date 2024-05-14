@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/13/2024
+Last modified: 05/14/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -136,21 +136,6 @@ public:
 
 //===== DATA
 
-// Linear Regression result
-struct LRegrResult
-{
-	chrlen	Pos;
-	coval	PtCnt;
-	float	Deriv;
-
-	bool Valid() const { return
-		Pos					// zero Pos is the result of a failed regression calculation
-		&& Deriv < 1		// 1 (vertical line) is useless
-		&& Deriv >= 0.01;	// too small angle is useless
-	}
-
-	void Clear() { Deriv = 0; PtCnt = Pos = 0; }
-};
 
 // temporary Reads collection
 class Reads
@@ -175,6 +160,32 @@ public:
 
 //=== TREATED COVER & COLLECTION
 struct CoverRegion;
+
+// Inclined line represents average derivative of the area of read's coverage growth/decline,
+// as a resul of Linear Regression
+struct Incline
+{
+	chrlen	Pos;	// position of the incline on the x-axis (chromosome's position)
+	chrlen	TopPos;	// position of the top point of the incline
+	coval	PtCnt;	// number of points along which the incline was drawn
+	float	MaxDerVal;	// 
+	float	Deriv;	// derivative (tangent of the angle of incline)
+
+	bool Valid() const {
+		return
+			Pos					// zero Pos is the result of a failed regression calculation
+			&& Deriv < 1		// 1 (vertical line) is useless
+			&& Deriv >= 0.01;	// too small angle is useless
+	}
+
+	void Clear() { Deriv = 0; PtCnt = Pos = 0; }
+
+#ifdef MY_DEBUG
+	void Print() const {
+		printf("%d %d  cnt: %2d, derVal: %-2.2f\n", Pos, TopPos, PtCnt, MaxDerVal);
+	}
+#endif
+};
 
 class TreatedCover : public AccumCover
 {
@@ -209,8 +220,8 @@ public:
 	//	@param it: start iterator
 	//	@param itStop: end iterator
 	//	@param op: strand operations
-	//	@result[out]: calculated results
-	void LinearRegr(coviter it, const coviter& itStop, const StrandOp& op, LRegrResult& result) const;
+	//	@incline[out]: resulting inclined line
+	void LinearRegr(coviter it, const coviter& itStop, const StrandOp& op, Incline& incline) const;
 };
 
 // 'CombCover' keeps the chromosome covers and optionally the set of writers these covers to file.
@@ -321,20 +332,29 @@ struct BS_PosVal
 	chrlen	GrpNumb;
 	coval	PointCount;
 	float	Score;
-	BYTE	Unreliable = 0;
-	bool	BS_NegWidth = false;
 
-	//BS_PosVal(BYTE reverse, chrlen grpNumb, coval pointCount, float deriv, float splineVal) :
-	//	Reverse(reverse), GrpNumb(grpNumb), PointCount(pointCount), Score(deriv* splineVal) {}
-
-	BS_PosVal(BYTE reverse, chrlen grpNumb, const LRegrResult& result, float splineVal, BYTE unreliable) :
-		Reverse(reverse), GrpNumb(grpNumb), PointCount(result.PtCnt), Score(result.Deriv * splineVal),
-		Unreliable(unreliable) {}
+	// Constructor
+	//	@param reverse: 0 for firect, 1 for reverse
+	//	@param grpNumb: group number
+	//	@param incln: inclined line
+	BS_PosVal(BYTE reverse, chrlen grpNumb, const Incline& incln) :
+		Reverse(reverse), GrpNumb(grpNumb), PointCount(incln.PtCnt), Score(incln.Deriv * incln.MaxDerVal) {}
 };
 
 class BS_map : public map<chrlen, BS_PosVal>
 {
 	//using iter = map<chrlen, BS_PosVal>::iterator;
+
+	// Adds BS position
+	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
+	//	@param grpNumber: group number
+	//	@param incln: inclined line
+	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incln) {
+		emplace(
+			incln.Pos + StrandOps[reverse].Factor * Glob::ReadLen,
+			BS_PosVal(reverse, grpNumb, incln)
+		);	// !!! use hint?
+	}
 
 public:
 	using iter = map<chrlen, BS_PosVal>::iterator;
@@ -347,15 +367,12 @@ public:
 		ValPos(iter it, float val) : Iter(it), Val(val) {}
 	};
 
-	//void AddPos(BYTE reverse, chrlen grpNumb, chrlen pos, coval pointCount, float deriv, float splineVal) {
-	//	emplace(pos, BS_PosVal(reverse, grpNumb, pointCount, deriv, splineVal));	// !!! use hint?
-	//}
-	void AddPos(BYTE reverse, chrlen grpNumb, const LRegrResult& result, float splineVal, BYTE unreliable) {
-		emplace(
-			result.Pos + StrandOps[reverse].Factor * Glob::ReadLen,
-			BS_PosVal(reverse, grpNumb, result, splineVal, unreliable)
-		);	// !!! use hint?
-	}
+	// Initializes the instance of recognized left/right borders of binding sites
+	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
+	//	@param grpNumber: group number
+	//	@param inclines: direct/reversed inclined lines
+	void Init(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines);
+
 
 	// Brings the instance to canonical order of placing BS borders
 	void Refine();
@@ -418,7 +435,6 @@ public:
 // 'BedWriter' implements methods for writing in ordinary bed format
 class BedWriter : public RegionWriter
 {
-	const BYTE MIN_BS_WIDTH = 5;
 	static bool rankScore;	// true if scores in the main bed should be normalized relative to 1000
 
 	void LineAddIntScore	(float score, bool delim) { LineAddInt(int(round(score * 1000)), delim); }
@@ -537,7 +553,7 @@ public:
 	void GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const;
 
 #ifdef MY_DEBUG
-	void Print() const;
+	void Print(bool prValues = false) const;
 #endif
 };
 
@@ -692,43 +708,46 @@ class BoundsValues : public vector<BoundValues>
 		}
 
 		// Saves previous positions/values (by swapping)
-		void Trace()
+		void Retain()
 		{
-			std::swap(_pos, _pos0);
-			std::swap(_val, _val0);
+			memcpy(_pos0, _pos, sizeof(_pos));
+			memcpy(_val0, _val, sizeof(_val));
+			//std::swap(_pos, _pos0);
+			//std::swap(_val, _val0);
 		}
 	};
 
 	float _maxVal = 0;
 	chrlen _grpNumb;
 
-	// Calculates cover linear regression and adds BS position between start and stop
-	//	@param reverse: true if tag is reversed (neg strand)
-	//	@param posVal: traced positions and values
-	//	@param cover: coverage on which the regression is calculated
-	//	@param bs: BS collection to which the new position is added
-	//	@param lwriter: writer to save linear regression representation
-	void AddBSpos(
+	void PushIncline(
 		BYTE reverse,
 		const TracedPosVal& posVal,
-		chrlen& prevStart,
-		chrlen& prevBSpos,
 		const TreatedCover& cover,
-		BS_map& bs,
+		vector<Incline>& inclines,
 		OLinearWriter& lwriter
 	) const;
 
 public:
+
 	float	MaxVal()	const { return _maxVal; }
-	//chrlen	GroupNumb()	const { return _grpNumb; }
+	chrlen	GroupNumb()	const { return _grpNumb; }
 
 	//using cIter = vector<ValuesMap>::const_iterator;
 	//using rIter = vector<ValuesMap>::reverse_iterator;
 	//typedef vector<ValuesMap>::iterator iter_type;
 
-	void SetDirectBSpos	(const TreatedCover& cover, BS_map& bs, OLinearWriter& lwriter) const;
+	// Collects direct inclined lines
+	//	@param rCover[in]: read coverage
+	//	@param inclines[out]: filled collection of direct inclined lines
+	//	@param lwriter[out]: line writer to save inclined 
+	void CollectDirectInclines	(const TreatedCover& cover, vector<Incline>& inclines, OLinearWriter& lwriter) const;
 
-	void SetReverseBSpos(const TreatedCover& cover, BS_map& bs, OLinearWriter& lwriter) const;
+	// Collects reversed inclined lines
+	//	@param rCover[in]: read coverage
+	//	@param inclines[out]: filled collection of reversed inclined lines
+	//	@param lwriter[out]: line writer to save inclined 
+	void CollectReverseInclines(const TreatedCover& cover, vector<Incline>& inclines, OLinearWriter& lwriter) const;
 
 	// Adds derivative values for given spline relative position
 	//	@param spline: given spline
@@ -753,7 +772,12 @@ public:
 	//void BuildDerivs(BYTE reverse, const ValuesMap& splines);
 	void BuildDerivs(int factor, const ValuesMap& splines);
 
-	void SetBSpos(BYTE reverse, const TreatedCover& cover, BS_map& bs, OLinearWriter& lwriter) const;
+	// Fills the BS map with recognized left/right border of binding sites
+	//	@param reverse[in]: 0 for firect (right borders), 1 for reverse (left borders)
+	//	@param rCover[in]: read coverage
+	//	@param bss[out]: filled BS map
+	//	@param lwriter[out]: line writer to save inclined 
+	void AdmitBSborders(BYTE reverse, const TreatedCover& cover, BS_map& bss, OLinearWriter& lwriter) const;
 
 #ifdef MY_DEBUG
 	void Print(eStrand strand, chrlen stopPos = 0) const;
@@ -769,10 +793,14 @@ public:
 		StrandData(NEG).BuildDerivs(StrandOps[1].Factor, splines.StrandData(NEG));
 	}
 
-	void SetBSpos(const DataSet<TreatedCover>& rCover, BS_map& bss, OLinearWriter& lwriter)
+	// Fills the BS map with recognized binding sites
+	//	@param rCover[in]: read coverage
+	//	@param bss[out]: filled BS map
+	//	@param lwriter[out]: line writer to save inclined lines
+	void AdmitBSs(const DataSet<TreatedCover>& rCover, BS_map& bss, OLinearWriter& lwriter) const
 	{
-		StrandData(POS).SetBSpos(0, rCover.StrandData(POS), bss, lwriter);
-		StrandData(NEG).SetBSpos(1, rCover.StrandData(NEG), bss, lwriter);
+		StrandData(POS).AdmitBSborders(0, rCover.StrandData(POS), bss, lwriter);
+		StrandData(NEG).AdmitBSborders(1, rCover.StrandData(NEG), bss, lwriter);
 	}
 
 #ifdef MY_DEBUG
