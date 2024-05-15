@@ -647,7 +647,7 @@ class BS_map : public map<chrlen, BS_PosVal>
 	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
 	//	@param grpNumber: group number
 	//	@param inclines: direct/reversed inclined lines
-	void Init(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines);
+	void AddBorders(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines);
 
 	// Fills the instance with recognized left/right border of binding sites
 	//	@param reverse[in]: 0 for firect (right borders), 1 for reverse (left borders)

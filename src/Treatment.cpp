@@ -836,7 +836,7 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 
 //===== BS_map
 
-void BS_map::Init(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines)
+void BS_map::AddBorders(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines)
 {
 	typedef bool(*tEqLess)(chrlen, chrlen);
 	const tEqLess op[2]{
@@ -872,7 +872,7 @@ void BS_map::SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const Treat
 	for (auto it = derivs.begin(); it != derivs.end(); it++) {		// loop through the derivative groups
 		inclines.clear();
 		(it->second.*fcollectInclines)(rCover, inclines, lwriter);
-		Init(reverse, it->second.GroupNumb(), inclines);
+		AddBorders(reverse, it->second.GroupNumb(), inclines);
 	}
 }
 
