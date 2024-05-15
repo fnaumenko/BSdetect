@@ -413,8 +413,12 @@ void DataCoverRegions::Clear()
 
 void BS_map::Init(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines)
 {
-	typedef bool(*tEqLess)(chrlen pos, chrlen lim);
-	tEqLess Less = StrandOps[reverse].EqLess;
+	typedef bool(*tEqLess)(chrlen,chrlen);
+	const tEqLess op[2] {
+		[](chrlen pos1, chrlen pos2) { return pos1 < pos2; },
+		[](chrlen pos1, chrlen pos2) { return pos1 < pos2; }
+	};
+	const tEqLess Less = op[reverse];
 
 	sort(inclines.begin(), inclines.end(),
 		// sorting by positions in ascending (reverse==0) or descending (reverse==1) order
@@ -866,29 +870,30 @@ void BedWriter::WriteChromROI(chrid cID, const BS_map& bss)
 
 //===== Values
 
-void Values::AddVal(float val)
+void Values::AddValue(float val)
 {
 	if (_maxVal < val)	_maxVal = val;
 	push_back(val);
 }
 
+void Values::AddValues(const Values& vals)
+{
+	if (_maxVal < vals._maxVal)	_maxVal = vals._maxVal;
+	insert(end(), vals.begin(), vals.end());
+}
+
 void Values::GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const
 {
 	float val0 = front();
-	chrlen currPos = startPos;
 	bool increase = false;
 
-	for (auto it = next(begin()); it != end(); val0 = *it, it++, currPos++) {
-		if (*it > val0) {		// increase
+	for (auto it = next(begin()); it != end(); val0 = *it, it++, startPos++)
+		if (*it > val0)		// increase
 			increase = true;
+		else if (increase) {
+			pos.push_back(startPos);
+			increase = false;
 		}
-		else {
-			if (increase) {
-				pos.push_back(currPos);
-				increase = false;
-			}
-		}
-	}
 }
 
 #ifdef MY_DEBUG
@@ -990,7 +995,7 @@ void ValuesMap::BuildRegionSpline(const TreatedCover& cover, const CoverRegion& 
 			if (val) {
 				if (!vals.MaxVal())
 					newPos = spliner.CorrectX(pos);	// start new spline
-				vals.AddVal(val);
+				vals.AddValue(val);
 			}
 			else 
 				addDecentRgn();						// end new spline
@@ -1183,8 +1188,14 @@ void BoundsValues::PushIncline(
 		if (reverse && nextStep) { nextStep = false; it++; }
 		if (compare(it))	break;
 	}
+
 	incline.MaxDerVal = posVal.Val(reverse);
-	inclines.push_back(incline);
+	if (inclines.size()) {
+		if (!inclines.back().Equal(incline))	// skip duplicate incline
+			inclines.push_back(incline);
+	}
+	else
+		inclines.push_back(incline);
 
 	if (lwriter.IsWriterSet()) {
 		opInv.Next(itStop);
@@ -1220,8 +1231,8 @@ void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos
 	_grpNumb = spline.second.GrpNumb;
 	emplace_back(
 		spline.first + relPos,
-		spline.second.Val(relPos),
-		spline.second.Val(relPos + deriv.Length()),
+		spline.second.Value(relPos),
+		spline.second.Value(relPos + deriv.Length()),
 		deriv
 	);
 }
@@ -1236,33 +1247,32 @@ void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 
 		Values deriv;
 		BoundsValues derivSet;	derivSet.reserve(4);
-		fraglen pos = 0;
-
-		auto addRngsVals = [&]() {
-			if (!deriv.MaxVal())	return;
-			fraglen len = deriv.Length();	// because deriv will be cleared
-
-			derivSet.AddValues(spline, pos, deriv);
-			pos += len;
-			deriv.Reserve();
-		};
+		fraglen pos = 0;	// relative position
 		const auto& itEnd = spline.second.end();
 
-		chrlen lastpos = 0;
-		for (auto it0 = spline.second.cbegin(), it = next(it0); 
-			it != itEnd; it0++, it++) 
-		{
-			float tang = (*it - *it0) * factor;				// flip sign of pos strand delta
-			lastpos = spline.first;
-			if (tang > 0)		// cut off negative tangent
-				deriv.AddVal(tang);
+		// loop through floats
+		for (auto it0 = spline.second.begin(), it = next(it0); it != itEnd; it0++, it++) {
+			float tang = (*it - *it0) * factor;		// flip sign of pos strand delta
+			if (tang > 0)							// cut off negative tangent
+				deriv.AddValue(tang);
 			else {
 				pos++;
-				addRngsVals();
+				if (deriv.MaxVal()) {
+					fraglen len = deriv.Length();	// because deriv will be cleared
+
+					derivSet.AddValues(spline, pos, deriv);
+					pos += len;
+					deriv.Reserve();
+				}
 			}
 		}
+
+		// last floats region
 		if (deriv.MaxVal())
-			derivSet.AddValues(spline, pos, deriv);
+			if (derivSet.back().End() == spline.first + pos)
+				derivSet.back().AddValues(deriv);	// add adjacent region
+			else
+				derivSet.AddValues(spline, pos, deriv);
 		AddRegions(spline.first, derivSet);
 	}
 }

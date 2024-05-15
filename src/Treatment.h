@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/14/2024
+Last modified: 05/15/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -55,24 +55,27 @@ private:
 struct StrandOp {
 	int Factor;							// 1 for direct reads, -1 for reversed ones
 	void (*Next)(coviter&);				// decrement/increment iterator (for direct/reversed)
-	coviter (*RetNext)(coviter&);				// decrement/increment iterator (for direct/reversed)
+	coviter (*RetNext)(coviter&);		// decrement/increment iterator (for direct/reversed)
 	coviter (*GetPrev)(const coviter&);	// returns prev/this iterator (for direct/reversed)
-	bool (*EqLess)(chrlen pos, chrlen lim);
+	bool (*EqLess)(chrlen, chrlen);
+	//bool (*Less)(chrlen, chrlen);
 };
 
 // strand-dependent operations: 0 - direct, 1 - reversed
 static const StrandOp StrandOps[2]{
-	{-1,	
-	[](coviter& it) { it--; },
-	[](coviter& it) { return --it; },
-	[](const coviter& it) { return prev(it); },
-	[](chrlen pos, chrlen lim) { return pos <= lim; }
+	{-1	
+	,[](coviter& it) { it--; }
+	,[](coviter& it) { return --it; }
+	,[](const coviter& it) { return prev(it); }
+	,[](chrlen pos, chrlen lim) { return pos <= lim; }
+	//,[](chrlen pos, chrlen lim) { return pos < lim; }
 	},
-	{ 1, 
-	[](coviter& it) { it++; }, 
-	[](coviter& it) { return ++it; },
-	[](const coviter& it) { return it; },
-	[](chrlen pos, chrlen lim) { return pos >= lim; }
+	{ 1
+	,[](coviter& it) { it++; }
+	,[](coviter& it) { return ++it; }
+	,[](const coviter& it) { return it; }
+	,[](chrlen pos, chrlen lim) { return pos >= lim; }
+	//,[](chrlen pos, chrlen lim) { return pos > lim; }
 	}
 };
 
@@ -179,6 +182,8 @@ struct Incline
 	}
 
 	void Clear() { Deriv = 0; PtCnt = Pos = 0; }
+
+	bool Equal(const Incline& incl) const {	return (Pos == incl.Pos) && (TopPos == incl.TopPos); }
 
 #ifdef MY_DEBUG
 	void Print() const {
@@ -519,7 +524,7 @@ using OBS_Map = OrderedData<BS_map, BedWriters>;
 
 //=== SPLINE & COLLECTION
 
-// Ñollection of sequential float values
+// Sequential float values
 class Values : public vector<float>
 {
 	float _maxVal;
@@ -531,13 +536,13 @@ public:
 	Values(Values&& rvals) noexcept : _maxVal(rvals._maxVal), GrpNumb(0), vector<float>(move(rvals)) { rvals._maxVal = 0; }
 	Values(const Values& rvals) = default;
 
-	// Returns region length
+	// Returns values length
 	fraglen Length() const { return fraglen(size()); }
 
-	// Returns value for given region relative position
-	float Val(chrlen relPos) const { return (*this)[relPos]; }
+	// Returns value for given relative position within sequential values
+	float Value(chrlen relPos) const { return (*this)[relPos]; }
 
-	// Returns maximum region value
+	// Returns maximum value within sequential values
 	float MaxVal() const { return _maxVal; }
 
 	void MarkAsEmpty() { _maxVal = 0; }
@@ -546,10 +551,14 @@ public:
 
 	void Clear() { _maxVal = 0; clear(); }
 
-	// Adds calue to the instance
-	void AddVal(float val);
+	void AddValue(float val);
 
-	// Adds positions with local maximum value to the vector pos
+	// Adds sequential values to the instance
+	void AddValues(const Values& vals);
+
+	// Adds positions with local maximum value
+	//	@param startPos[in]: start position to search
+	//	@oaram pos[out]: vector of maximum value positions to which the value is added
 	void GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const;
 
 #ifdef MY_DEBUG
@@ -663,6 +672,7 @@ public:
 
 	chrlen	Start()	const { return _pos; }
 	chrlen	End()	const { return _pos + Length(); }
+
 	// Copies min, max values to the external pair
 	void	GetValues(float(&val)[2]) const { memcpy(val, _val, 2 * sizeof(float)); }
 };
@@ -710,10 +720,10 @@ class BoundsValues : public vector<BoundValues>
 		// Saves previous positions/values (by swapping)
 		void Retain()
 		{
-			memcpy(_pos0, _pos, sizeof(_pos));
-			memcpy(_val0, _val, sizeof(_val));
-			//std::swap(_pos, _pos0);
-			//std::swap(_val, _val0);
+			//memcpy(_pos0, _pos, sizeof(_pos));
+			//memcpy(_val0, _val, sizeof(_val));
+			std::swap(_pos, _pos0);
+			std::swap(_val, _val0);
 		}
 	};
 

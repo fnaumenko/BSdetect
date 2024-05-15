@@ -167,8 +167,7 @@ void Detector::CallBS(chrid cID)
 	//splines.Print(cID);
 
 	derivs.BuildDerivs(splines);					_splines.WriteChrom(cID);
-	derivs.Print();
-	return;
+	//derivs.Print();
 	derivs.AdmitBSs(readCovers, bss, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
 	bss.Refine();
 	bss.NormalizeScore();
