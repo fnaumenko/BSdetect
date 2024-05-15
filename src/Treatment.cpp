@@ -1263,7 +1263,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 			if (vp.size() == 1)	return;
 			for (auto it0 = vp.begin(), it = next(it0); it != vp.end(); it0++, it++) {
 				LineAddUInts(it0->Iter->first, it->Iter->first, bsNumb, true);
-				LineAddFloat(start->second.Score, true);	// BS score
+				LineAddFloat(it0->Val, true);	// BS score
 				LineAddChar(DOT, true);
 				LineAddInts(it0->Iter->first, it->Iter->first, true);
 				// colors
