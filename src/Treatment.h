@@ -139,7 +139,6 @@ public:
 
 //===== DATA
 
-
 // temporary Reads collection
 class Reads
 {
@@ -327,199 +326,6 @@ public:
 
 	void Clear();
 };
-
-
-//=== BINDING SITES DATA 
-
-struct BS_PosVal
-{
-	BYTE	Reverse;
-	chrlen	GrpNumb;
-	coval	PointCount;
-	float	Score;
-
-	// Constructor
-	//	@param reverse: 0 for firect, 1 for reverse
-	//	@param grpNumb: group number
-	//	@param incln: inclined line
-	BS_PosVal(BYTE reverse, chrlen grpNumb, const Incline& incln) :
-		Reverse(reverse), GrpNumb(grpNumb), PointCount(incln.PtCnt), Score(incln.Deriv * incln.MaxDerVal) {}
-};
-
-class BS_map : public map<chrlen, BS_PosVal>
-{
-	//using iter = map<chrlen, BS_PosVal>::iterator;
-
-	// Adds BS position
-	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
-	//	@param grpNumber: group number
-	//	@param incln: inclined line
-	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incln) {
-		emplace(
-			incln.Pos + StrandOps[reverse].Factor * Glob::ReadLen,
-			BS_PosVal(reverse, grpNumb, incln)
-		);	// !!! use hint?
-	}
-
-public:
-	using iter = map<chrlen, BS_PosVal>::iterator;
-	using citer = map<chrlen, BS_PosVal>::const_iterator;
-
-	struct ValPos {
-		iter	Iter;
-		float	Val;
-
-		ValPos(iter it, float val) : Iter(it), Val(val) {}
-	};
-
-	// Initializes the instance of recognized left/right borders of binding sites
-	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
-	//	@param grpNumber: group number
-	//	@param inclines: direct/reversed inclined lines
-	void Init(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines);
-
-
-	// Brings the instance to canonical order of placing BS borders
-	void Refine();
-
-	// Applies lambda to each group of binding sites, passing borders collection
-	template<typename F>
-	void Do(F&& lambda)
-	{
-		vector<ValPos> VP[2];	// 0 - direct, 1 - reversed
-
-		VP[0].reserve(4), VP[1].reserve(4);
-		for (auto it = begin(); it != end(); it++)
-			if (it->second.Score) {
-				if (it->second.Reverse && VP[0].size() && VP[1].size()) {
-					lambda(VP);
-					VP[0].clear(), VP[1].clear();
-				}
-				VP[it->second.Reverse].emplace_back(it, it->second.Score);
-			}
-
-		// last element
-		if (VP[0].size() && VP[1].size())
-			lambda(VP);
-	}
-
-	// Applies lambda to each group denotes the binding site, passing start-end iterators
-	template<typename F>
-	void DoBasic(F&& lambda) const
-	{
-		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
-			if (it->second.Score && !it->second.Reverse && it0->second.Reverse)
-				lambda(it0, it);
-	}
-	template<typename F>
-	void DoBasic(F&& lambda)
-	{
-		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
-			if (it->second.Score && !it->second.Reverse && it0->second.Reverse)
-				lambda(it0, it);
-	}
-
-	void NormalizeScore();
-
-	// Expands too narrow BSs to the minimum acceptable width
-	void NormalizeBSwidth();
-
-	void PrintStat() const;
-
-#ifdef MY_DEBUG
-	// Prints "unsorted" scores
-	void CheckScoreHierarchy();
-
-	// Prints positions
-	//	@param real: if true then prints position with unzero score 
-	//	@param stopPos: max printed position or all by default 
-	void Print(chrid cID, bool real, chrlen stopPos = 0) const;
-#endif
-};
-
-// 'BedWriter' implements methods for writing in ordinary bed format
-class BedWriter : public RegionWriter
-{
-	static bool rankScore;	// true if scores in the main bed should be normalized relative to 1000
-
-	void LineAddIntScore	(float score, bool delim) { LineAddInt(int(round(score * 1000)), delim); }
-	void LineAddFloatScore	(float score, bool delim) { LineAddFloat(score, delim); }
-
-	typedef void (BedWriter::* tAddScore)(float, bool);
-	static tAddScore fLineAddScore;
-
-	void LineAddScore(float score, bool delim) { assert(fLineAddScore); (this->*fLineAddScore)(score, delim); }
-
-public:
-	static bool RankScore() { return rankScore; }
-
-	static void SetRankScore(bool rank) {
-		fLineAddScore = (rankScore = rank) ? &BedWriter::LineAddIntScore : &BedWriter::LineAddFloatScore;
-	}
-
-	// Creates new instance for writing.
-	//	@param strand: strand
-	//	@param fields: BED/WIG track fields
-	BedWriter(eStrand strand, const TrackFields& fields)
-		: RegionWriter(FT::eType::BED, strand, fields) {}
-
-	// Writes regions as lines containing 4 or 9-field feature; adds a gray color to feature with zero score
-	//	@param cID: chrom ID
-	//	@param rgns: range values
-	void WriteChromData(chrid cID, const CoverRegions& rgns);
-
-	// Writes BSs as lines containing 7 or 11-fields feature; adds a gray color to feature with zero score
-	//	@param cID: chrom ID
-	//	@param bss: binding sites (const in fact)
-	void WriteChromData(chrid cID, BS_map& bss);
-
-	// Writes extended BSs; adds a gray color to feature with zero score
-	//	@param cID: chrom ID
-	//	@param bss: binding sites (const in fact)
-	void WriteChromExtData(chrid cID, BS_map& bss);
-
-	// Writes Regions of interest (extended binding sites) as a 4-fields features
-	//	@param cID: chrom ID
-	//	@param bss: binding sites
-	void WriteChromROI(chrid cID, const BS_map& bss);
-};
-
-class BedWriters
-{
-	BedWriter _main;
-	BedWriter _ext;
-	BedWriter _roi;
-
-public:
-	BedWriters(eStrand strand, const TrackFields& fields, const string* commLine = nullptr)
-		: _main(strand, TrackFields(fields, false, BedWriter::RankScore(), "Black"))
-		, _ext (strand, TrackFields(fields, "_ext", "extended called binding sites", true, false, "Black"))
-		, _roi (strand, TrackFields(fields, ".ROI", "IGV Region Navigator list", false, false))
-	{
-		_main.SetFloatFractDigits(3);
-	}
-
-	void WriteChromData(chrid cID, BS_map& bss)
-	{
-		_main.WriteChromData(cID, bss);
-		_ext.WriteChromExtData(cID, bss);
-		_roi.WriteChromROI(cID, bss);
-	}
-};
-
-using OBS_Map = OrderedData<BS_map, BedWriters>;
-//class OBS_Map : public OrderedData<BS_map, BedWriter>
-//{
-//public:
-//	// Primer constructor
-//	//	@param cSizes: chrom sizes
-//	//	@param dim: number (dimension) of data
-//	//	@param write: if true then data sould be save to output file
-//	//	@param fname: name of output file
-//	//	@param descr: track decsription in declaration line
-//	OBS_Map(const ChromSizes& cSizes, BYTE dim, bool write, const string& fname, const char* descr)
-//		: OrderedData<BS_map, BedWriter>(cSizes, dim, write, TrackFields(fname, descr)) {}
-//};
 
 
 //=== SPLINE & COLLECTION
@@ -782,13 +588,6 @@ public:
 	//void BuildDerivs(BYTE reverse, const ValuesMap& splines);
 	void BuildDerivs(int factor, const ValuesMap& splines);
 
-	// Fills the BS map with recognized left/right border of binding sites
-	//	@param reverse[in]: 0 for firect (right borders), 1 for reverse (left borders)
-	//	@param rCover[in]: read coverage
-	//	@param bss[out]: filled BS map
-	//	@param lwriter[out]: line writer to save inclined 
-	void AdmitBSborders(BYTE reverse, const TreatedCover& cover, BS_map& bss, OLinearWriter& lwriter) const;
-
 #ifdef MY_DEBUG
 	void Print(eStrand strand, chrlen stopPos = 0) const;
 #endif
@@ -803,16 +602,6 @@ public:
 		StrandData(NEG).BuildDerivs(StrandOps[1].Factor, splines.StrandData(NEG));
 	}
 
-	// Fills the BS map with recognized binding sites
-	//	@param rCover[in]: read coverage
-	//	@param bss[out]: filled BS map
-	//	@param lwriter[out]: line writer to save inclined lines
-	void AdmitBSs(const DataSet<TreatedCover>& rCover, BS_map& bss, OLinearWriter& lwriter) const
-	{
-		StrandData(POS).AdmitBSborders(0, rCover.StrandData(POS), bss, lwriter);
-		StrandData(NEG).AdmitBSborders(1, rCover.StrandData(NEG), bss, lwriter);
-	}
-
 #ifdef MY_DEBUG
 	void Print(chrlen stopPos = 0) const
 	{
@@ -820,8 +609,216 @@ public:
 		StrandData(NEG).Print(NEG, stopPos);
 	}
 #endif
-
 };
+
+//=== BINDING SITES DATA 
+
+struct BS_PosVal
+{
+	BYTE	Reverse;
+	chrlen	GrpNumb;
+	coval	PointCount;
+	float	Score;
+
+	// Constructor
+	//	@param reverse: 0 for firect, 1 for reverse
+	//	@param grpNumb: group number
+	//	@param incln: inclined line
+	BS_PosVal(BYTE reverse, chrlen grpNumb, const Incline& incln) :
+		Reverse(reverse), GrpNumb(grpNumb), PointCount(incln.PtCnt), Score(incln.Deriv * incln.MaxDerVal) {}
+};
+
+class BS_map : public map<chrlen, BS_PosVal>
+{
+	//using iter = map<chrlen, BS_PosVal>::iterator;
+
+	// Adds BS position
+	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
+	//	@param grpNumber: group number
+	//	@param incln: inclined line
+	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incln) {
+		emplace(
+			incln.Pos + StrandOps[reverse].Factor * Glob::ReadLen,
+			BS_PosVal(reverse, grpNumb, incln)
+		);	// !!! use hint?
+	}
+
+	// Initializes the instance of recognized left/right borders of binding sites
+	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
+	//	@param grpNumber: group number
+	//	@param inclines: direct/reversed inclined lines
+	void Init(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines);
+
+	// Fills the instance with recognized left/right border of binding sites
+	//	@param reverse[in]: 0 for firect (right borders), 1 for reverse (left borders)
+	//	@param derivs[in]: derivatives
+	//	@param rCover[in]: read coverage
+	//	@param lwriter[out]: line writer to save inclined 
+	void SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OLinearWriter& lwriter);
+
+public:
+	using iter = map<chrlen, BS_PosVal>::iterator;
+	using citer = map<chrlen, BS_PosVal>::const_iterator;
+
+	// positioned value
+	struct PosValue {
+		iter	Iter;
+		float	Val;
+
+		PosValue(iter it, float val) : Iter(it), Val(val) {}
+	};
+
+	// Fills the instance with recognized binding sites
+	//	@param derivs[in]: derivatives
+	//	@param rCover[in]: read coverage
+	//	@param lwriter[out]: line writer to save inclined lines
+	void Detect(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover, OLinearWriter& lwriter)
+	{
+		SetBorders(0, derivs.StrandData(POS), rCover.StrandData(POS), lwriter);
+		SetBorders(1, derivs.StrandData(NEG), rCover.StrandData(NEG), lwriter);
+	}
+
+	// Brings the instance to canonical order of placing BS borders
+	void Refine();
+
+	void NormalizeScore();
+
+	// Expands too narrow BSs to the minimum acceptable width
+	void NormalizeBSwidth();
+
+	void PrintStat() const;
+
+	// Applies lambda to each group of binding sites, passing borders collection
+	template<typename F>
+	void Do(F&& lambda)
+	{
+		vector<PosValue> VP[2];	// 0 - direct, 1 - reversed
+
+		VP[0].reserve(4), VP[1].reserve(4);
+		for (auto it = begin(); it != end(); it++)
+			if (it->second.Score) {
+				if (it->second.Reverse && VP[0].size() && VP[1].size()) {
+					lambda(VP);
+					VP[0].clear(), VP[1].clear();
+				}
+				VP[it->second.Reverse].emplace_back(it, it->second.Score);
+			}
+
+		// last element
+		if (VP[0].size() && VP[1].size())
+			lambda(VP);
+	}
+
+	// Applies lambda to each group denotes the binding site, passing start-end iterators
+	template<typename F>
+	void DoBasic(F&& lambda) const
+	{
+		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
+			if (it->second.Score && !it->second.Reverse && it0->second.Reverse)
+				lambda(it0, it);
+	}
+	template<typename F>
+	void DoBasic(F&& lambda)
+	{
+		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
+			if (it->second.Score && !it->second.Reverse && it0->second.Reverse)
+				lambda(it0, it);
+	}
+
+#ifdef MY_DEBUG
+	// Prints "unsorted" scores
+	void CheckScoreHierarchy();
+
+	// Prints positions
+	//	@param real: if true then prints position with unzero score 
+	//	@param stopPos: max printed position or all by default 
+	void Print(chrid cID, bool real, chrlen stopPos = 0) const;
+#endif
+};
+
+// 'BedWriter' implements methods for writing in ordinary bed format
+class BedWriter : public RegionWriter
+{
+	static bool rankScore;	// true if scores in the main bed should be normalized relative to 1000
+
+	void LineAddIntScore	(float score, bool delim) { LineAddInt(int(round(score * 1000)), delim); }
+	void LineAddFloatScore	(float score, bool delim) { LineAddFloat(score, delim); }
+
+	typedef void (BedWriter::* tAddScore)(float, bool);
+	static tAddScore fLineAddScore;
+
+	void LineAddScore(float score, bool delim) { assert(fLineAddScore); (this->*fLineAddScore)(score, delim); }
+
+public:
+	static bool RankScore() { return rankScore; }
+
+	static void SetRankScore(bool rank) {
+		fLineAddScore = (rankScore = rank) ? &BedWriter::LineAddIntScore : &BedWriter::LineAddFloatScore;
+	}
+
+	// Creates new instance for writing.
+	//	@param strand: strand
+	//	@param fields: BED/WIG track fields
+	BedWriter(eStrand strand, const TrackFields& fields)
+		: RegionWriter(FT::eType::BED, strand, fields) {}
+
+	// Writes regions as lines containing 4 or 9-field feature; adds a gray color to feature with zero score
+	//	@param cID: chrom ID
+	//	@param rgns: range values
+	void WriteChromData(chrid cID, const CoverRegions& rgns);
+
+	// Writes BSs as lines containing 7 or 11-fields feature; adds a gray color to feature with zero score
+	//	@param cID: chrom ID
+	//	@param bss: binding sites (const in fact)
+	void WriteChromData(chrid cID, BS_map& bss);
+
+	// Writes extended BSs; adds a gray color to feature with zero score
+	//	@param cID: chrom ID
+	//	@param bss: binding sites (const in fact)
+	void WriteChromExtData(chrid cID, BS_map& bss);
+
+	// Writes Regions of interest (extended binding sites) as a 4-fields features
+	//	@param cID: chrom ID
+	//	@param bss: binding sites
+	void WriteChromROI(chrid cID, const BS_map& bss);
+};
+
+class BedWriters
+{
+	BedWriter _main;
+	BedWriter _ext;
+	BedWriter _roi;
+
+public:
+	BedWriters(eStrand strand, const TrackFields& fields, const string* commLine = nullptr)
+		: _main(strand, TrackFields(fields, false, BedWriter::RankScore(), "Black"))
+		, _ext (strand, TrackFields(fields, "_ext", "extended called binding sites", true, false, "Black"))
+		, _roi (strand, TrackFields(fields, ".ROI", "IGV Region Navigator list", false, false))
+	{
+		_main.SetFloatFractDigits(3);
+	}
+
+	void WriteChromData(chrid cID, BS_map& bss)
+	{
+		_main.WriteChromData(cID, bss);
+		_ext.WriteChromExtData(cID, bss);
+		_roi.WriteChromROI(cID, bss);
+	}
+};
+
+using OBS_Map = OrderedData<BS_map, BedWriters>;
+//class OBS_Map : public OrderedData<BS_map, BedWriter>
+//{
+//public:
+//	// Primer constructor
+//	//	@param cSizes: chrom sizes
+//	//	@param dim: number (dimension) of data
+//	//	@param write: if true then data sould be save to output file
+//	//	@param fname: name of output file
+//	//	@param descr: track decsription in declaration line
+//	OBS_Map(const ChromSizes& cSizes, BYTE dim, bool write, const string& fname, const char* descr)
+//		: OrderedData<BS_map, BedWriter>(cSizes, dim, write, TrackFields(fname, descr)) {}
+//};
 
 
 //===== WIG WRITERS

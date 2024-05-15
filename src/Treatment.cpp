@@ -409,465 +409,6 @@ void DataCoverRegions::Clear()
 }
 
 
-//===== BS_map
-
-void BS_map::Init(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines)
-{
-	typedef bool(*tEqLess)(chrlen,chrlen);
-	const tEqLess op[2] {
-		[](chrlen pos1, chrlen pos2) { return pos1 < pos2; },
-		[](chrlen pos1, chrlen pos2) { return pos1 < pos2; }
-	};
-	const tEqLess Less = op[reverse];
-
-	sort(inclines.begin(), inclines.end(),
-		// sorting by positions in ascending (reverse==0) or descending (reverse==1) order
-		[&Less](const Incline& i1, const Incline& i2) { return Less(i1.Pos, i2.Pos); }
-	);
-	auto it0 = inclines.cbegin();
-	chrlen pos = it0->Pos;
-	AddPos(reverse, grpNumber, *it0);		// the first, definitely steepest (tightest) incline
-	// left to right (reverse==0) or right to left (reverse==1)
-	for (auto it = next(it0); it != inclines.cend(); it0++, it++) {
-		if (Less(pos, it->TopPos))
-			AddPos(reverse, grpNumber, *it);
-		pos = it->TopPos;
-	}
-}
-
-void BS_map::Refine()
-{
-	/*
-	BS Left entry (border): is formed by reverse reads; BS Right entry (border): is formed by direct reads
-	Group corresponds to potential region.
-
-	Options for placing borders in a group:
-	canonical:					[[L] [R]]
-	extra right/left borders:	[R] [[L] [R]] [L]
-	'negative' BS width:		[R] [L]
-
-	Method brings the instance to canonical form, resetting the score of all extra elements to zero,
-	and marking BSs with 'negative' width.
-	*/
-
-	auto lastExtraRight_it = end();	// iterator pointing to the last Right entry that starts the group 
-	uint16_t extraRightCnt = 0;		// count of Right entry that starts the group
-	uint16_t extraLeftCnt = 0;		// count of Left entry that ends the group
-	bool newBS = true;				// if true then new BS in the group is registered
-	bool raisedLeft = false;		// if true then at least one Left entry in the group is processed
-	bool someBS = false;			// if true then at least one BS in the group is registered
-	chrlen grpNumb = 1;
-
-	// resets extra ('false') entries
-	//	@param it: iterator pointing to the first extra entry
-	//	@param entryCnt: count of extra entries which should be reset; becomes zero
-	//	@returns: iterator pointing to the first non-extra entry
-	auto ResetExtraEntries = [](iter& it, uint16_t& entryCnt) {
-		for (; entryCnt; entryCnt--, --it)
-			it->second.Score = 0;
-		return it;
-	};
-
-	// reset right and left extra entries
-	auto ResetBothExtraEntries = [&](iter it) {
-		// reset extra right entries
-		if (lastExtraRight_it != end()) {
-			if (someBS)
-				ResetExtraEntries(lastExtraRight_it, extraRightCnt);
-			else {		// register 'negative' BS width
-				//lastExtraRight_it->second.BS_NegWidth = true;				// set 'negative' flag to the last extra entry
-				lastExtraRight_it->second.Reverse = true;
-				ResetExtraEntries(--lastExtraRight_it, --extraRightCnt);	// reset other extra entries
-			}
-			lastExtraRight_it = end();
-		}
-		// reset extra left entries
-		if (someBS)
-			ResetExtraEntries(--it, extraLeftCnt);
-		else			// register 'negative' BS width
-			// set 'negative' flag to the first extra entry and reset other extra ones
-			//ResetExtraEntries(--it, --extraLeftCnt)->second.BS_NegWidth = true;
-		{
-			auto bs1 = ResetExtraEntries(--it, --extraLeftCnt);
-			//bs1->second.BS_NegWidth = true;
-			bs1->second.Reverse = false;
-		}
-	};
-
-	for (auto it = begin(); it != end(); it++)
-	{
-		const bool newGroup = grpNumb != it->second.GrpNumb;
-
-		if (newGroup) {
-			// 'close' previous group
-			ResetBothExtraEntries(it);	// set extraRightCnt to zero
-			// reset current group
-			if (!newBS)		newBS = true;
-			grpNumb = it->second.GrpNumb;
-			raisedLeft = someBS = false;
-		}
-
-		if (it->second.Reverse) {	// Left border
-			extraLeftCnt++;
-			raisedLeft = true;
-			newBS = false;
-		}
-		else {						// Right border
-			if (newBS && !extraLeftCnt)
-				if (!extraRightCnt || !newGroup)
-					lastExtraRight_it = it;
-			extraLeftCnt = 0;
-			if (raisedLeft)
-				someBS = true;
-			else 
-				extraRightCnt++;
-		}
-	}
-	// 'close' last group
-	ResetBothExtraEntries(end());
-}
-
-void BS_map::NormalizeScore()
-{
-	float maxScore = 0;
-
-	// *** set direct&reversed position scores as sum of each other
-	Do( [&maxScore](vector<ValPos>* VP) {
-		const float val[2]{ VP[0].front().Val ,VP[1].back().Val };	// first direct, last reversed
-		const float ratio = val[0] / val[1];						// direct/reversed score ratio
-
-		auto setScore = [&maxScore](const vector<ValPos>& vp, BYTE i, float val) {
-			float score = (vp[i].Iter->second.Score += val);
-			if (maxScore < score)	maxScore = score;
-		};
-
-		setScore(VP[1], BYTE(VP[1].size() - 1), val[0]);	// set basic reverse score to sum of direct & reversed
-		VP[0].front().Iter->second.Score = ratio;			// set basic direct score to direct/reversed score ratio
-
-		for (BYTE s : {0, 1}) {
-			const BYTE vpLen = BYTE(VP[s].size() - 1);
-			const auto& vp = VP[s];
-			for (BYTE i = !s + 1; i < vpLen; i++)
-				setScore(vp, i, val[!s]);
-		}
-	} );
-
-	// *** normalize scores relative to maximum
-	bool reversed = false;
-	for (auto& x : *this)
-		if (x.second.Score) {
-			if (x.second.Reverse)
-				reversed = true;
-			else if (reversed) {
-				reversed = false;
-				continue;		// skip basic direct score as it keeps direct/reversed ratio
-			}
-			x.second.Score /= maxScore;
-		}
-}
-
-void BS_map::NormalizeBSwidth()
-{
-	const BYTE MIN_BS_WIDTH = 5;
-
-	vector<BS_map::iter> toErase;
-	toErase.reserve(10);
-	// accumulate abd expand narrow BSs
-	DoBasic([&](iter& start, iter& end) {
-		if (start->second.GrpNumb != end->second.GrpNumb)	return;
-		const fraglen len = end->first - start->first;
-		if (len < MIN_BS_WIDTH) {
-			const auto diff = BYTE(MIN_BS_WIDTH - len);
-			auto Expand = [&](iter& it, chrlen newPos, bool newPosIsLess) {
-				if (it->first != newPos) {
-					auto it1 = emplace_hint(newPosIsLess ? it : next(it), newPos, it->second);
-					toErase.push_back(it);
-				}
-			};
-
-			Expand(start, start->first - diff / 2, true);
-			Expand(end, end->first + diff / 2 + diff % 2, false);
-		}
-	});
-	// erase narrow BSs
-	for (auto i = toErase.size(); i; i--)	// reverse bypass
-		erase(toErase[i - 1]);
-}
-
-void BS_map::PrintStat() const
-{
-	if (!Verb::Level(Verb::DBG))	return;
-
-	chrlen	bsNumb = 0;
-	chrlen	minNumb, maxNumb, minLen = CHRLEN_MAX, maxLen = 0;
-	chrlen	minNegNumb, maxNegNumb, minPosNumb, maxPosNumb, minScoreNumb;
-	float	minNegRatio, minPosRatio, minScore, maxNegRatio = 0, maxPosRatio = 0;
-	minNegRatio = minPosRatio = minScore = 1000;
-
-	DoBasic([&](citer& start, citer& end) {
-		const chrlen len = end->first - start->first;
-		++bsNumb;
-		if (minLen > len)		minLen = len, minNumb = bsNumb;
-		else if (maxLen < len)	maxLen = len, maxNumb = bsNumb;
-
-		float val = start->second.Score;
-		if (minScore > val)		minScore = val, minScoreNumb = bsNumb;
-
-		val = end->second.Score;
-		if (val < 1) {
-			if (minNegRatio > val)		minNegRatio = val, minNegNumb = bsNumb;
-			else if (maxNegRatio < val)	maxNegRatio = val, maxNegNumb = bsNumb;
-		}
-		else
-			if (minPosRatio > val)		minPosRatio = val, minPosNumb = bsNumb;
-			else if (maxPosRatio < val)	maxPosRatio = val, maxPosNumb = bsNumb;
-		}
-	);
-
-	// collect items with min/max len
-	vector<chrlen> minLenNumbers, maxLenNumbers;
-	bsNumb = 0;
-	DoBasic([&](citer& start, citer& end) {
-		const chrlen len = end->first - start->first;
-		++bsNumb;
-		if (len == minLen)
-			minLenNumbers.push_back(bsNumb);
-		else if (len == maxLen)
-			maxLenNumbers.push_back(bsNumb);
-		}
-	);
-
-	std::printf("\nBS count: %d\n", bsNumb);
-	if (!bsNumb) return;
-
-	// lengths
-	const char* line = "-----------------\n";
-	auto prLenNumbs = [](const char* title, chrlen len, vector<chrlen>& numbers) {
-		std::printf("%s %4d  %d", title, len, numbers[0]);
-		for (short i = 1; i < numbers.size(); i++)	std::printf(",%d", numbers[i]);
-		std::printf("\n");
-	};
-	std::printf("%s", line);
-	std::printf("   length numbers\n");
-	std::printf("%s", line);
-	prLenNumbs("min", minLen, minLenNumbers);
-	prLenNumbs("max", maxLen, maxLenNumbers);
-
-	std::printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
-	std::printf("----------------------------\n");
-	std::printf("RATIO:\tmin  (N)   max  (N)\n");
-	std::printf("----------------------------\n");
-	std::printf("reverse\t%2.2f (%d)  %2.2f (%d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
-	std::printf("direct\t%2.2f (%d)  %2.2f (%d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
-}
-
-#ifdef MY_DEBUG
-void BS_map::CheckScoreHierarchy()
-{
-	chrlen bsNumb = 0;
-	bool issues = false;
-
-	printf("\nCHECK SCORES HIERARCHY\n");
-	Do([&](const vector<ValPos>* VP) {
-		bool prNeg = false, prPos = false;
-		float val = 0;
-		auto prVals = [](bool sep, char sign, const vector<ValPos>& VP) {
-			if(sep) 	printf(" ");
-			printf("%c", sign);
-			for (const ValPos& vp : VP)
-				printf("%2.3f ", vp.Val);
-		};
-		
-		bsNumb++;
-		// set prNeg; check all
-		for (const ValPos& vp : VP[1])
-			if (prNeg = (val > vp.Val))		break;
-			else val = vp.Val;
-		// set prPos; check all except first element
-		const BYTE vpLen = BYTE(VP[0].size() - 1);
-		const auto& vp = VP[0];
-		val = 1000;
-		for (BYTE i = 1; i < vpLen; i++)
-			if (prPos = (val < vp[i].Val))	break;
-			else val = vp[i].Val;
-		// print of excess over basic score
-		if (prNeg || prPos) {
-			issues = printf("%4d  %d\t", bsNumb, VP[1].back().Iter->first);	// start position
-			if (prNeg)	prVals(false, '-', VP[1]);
-			if (prPos)	prVals(prNeg, '+', VP[0]);
-			printf("\n");
-		}
-		});
-
-	if (!issues)	printf("OK\n");
-}
-
-void BS_map::Print(chrid cID, bool real, chrlen stopPos) const
-{
-	const char* format[]{
-		//"%d %4d %c %c %s %5.2f %4d   %s\n",	// odd group numb to left
-		//"%d %-4d %c %c %s %5.2f %4d   %s\n"	// even group numb to right
-		"%d %4d %c %5.2f %4d   %s\n",	// odd group numb to left
-		"%d %-4d %c %5.2f %4d   %s\n"	// even group numb to right
-	};
-	const char bound[]{ 'R','L' };
-	//const char reliable[]{ ' ','?' };
-	//const char* expand[]{ "   ","exp"};
-	IGVlocus locus(cID);
-
-	//printf("\npos\tgrp  brd exp score  pCnt  IGV view\n");
-	printf("\npos\tgrp  brd score  pCnt  IGV view\n");
-	for (const auto& x : *this) {
-		if (stopPos && x.first > stopPos)	break;
-		if (!real || x.second.Score)
-			printf(format[x.second.GrpNumb % 2],
-				x.first,
-				x.second.GrpNumb,
-				bound[x.second.Reverse],
-				//reliable[x.second.Unreliable],
-				//expand[x.second.BS_NegWidth],
-				x.second.Score,
-				x.second.PointCount, locus.Print(x.first)
-			);
-	}
-}
-#endif
-
-
-//===== BedWriter
-
-bool BedWriter::rankScore = false;
-BedWriter::tAddScore BedWriter::fLineAddScore = nullptr;
-
-void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
-{
-	const reclen colorLen = reclen(strlen(sGRAY));
-	const reclen offset = AddChromToLine(cID);
-
-	for (const auto& rgn : rgns) {
-		LineAddUInts(rgn.Start(), rgn.End(), rgn.value, false);
-		if (!rgn.value) {		// discarded items
-			LineAddChars("\t.\t.\t", 5, false);
-			LineAddInts(rgn.Start(), rgn.End(), true);
-			LineAddChars(sGRAY, colorLen, false);
-		}
-		LineToIOBuff(offset);
-	}
-}
-
-void BedWriter::WriteChromData(chrid cID, BS_map& bss)
-{
-	const reclen offset = AddChromToLine(cID);
-	bool lastSep[]{ false, false };
-	chrlen bsNumb = 0;
-
-	bss.Do([&](const vector<BS_map::ValPos>* VP) {
-		// *** save basic info
-		const auto& itStart = VP[1].back().Iter;
-		const auto& itEnd = VP[0].front().Iter;
-
-		LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
-		LineAddScore(itStart->second.Score, true);					// BS score
-		
-		// *** additional regions info
-		LineAddChar(DOT, true);
-		lastSep[1] = VP[0].size() - 1;
-		LineAddFloat(itEnd->second.Score, VP[1].size() - 1 || lastSep[1]);	// ratio
-
-		// *** extra deviations info
-		for (BYTE s : {1, 0}) {
-			const BYTE vpLen = BYTE(VP[s].size() - 1);
-			if (!vpLen) continue;
-
-			auto& vp = VP[s];
-			function<void(BYTE, char)> saveExtraPos = [this, &vp](BYTE i, char specChar) {
-				LineAddArgs("%c%d", specChar, vp[i].Iter->first);
-			};
-			function<void(BYTE, char)> saveExtraVal = [this, &vp](BYTE i, char specChar) {
-				if (specChar)	LineAddChar(specChar);
-				LineAddScore(vp[i].Iter->second.Score, false);
-			};
-			auto saveExtraFields = [&](function<void(BYTE, char)>& fn, char specChar, bool delim) {
-				BYTE i = !s;
-				fn(i, specChar);
-				for (i++; i < vpLen; i++)	fn(i, COMMA);
-				if (delim)	LineAddChar(TAB);
-			};
-
-			saveExtraFields(saveExtraPos, Read::Strands[s], true);
-			saveExtraFields(saveExtraVal, 0, lastSep[s]);
-		}
-
-		LineToIOBuff(offset);
-		});
-}
-
-void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
-{
-	chrlen bsNumb = 0;
-	const reclen offset = AddChromToLine(cID);
-
-	bss.Do([&](const vector<BS_map::ValPos>* VP) {
-		static const string colors[]{
-			// color		 ind	feature_score/BS_score
-			"140,30,30",	// 0	>=0		dark red
-			"140,85,30",	// 1	>=0.2	dark orange
-			"180,140,30",	// 2	>=0.4	dark yellow
-			"130,140,30",	// 3	>=0.6	dark yellow-green
-			"30,100,30",	// 4	>=0.8	dark green
-		};
-		const auto& start = VP[1].back().Iter;
-		const float score = VP[1].back().Val;
-
-		auto addExtraLines = [=, &bsNumb](const vector<BS_map::ValPos>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
-			if (vp.size() == 1)	return;
-			for (auto it0 = vp.begin(), it = next(it0); it != vp.end(); it0++, it++) {
-				LineAddUInts(it0->Iter->first, it->Iter->first, bsNumb, true);
-				LineAddFloat(start->second.Score, true);	// BS score
-				LineAddChar(DOT, true);
-				LineAddInts(it0->Iter->first, it->Iter->first, true);
-				auto ind = BYTE(10 * it0->Val / score) / 2;
-				if (ind > 4)	ind = 4;
-				LineAddStr(colors[ind], false);
-				LineToIOBuff(offset);
-			}
-		};
-
-		const auto& end = VP[0].front().Iter;
-		const char* delims = ".\t.\t.\t.\t";
-
-		++bsNumb;
-
-		addExtraLines(VP[1]);
-		// *** add basic feature
-		LineAddUInts(start->first, end->first, bsNumb, true);
-		LineAddFloat(start->second.Score, true);		// BS score
-		LineAddChars(delims, reclen(strlen(delims)), false);
-		LineAddFloat(end->second.Score, false);			// reverse/direct ratio
-		LineToIOBuff(offset);
-
-		addExtraLines(VP[0]);
-		});
-}
-
-void BedWriter::WriteChromROI(chrid cID, const BS_map& bss)
-{
-	const reclen offset = AddChromToLine(cID);
-	chrlen bsNumb = 0;
-
-	bss.DoBasic([&](BS_map::citer& start, BS_map::citer& end) {
-		LineAddUInts(
-			start->first - Glob::ROI_ext,
-			end->first + Glob::ROI_ext,
-			++bsNumb,
-			false
-		);
-		LineToIOBuff(offset);
-		});
-}
-
-//===== BedWriters
-
 //===== Values
 
 void Values::AddValue(float val)
@@ -1277,22 +818,6 @@ void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 	}
 }
 
-void BoundsValuesMap::AdmitBSborders(BYTE reverse, const TreatedCover& rCover, BS_map& bss, OLinearWriter& lwriter) const
-{
-	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines, OLinearWriter&) const;
-	tSetBSpos fcollectInclines = reverse ?
-		&BoundsValues::CollectReverseInclines:
-		&BoundsValues::CollectDirectInclines ;
-	vector<Incline> inclines;
-	inclines.reserve(4);
-
-	for (auto it = begin(); it != end(); it++) {		// loop through the derivative groups
-		inclines.clear();
-		(it->second.*fcollectInclines)(rCover, inclines, lwriter);
-		bss.Init(reverse, it->second.GroupNumb(), inclines);
-	}
-}
-
 #ifdef MY_DEBUG
 void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 {
@@ -1307,6 +832,479 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 	}
 }
 #endif
+
+
+//===== BS_map
+
+void BS_map::Init(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines)
+{
+	typedef bool(*tEqLess)(chrlen, chrlen);
+	const tEqLess op[2]{
+		[](chrlen pos1, chrlen pos2) { return pos1 < pos2; },
+		[](chrlen pos1, chrlen pos2) { return pos1 < pos2; }
+	};
+	const tEqLess Less = op[reverse];
+
+	sort(inclines.begin(), inclines.end(),
+		// sorting by positions in ascending (reverse==0) or descending (reverse==1) order
+		[&Less](const Incline& i1, const Incline& i2) { return Less(i1.Pos, i2.Pos); }
+	);
+	auto it0 = inclines.cbegin();
+	chrlen pos = it0->Pos;
+	AddPos(reverse, grpNumber, *it0);		// the first, definitely steepest (tightest) incline
+	// left to right (reverse==0) or right to left (reverse==1)
+	for (auto it = next(it0); it != inclines.cend(); it0++, it++) {
+		if (Less(pos, it->TopPos))
+			AddPos(reverse, grpNumber, *it);
+		pos = it->TopPos;
+	}
+}
+
+void BS_map::SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OLinearWriter& lwriter)
+{
+	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines, OLinearWriter&) const;
+	tSetBSpos fcollectInclines = reverse ?
+		&BoundsValues::CollectReverseInclines :
+		&BoundsValues::CollectDirectInclines;
+	vector<Incline> inclines;
+	inclines.reserve(4);
+
+	for (auto it = derivs.begin(); it != derivs.end(); it++) {		// loop through the derivative groups
+		inclines.clear();
+		(it->second.*fcollectInclines)(rCover, inclines, lwriter);
+		Init(reverse, it->second.GroupNumb(), inclines);
+	}
+}
+
+void BS_map::Refine()
+{
+	/*
+	BS Left entry (border): is formed by reverse reads; BS Right entry (border): is formed by direct reads
+	Group corresponds to potential region.
+
+	Options for placing borders in a group:
+	canonical:					[[L] [R]]
+	extra right/left borders:	[R] [[L] [R]] [L]
+	'negative' BS width:		[R] [L]
+
+	Method brings the instance to canonical form, resetting the score of all extra elements to zero,
+	and marking BSs with 'negative' width.
+	*/
+
+	auto lastExtraRight_it = end();	// iterator pointing to the last Right entry that starts the group 
+	uint16_t extraRightCnt = 0;		// count of Right entry that starts the group
+	uint16_t extraLeftCnt = 0;		// count of Left entry that ends the group
+	bool newBS = true;				// if true then new BS in the group is registered
+	bool raisedLeft = false;		// if true then at least one Left entry in the group is processed
+	bool someBS = false;			// if true then at least one BS in the group is registered
+	chrlen grpNumb = 1;
+
+	// resets extra ('false') entries
+	//	@param it: iterator pointing to the first extra entry
+	//	@param entryCnt: count of extra entries which should be reset; becomes zero
+	//	@returns: iterator pointing to the first non-extra entry
+	auto ResetExtraEntries = [](iter& it, uint16_t& entryCnt) {
+		for (; entryCnt; entryCnt--, --it)
+			it->second.Score = 0;
+		return it;
+	};
+
+	// reset right and left extra entries
+	auto ResetBothExtraEntries = [&](iter it) {
+		// reset extra right entries
+		if (lastExtraRight_it != end()) {
+			if (someBS)
+				ResetExtraEntries(lastExtraRight_it, extraRightCnt);
+			else {		// register 'negative' BS width
+				//lastExtraRight_it->second.BS_NegWidth = true;				// set 'negative' flag to the last extra entry
+				lastExtraRight_it->second.Reverse = true;
+				ResetExtraEntries(--lastExtraRight_it, --extraRightCnt);	// reset other extra entries
+			}
+			lastExtraRight_it = end();
+		}
+		// reset extra left entries
+		if (someBS)
+			ResetExtraEntries(--it, extraLeftCnt);
+		else			// register 'negative' BS width
+			// set 'negative' flag to the first extra entry and reset other extra ones
+			//ResetExtraEntries(--it, --extraLeftCnt)->second.BS_NegWidth = true;
+		{
+			auto bs1 = ResetExtraEntries(--it, --extraLeftCnt);
+			//bs1->second.BS_NegWidth = true;
+			bs1->second.Reverse = false;
+		}
+	};
+
+	for (auto it = begin(); it != end(); it++)
+	{
+		const bool newGroup = grpNumb != it->second.GrpNumb;
+
+		if (newGroup) {
+			// 'close' previous group
+			ResetBothExtraEntries(it);	// set extraRightCnt to zero
+			// reset current group
+			if (!newBS)		newBS = true;
+			grpNumb = it->second.GrpNumb;
+			raisedLeft = someBS = false;
+		}
+
+		if (it->second.Reverse) {	// Left border
+			extraLeftCnt++;
+			raisedLeft = true;
+			newBS = false;
+		}
+		else {						// Right border
+			if (newBS && !extraLeftCnt)
+				if (!extraRightCnt || !newGroup)
+					lastExtraRight_it = it;
+			extraLeftCnt = 0;
+			if (raisedLeft)
+				someBS = true;
+			else
+				extraRightCnt++;
+		}
+	}
+	// 'close' last group
+	ResetBothExtraEntries(end());
+}
+
+void BS_map::NormalizeScore()
+{
+	float maxScore = 0;
+
+	// *** set direct&reversed position scores as sum of each other
+	Do([&maxScore](vector<PosValue>* VP) {
+		const float val[2]{ VP[0].front().Val ,VP[1].back().Val };	// first direct, last reversed
+		const float ratio = val[0] / val[1];						// direct/reversed score ratio
+
+		auto setScore = [&maxScore](const vector<PosValue>& vp, BYTE i, float val) {
+			float score = (vp[i].Iter->second.Score += val);
+			if (maxScore < score)	maxScore = score;
+		};
+
+		setScore(VP[1], BYTE(VP[1].size() - 1), val[0]);	// set basic reverse score to sum of direct & reversed
+		VP[0].front().Iter->second.Score = ratio;			// set basic direct score to direct/reversed score ratio
+
+		for (BYTE s : {0, 1}) {
+			const BYTE vpLen = BYTE(VP[s].size() - 1);
+			const auto& vp = VP[s];
+			for (BYTE i = !s + 1; i < vpLen; i++)
+				setScore(vp, i, val[!s]);
+		}
+		});
+
+	// *** normalize scores relative to maximum
+	bool reversed = false;
+	for (auto& x : *this)
+		if (x.second.Score) {
+			if (x.second.Reverse)
+				reversed = true;
+			else if (reversed) {
+				reversed = false;
+				continue;		// skip basic direct score as it keeps direct/reversed ratio
+			}
+			x.second.Score /= maxScore;
+		}
+}
+
+void BS_map::NormalizeBSwidth()
+{
+	const BYTE MIN_BS_WIDTH = 5;
+
+	vector<BS_map::iter> toErase;
+	toErase.reserve(10);
+	// accumulate abd expand narrow BSs
+	DoBasic([&](iter& start, iter& end) {
+		if (start->second.GrpNumb != end->second.GrpNumb)	return;
+		const fraglen len = end->first - start->first;
+		if (len < MIN_BS_WIDTH) {
+			const auto diff = BYTE(MIN_BS_WIDTH - len);
+			auto Expand = [&](iter& it, chrlen newPos, bool newPosIsLess) {
+				if (it->first != newPos) {
+					auto it1 = emplace_hint(newPosIsLess ? it : next(it), newPos, it->second);
+					toErase.push_back(it);
+				}
+			};
+
+			Expand(start, start->first - diff / 2, true);
+			Expand(end, end->first + diff / 2 + diff % 2, false);
+		}
+		});
+	// erase narrow BSs
+	for (auto i = toErase.size(); i; i--)	// reverse bypass
+		erase(toErase[i - 1]);
+}
+
+void BS_map::PrintStat() const
+{
+	if (!Verb::Level(Verb::DBG))	return;
+
+	chrlen	bsNumb = 0;
+	chrlen	minNumb, maxNumb, minLen = CHRLEN_MAX, maxLen = 0;
+	chrlen	minNegNumb, maxNegNumb, minPosNumb, maxPosNumb, minScoreNumb;
+	float	minNegRatio, minPosRatio, minScore, maxNegRatio = 0, maxPosRatio = 0;
+	minNegRatio = minPosRatio = minScore = 1000;
+
+	DoBasic([&](citer& start, citer& end) {
+		const chrlen len = end->first - start->first;
+		++bsNumb;
+		if (minLen > len)		minLen = len, minNumb = bsNumb;
+		else if (maxLen < len)	maxLen = len, maxNumb = bsNumb;
+
+		float val = start->second.Score;
+		if (minScore > val)		minScore = val, minScoreNumb = bsNumb;
+
+		val = end->second.Score;
+		if (val < 1) {
+			if (minNegRatio > val)		minNegRatio = val, minNegNumb = bsNumb;
+			else if (maxNegRatio < val)	maxNegRatio = val, maxNegNumb = bsNumb;
+		}
+		else
+			if (minPosRatio > val)		minPosRatio = val, minPosNumb = bsNumb;
+			else if (maxPosRatio < val)	maxPosRatio = val, maxPosNumb = bsNumb;
+		}
+	);
+
+	// collect items with min/max len
+	vector<chrlen> minLenNumbers, maxLenNumbers;
+	bsNumb = 0;
+	DoBasic([&](citer& start, citer& end) {
+		const chrlen len = end->first - start->first;
+		++bsNumb;
+		if (len == minLen)
+			minLenNumbers.push_back(bsNumb);
+		else if (len == maxLen)
+			maxLenNumbers.push_back(bsNumb);
+		}
+	);
+
+	std::printf("\nBS count: %d\n", bsNumb);
+	if (!bsNumb) return;
+
+	// lengths
+	const char* line = "-----------------\n";
+	auto prLenNumbs = [](const char* title, chrlen len, vector<chrlen>& numbers) {
+		std::printf("%s %4d  %d", title, len, numbers[0]);
+		for (short i = 1; i < numbers.size(); i++)	std::printf(",%d", numbers[i]);
+		std::printf("\n");
+	};
+	std::printf("%s", line);
+	std::printf("   length numbers\n");
+	std::printf("%s", line);
+	prLenNumbs("min", minLen, minLenNumbers);
+	prLenNumbs("max", maxLen, maxLenNumbers);
+
+	std::printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
+	std::printf("----------------------------\n");
+	std::printf("RATIO:\tmin  (N)   max  (N)\n");
+	std::printf("----------------------------\n");
+	std::printf("reverse\t%2.2f (%d)  %2.2f (%d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
+	std::printf("direct\t%2.2f (%d)  %2.2f (%d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
+}
+
+#ifdef MY_DEBUG
+void BS_map::CheckScoreHierarchy()
+{
+	chrlen bsNumb = 0;
+	bool issues = false;
+
+	printf("\nCHECK SCORES HIERARCHY\n");
+	Do([&](const vector<PosValue>* VP) {
+		bool prNeg = false, prPos = false;
+		float val = 0;
+		auto prVals = [](bool sep, char sign, const vector<PosValue>& VP) {
+			if (sep) 	printf(" ");
+			printf("%c", sign);
+			for (const PosValue& vp : VP)
+				printf("%2.3f ", vp.Val);
+		};
+
+		bsNumb++;
+		// set prNeg; check all
+		for (const PosValue& vp : VP[1])
+			if (prNeg = (val > vp.Val))		break;
+			else val = vp.Val;
+		// set prPos; check all except first element
+		const BYTE vpLen = BYTE(VP[0].size() - 1);
+		const auto& vp = VP[0];
+		val = 1000;
+		for (BYTE i = 1; i < vpLen; i++)
+			if (prPos = (val < vp[i].Val))	break;
+			else val = vp[i].Val;
+		// print of excess over basic score
+		if (prNeg || prPos) {
+			issues = printf("%4d  %d\t", bsNumb, VP[1].back().Iter->first);	// start position
+			if (prNeg)	prVals(false, '-', VP[1]);
+			if (prPos)	prVals(prNeg, '+', VP[0]);
+			printf("\n");
+		}
+		});
+
+	if (!issues)	printf("OK\n");
+}
+
+void BS_map::Print(chrid cID, bool real, chrlen stopPos) const
+{
+	const char* format[]{
+		//"%d %4d %c %c %s %5.2f %4d   %s\n",	// odd group numb to left
+		//"%d %-4d %c %c %s %5.2f %4d   %s\n"	// even group numb to right
+		"%d %4d %c %5.2f %4d   %s\n",	// odd group numb to left
+		"%d %-4d %c %5.2f %4d   %s\n"	// even group numb to right
+	};
+	const char bound[]{ 'R','L' };
+	//const char reliable[]{ ' ','?' };
+	//const char* expand[]{ "   ","exp"};
+	IGVlocus locus(cID);
+
+	//printf("\npos\tgrp  brd exp score  pCnt  IGV view\n");
+	printf("\npos\tgrp  brd score  pCnt  IGV view\n");
+	for (const auto& x : *this) {
+		if (stopPos && x.first > stopPos)	break;
+		if (!real || x.second.Score)
+			printf(format[x.second.GrpNumb % 2],
+				x.first,
+				x.second.GrpNumb,
+				bound[x.second.Reverse],
+				//reliable[x.second.Unreliable],
+				//expand[x.second.BS_NegWidth],
+				x.second.Score,
+				x.second.PointCount, locus.Print(x.first)
+			);
+	}
+}
+#endif
+
+//===== BedWriter
+
+bool BedWriter::rankScore = false;
+BedWriter::tAddScore BedWriter::fLineAddScore = nullptr;
+
+void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
+{
+	const reclen colorLen = reclen(strlen(sGRAY));
+	const reclen offset = AddChromToLine(cID);
+
+	for (const auto& rgn : rgns) {
+		LineAddUInts(rgn.Start(), rgn.End(), rgn.value, false);
+		if (!rgn.value) {		// discarded items
+			LineAddChars("\t.\t.\t", 5, false);
+			LineAddInts(rgn.Start(), rgn.End(), true);
+			LineAddChars(sGRAY, colorLen, false);
+		}
+		LineToIOBuff(offset);
+	}
+}
+
+void BedWriter::WriteChromData(chrid cID, BS_map& bss)
+{
+	const reclen offset = AddChromToLine(cID);
+	bool lastSep[]{ false, false };
+	chrlen bsNumb = 0;
+
+	bss.Do([&](const vector<BS_map::PosValue>* VP) {
+		// *** save basic info
+		const auto& itStart = VP[1].back().Iter;
+		const auto& itEnd = VP[0].front().Iter;
+
+		LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
+		LineAddScore(itStart->second.Score, true);					// BS score
+
+		// *** additional regions info
+		LineAddChar(DOT, true);
+		lastSep[1] = VP[0].size() - 1;
+		LineAddFloat(itEnd->second.Score, VP[1].size() - 1 || lastSep[1]);	// ratio
+
+		// *** extra deviations info
+		for (BYTE s : {1, 0}) {
+			const BYTE vpLen = BYTE(VP[s].size() - 1);
+			if (!vpLen) continue;
+
+			auto& vp = VP[s];
+			function<void(BYTE, char)> saveExtraPos = [this, &vp](BYTE i, char specChar) {
+				LineAddArgs("%c%d", specChar, vp[i].Iter->first);
+			};
+			function<void(BYTE, char)> saveExtraVal = [this, &vp](BYTE i, char specChar) {
+				if (specChar)	LineAddChar(specChar);
+				LineAddScore(vp[i].Iter->second.Score, false);
+			};
+			auto saveExtraFields = [&](function<void(BYTE, char)>& fn, char specChar, bool delim) {
+				BYTE i = !s;
+				fn(i, specChar);
+				for (i++; i < vpLen; i++)	fn(i, COMMA);
+				if (delim)	LineAddChar(TAB);
+			};
+
+			saveExtraFields(saveExtraPos, Read::Strands[s], true);
+			saveExtraFields(saveExtraVal, 0, lastSep[s]);
+		}
+
+		LineToIOBuff(offset);
+		});
+}
+
+void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
+{
+	chrlen bsNumb = 0;
+	const reclen offset = AddChromToLine(cID);
+
+	bss.Do([&](const vector<BS_map::PosValue>* VP) {
+		static const string colors[]{
+			// color		 ind	feature_score/BS_score
+			"140,30,30",	// 0	>=0		dark red
+			"140,85,30",	// 1	>=0.2	dark orange
+			"180,140,30",	// 2	>=0.4	dark yellow
+			"130,140,30",	// 3	>=0.6	dark yellow-green
+			"30,100,30",	// 4	>=0.8	dark green
+		};
+		const auto& start = VP[1].back().Iter;
+		const float score = VP[1].back().Val;
+
+		auto addExtraLines = [=, &bsNumb](const vector<BS_map::PosValue>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
+			if (vp.size() == 1)	return;
+			for (auto it0 = vp.begin(), it = next(it0); it != vp.end(); it0++, it++) {
+				LineAddUInts(it0->Iter->first, it->Iter->first, bsNumb, true);
+				LineAddFloat(start->second.Score, true);	// BS score
+				LineAddChar(DOT, true);
+				LineAddInts(it0->Iter->first, it->Iter->first, true);
+				auto ind = BYTE(10 * it0->Val / score) / 2;
+				if (ind > 4)	ind = 4;
+				LineAddStr(colors[ind], false);
+				LineToIOBuff(offset);
+			}
+		};
+
+		const auto& end = VP[0].front().Iter;
+		const char* delims = ".\t.\t.\t.\t";
+
+		++bsNumb;
+
+		addExtraLines(VP[1]);
+		// *** add basic feature
+		LineAddUInts(start->first, end->first, bsNumb, true);
+		LineAddFloat(start->second.Score, true);		// BS score
+		LineAddChars(delims, reclen(strlen(delims)), false);
+		LineAddFloat(end->second.Score, false);			// reverse/direct ratio
+		LineToIOBuff(offset);
+
+		addExtraLines(VP[0]);
+		});
+}
+
+void BedWriter::WriteChromROI(chrid cID, const BS_map& bss)
+{
+	const reclen offset = AddChromToLine(cID);
+	chrlen bsNumb = 0;
+
+	bss.DoBasic([&](BS_map::citer& start, BS_map::citer& end) {
+		LineAddUInts(
+			start->first - Glob::ROI_ext,
+			end->first + Glob::ROI_ext,
+			++bsNumb,
+			false
+		);
+		LineToIOBuff(offset);
+		});
+}
 
 
 //===== FixWigWriter

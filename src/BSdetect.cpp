@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/13/2024
+Last modified: 05/15/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -168,7 +168,8 @@ void Detector::CallBS(chrid cID)
 
 	derivs.BuildDerivs(splines);					_splines.WriteChrom(cID);
 	//derivs.Print();
-	derivs.AdmitBSs(readCovers, bss, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
+
+	bss.Detect(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
 	bss.Refine();
 	bss.NormalizeScore();
 	bss.NormalizeBSwidth();
@@ -180,5 +181,4 @@ void Detector::CallBS(chrid cID)
 	_bss.WriteChrom(cID);
 
 	_timer.Stop("Threament: ");	cout << LF;
-
 }
