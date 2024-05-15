@@ -402,12 +402,6 @@ void DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 //	return FragDefLEN - round(float(sum) / (mostPositive ? (diffs.size() - negCnt) : negCnt));
 //}
 
-void DataCoverRegions::Clear()
-{
-	StrandData(POS).clear();
-	StrandData(NEG).clear();
-}
-
 
 //===== Values
 
@@ -1246,15 +1240,21 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 {
 	chrlen bsNumb = 0;
 	const reclen offset = AddChromToLine(cID);
+	const BYTE COLORS_CNT = 4;
 
 	bss.Do([&](const vector<BS_map::PosValue>* VP) {
 		static const string colors[]{
 			// color		 ind	feature_score/BS_score
-			"140,30,30",	// 0	>=0		dark red
-			"140,85,30",	// 1	>=0.2	dark orange
-			"180,140,30",	// 2	>=0.4	dark yellow
-			"130,140,30",	// 3	>=0.6	dark yellow-green
-			"30,100,30",	// 4	>=0.8	dark green
+			"0,190,255",	// 1	>=0.2	light blue
+			"0,160,230",	// 2	>=0.4	blue
+			"0,130,205",	// 3	>=0.6	dark blue
+			"0,100,180",	// 4	>=0.8	dark dark blue
+
+			//"140,30,30",	// 0	>=0		dark red
+			//"140,85,30",	// 1	>=0.2	dark orange
+			//"180,140,30",	// 2	>=0.4	dark yellow
+			//"130,140,30",	// 3	>=0.6	dark yellow-green
+			//"30,100,30",	// 4	>=0.8	dark green
 		};
 		const auto& start = VP[1].back().Iter;
 		const float score = VP[1].back().Val;
@@ -1266,8 +1266,9 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 				LineAddFloat(start->second.Score, true);	// BS score
 				LineAddChar(DOT, true);
 				LineAddInts(it0->Iter->first, it->Iter->first, true);
+				// colors
 				auto ind = BYTE(10 * it0->Val / score) / 2;
-				if (ind > 4)	ind = 4;
+				if (ind > COLORS_CNT - 1)	ind = COLORS_CNT - 1;
 				LineAddStr(colors[ind], false);
 				LineToIOBuff(offset);
 			}

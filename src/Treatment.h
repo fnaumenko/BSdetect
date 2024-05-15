@@ -324,7 +324,12 @@ public:
 	//	@param cover: fragment coverage
 	//fraglen GetFragMean(const DataSet<TreatedCover>& cover) const;
 
-	void Clear();
+	void Clear()
+	{
+		StrandData(POS).clear();
+		StrandData(NEG).clear();
+	}
+
 };
 
 
