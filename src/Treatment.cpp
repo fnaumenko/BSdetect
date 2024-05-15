@@ -1245,10 +1245,15 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 	bss.Do([&](const vector<BS_map::PosValue>* VP) {
 		static const string colors[]{
 			// color		 ind	feature_score/BS_score
-			"0,190,255",	// 1	>=0.2	light blue
-			"0,160,230",	// 2	>=0.4	blue
-			"0,130,205",	// 3	>=0.6	dark blue
-			"0,100,180",	// 4	>=0.8	dark dark blue
+			"155,233,168",	// 1	>=0.2	light light green
+			"64,196,99",	// 2	>=0.4	light green
+			"48,161,78",	// 3	>=0.6	green
+			"33,110,57",	// 4	>=0.8	dark green
+
+			//"0,190,255",	// 1	>=0.2	light blue
+			//"0,160,230",	// 2	>=0.4	blue
+			//"0,130,205",	// 3	>=0.6	dark blue
+			//"0,100,180",	// 4	>=0.8	dark dark blue
 
 			//"140,30,30",	// 0	>=0		dark red
 			//"140,85,30",	// 1	>=0.2	dark orange
