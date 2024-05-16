@@ -601,7 +601,9 @@ public:
 class DataBoundsValuesMap : public DataSet<BoundsValuesMap>
 {
 public:
-	void BuildDerivs(const DataValuesMap& splines)
+	// Fills the instance with spline derivatives
+	//	@param splines: Read coverage splines
+	void Set(const DataValuesMap& splines)
 	{
 		StrandData(POS).BuildDerivs(StrandOps[0].Factor, splines.StrandData(POS));
 		StrandData(NEG).BuildDerivs(StrandOps[1].Factor, splines.StrandData(NEG));
@@ -677,7 +679,7 @@ public:
 	//	@param derivs[in]: derivatives
 	//	@param rCover[in]: read coverage
 	//	@param lwriter[out]: line writer to save inclined lines
-	void Detect(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover, OLinearWriter& lwriter)
+	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover, OLinearWriter& lwriter)
 	{
 		SetBorders(0, derivs.StrandData(POS), rCover.StrandData(POS), lwriter);
 		SetBorders(1, derivs.StrandData(NEG), rCover.StrandData(NEG), lwriter);

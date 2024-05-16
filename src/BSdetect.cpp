@@ -129,7 +129,11 @@ void Detector::CallBS(chrid cID)
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 	_lineWriter.SetChromID(cID);
 
-	if (!IsPEReads) {
+	if (IsPEReads) {
+		rgns.SetPotentialRegions(fragCovers, cLen, 3);					_frag—overs.WriteChrom(cID);
+		splines.BuildSplinePE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID);
+	}
+	else {
 		if (IsFragMeanUnset) {
 			Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
 			_timer.Start();
@@ -152,24 +156,17 @@ void Detector::CallBS(chrid cID)
 		}
 
 		Verb::PrintMsg(Verb::DBG, "Locate binding sites");
-		rgns.SetPotentialRegions(fragCovers, cLen, 3, false);			 
-
+		rgns.SetPotentialRegions(fragCovers, cLen, 3, false);
 		splines.BuildSplineSE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID); _frag—overs.WriteChrom(cID);
-	}
-	else {
-		rgns.SetPotentialRegions(fragCovers, cLen, 3);					_frag—overs.WriteChrom(cID);
-		splines.BuildSplinePE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID);
 	}
 
 	splines.Data()->EliminateNonOverlaps();
 	splines.Data()->PrintStat(cLen);
 	splines.Data()->Numerate();
 	//splines.Print(cID);
-
-	derivs.BuildDerivs(splines);					_splines.WriteChrom(cID);
+	derivs.Set(splines);						_splines.WriteChrom(cID);
 	//derivs.Print();
-
-	bss.Detect(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
+	bss.Set(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
 	bss.Refine();
 	bss.NormalizeScore();
 	bss.NormalizeBSwidth();
