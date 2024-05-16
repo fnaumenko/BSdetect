@@ -642,7 +642,7 @@ public:
 	using citer = map<chrlen, BS_PosVal>::const_iterator;
 
 private:
-	iter _lastIt;	// last inserted iterator
+	iter _lastIt;	// last inserted iterator (for left borders only)
 
 	// Inserts BS position (border)
 	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
