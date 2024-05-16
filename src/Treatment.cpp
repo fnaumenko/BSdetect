@@ -830,28 +830,65 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 
 //===== BS_map
 
-void BS_map::AddBorders(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines)
+void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 {
-	typedef bool(*tEqLess)(chrlen, chrlen);
-	const tEqLess op[2]{
-		[](chrlen pos1, chrlen pos2) { return pos1 < pos2; },
-		[](chrlen pos1, chrlen pos2) { return pos1 < pos2; }
-	};
-	const tEqLess Less = op[reverse];
+	// all positions are added in ascending order
+	chrlen pos = incl.Pos + StrandOps[reverse].Factor * Glob::ReadLen;
+	if (reverse) {		// insert left position; all right positions are already inserted
+		iter lastIt = _lastIt;
 
+		// find the iterator that will follow the inserted element
+		for (; lastIt != end() && lastIt->first < pos; lastIt++);
+		// the inserted position can duplicate an already inserted right one; reduce it by 1
+		if (lastIt->first == pos)
+			--pos;
+		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb, incl));
+	}
+	else
+		emplace_hint(end(), pos, BS_PosVal(0, grpNumb, incl));
+}
+
+void BS_map::AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
+{
+	/*
+	now all inclines are sorted in ascending order;
+	left and right positions (borders) are inserted in the same order
+	*/
 	sort(inclines.begin(), inclines.end(),
-		// sorting by positions in ascending (reverse==0) or descending (reverse==1) order
-		[&Less](const Incline& i1, const Incline& i2) { return Less(i1.Pos, i2.Pos); }
+		[](const Incline& i1, const Incline& i2) { return i1.Pos < i2.Pos; }
 	);
 	auto it0 = inclines.cbegin();
-	chrlen pos = it0->Pos;
-	AddPos(reverse, grpNumber, *it0);		// the first, definitely steepest (tightest) incline
-	// left to right (reverse==0) or right to left (reverse==1)
-	for (auto it = next(it0); it != inclines.cend(); it0++, it++) {
-		if (Less(pos, it->TopPos))
-			AddPos(reverse, grpNumber, *it);
-		pos = it->TopPos;
+
+	/*
+	filter out intersecting inclines - thus inserting only the best borders
+	(the borders formed by the steepest inclines) in the group
+	*/
+	if (reverse) {
+		chrlen pos = it0->TopPos;
+		for (auto it = next(it0); it != inclines.cend(); it0++, it++) {
+			if (pos < it->TopPos)
+				AddPos(reverse, grpNumb, *it0);
+			pos = it->TopPos;
+		}
+		AddPos(reverse, grpNumb, *prev(inclines.cend()));	// always add the last, steepest (tightest) incline
 	}
+	else {
+		chrlen pos = it0->Pos;
+		AddPos(reverse, grpNumb, *it0);		// always add the first, steepest (tightest) incline
+		for (auto it = next(it0); it != inclines.cend(); it++) {
+			if (pos < it->TopPos)
+				AddPos(reverse, grpNumb, *it);
+			pos = it->TopPos;
+		}
+	}
+	//chrlen pos = it0->Pos;
+	//AddPos(reverse, grpNumb, *it0);		// always add the first, steepest (tightest) incline
+	//// left to right (reverse==0) or right to left (reverse==1)
+	//for (auto it = next(it0); it != inclines.cend(); it0++, it++) {
+	//	if (Less(pos, it->TopPos))
+	//		AddPos(reverse, grpNumb, *it);
+	//	pos = it->TopPos;
+	//}
 }
 
 void BS_map::SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OLinearWriter& lwriter)
@@ -1137,7 +1174,7 @@ void BS_map::CheckScoreHierarchy()
 	if (!issues)	printf("OK\n");
 }
 
-void BS_map::Print(chrid cID, bool real, chrlen stopPos) const
+void BS_map::Print(chrid cID, bool selected, chrlen stopPos) const
 {
 	const char* format[]{
 		//"%d %4d %c %c %s %5.2f %4d   %s\n",	// odd group numb to left
@@ -1154,7 +1191,7 @@ void BS_map::Print(chrid cID, bool real, chrlen stopPos) const
 	printf("\npos\tgrp  brd score  pCnt  IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
-		if (!real || x.second.Score)
+		if (!selected || x.second.Score)
 			printf(format[x.second.GrpNumb % 2],
 				x.first,
 				x.second.GrpNumb,

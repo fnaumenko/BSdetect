@@ -167,11 +167,12 @@ void Detector::CallBS(chrid cID)
 	derivs.Set(splines);						_splines.WriteChrom(cID);
 	//derivs.Print();
 	bss.Set(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
+	//bss.Print(cID, false);
 	bss.Refine();
 	bss.NormalizeScore();
 	bss.NormalizeBSwidth();
 #ifdef MY_DEBUG
-	//bss.Print(cID, true);
+	//bss.Print(cID, false);
 	bss.CheckScoreHierarchy();
 #endif
 	bss.PrintStat();

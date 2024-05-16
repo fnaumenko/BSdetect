@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/15/2024
+Last modified: 05/16/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -637,26 +637,26 @@ struct BS_PosVal
 
 class BS_map : public map<chrlen, BS_PosVal>
 {
-	//using iter = map<chrlen, BS_PosVal>::iterator;
+public:
+	using iter = map<chrlen, BS_PosVal>::iterator;
+	using citer = map<chrlen, BS_PosVal>::const_iterator;
 
-	// Adds BS position
+private:
+	iter _lastIt;	// last inserted iterator
+
+	// Inserts BS position (border)
 	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
-	//	@param grpNumber: group number
-	//	@param incln: inclined line
-	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incln) {
-		emplace(
-			incln.Pos + StrandOps[reverse].Factor * Glob::ReadLen,
-			BS_PosVal(reverse, grpNumb, incln)
-		);	// !!! use hint?
-	}
+	//	@param grpNumb: group number
+	//	@param incl: inclined line
+	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl);
 
-	// Initializes the instance of recognized left/right borders of binding sites
+	// Inserts BS positions (left/right borders)
 	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
-	//	@param grpNumber: group number
-	//	@param inclines: direct/reversed inclined lines
-	void AddBorders(BYTE reverse, chrlen grpNumber, vector<Incline>& inclines);
+	//	@param grpNumb: group number
+	//	@param inclines: direct/reversed (right/left) inclined lines
+	void AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines);
 
-	// Fills the instance with recognized left/right border of binding sites
+	// Fills the instance with recognized left/right BS positions (borders)
 	//	@param reverse[in]: 0 for firect (right borders), 1 for reverse (left borders)
 	//	@param derivs[in]: derivatives
 	//	@param rCover[in]: read coverage
@@ -664,9 +664,6 @@ class BS_map : public map<chrlen, BS_PosVal>
 	void SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OLinearWriter& lwriter);
 
 public:
-	using iter = map<chrlen, BS_PosVal>::iterator;
-	using citer = map<chrlen, BS_PosVal>::const_iterator;
-
 	// positioned value
 	struct PosValue {
 		iter	Iter;
@@ -682,6 +679,7 @@ public:
 	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover, OLinearWriter& lwriter)
 	{
 		SetBorders(0, derivs.StrandData(POS), rCover.StrandData(POS), lwriter);
+		_lastIt = begin();
 		SetBorders(1, derivs.StrandData(NEG), rCover.StrandData(NEG), lwriter);
 	}
 
@@ -737,9 +735,9 @@ public:
 	void CheckScoreHierarchy();
 
 	// Prints positions
-	//	@param real: if true then prints position with unzero score 
+	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 
-	void Print(chrid cID, bool real, chrlen stopPos = 0) const;
+	void Print(chrid cID, bool selected, chrlen stopPos = 0) const;
 #endif
 };
 
