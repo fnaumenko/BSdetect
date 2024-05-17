@@ -312,13 +312,13 @@ public:
 	//	@param cLen: length of chromosome
 	//	@param cutoff: fragment coverage cut off value
 	//	@param noMultiOverl: if true then eliminate multi overlaps regions as well
-	void SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl);
+	void SetPotentialRegionsSE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl);
 
 	// Fills the instance by potential regions of fragment coverage
 	//	@param cover: fragment coverage
 	//	@param cLen: length of chromosome
 	//	@param cutoff: fragment coverage cut off value
-	void SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff);
+	void SetPotentialRegionsPE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff);
 
 	// Returns mean fragment length based on cover regions mass centre comparison
 	//	@param cover: fragment coverage
@@ -542,6 +542,7 @@ class BoundsValues : public vector<BoundValues>
 	chrlen _grpNumb;
 
 	void PushIncline(
+		chrlen grpNumb,
 		BYTE reverse,
 		const TracedPosVal& posVal,
 		const TreatedCover& cover,

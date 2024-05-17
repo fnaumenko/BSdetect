@@ -130,7 +130,7 @@ void Detector::CallBS(chrid cID)
 	_lineWriter.SetChromID(cID);
 
 	if (IsPEReads) {
-		rgns.SetPotentialRegions(fragCovers, cLen, 3);					_frag—overs.WriteChrom(cID);
+		rgns.SetPotentialRegionsPE(fragCovers, cLen, 3);					_frag—overs.WriteChrom(cID);
 		splines.BuildSplinePE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID);
 	}
 	else {
@@ -139,7 +139,7 @@ void Detector::CallBS(chrid cID)
 			_timer.Start();
 			coval maxVal = readCovers.StrandData(POS).GetMaxVal();
 			printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
-			rgns.SetPotentialRegions(fragCovers, cLen, maxVal / 3, true);	//10
+			rgns.SetPotentialRegionsSE(fragCovers, cLen, maxVal / 3, true);	//10
 
 			//auto flen = rgns.GetFragMean(fragCovers);
 			//printf("\nMass Mean fragment length: %d\n", flen);
@@ -156,7 +156,7 @@ void Detector::CallBS(chrid cID)
 		}
 
 		Verb::PrintMsg(Verb::DBG, "Locate binding sites");
-		rgns.SetPotentialRegions(fragCovers, cLen, 3, false);
+		rgns.SetPotentialRegionsSE(fragCovers, cLen, 3, false);
 		splines.BuildSplineSE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID); _frag—overs.WriteChrom(cID);
 	}
 
@@ -168,6 +168,7 @@ void Detector::CallBS(chrid cID)
 	//derivs.Print();
 	bss.Set(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
 	//bss.Print(cID, false);
+	//return;
 	bss.Refine();
 	bss.NormalizeScore();
 	bss.NormalizeBSwidth();

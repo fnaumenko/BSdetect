@@ -341,7 +341,7 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, size_t capacit
 bool PositiveVal(int16_t val) { return val > 0; }
 bool NegativeVal(int16_t val) { return val < 0; }
 
-void DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
+void DataCoverRegions::SetPotentialRegionsSE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
 {
 	size_t capacity = cLen / (Glob::FragLen * 100);
 	StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
@@ -354,7 +354,7 @@ void DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 		PrintRegionStats<CoverRegions>(Data(), cLen);
 }
 
-void DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff)
+void DataCoverRegions::SetPotentialRegionsPE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff)
 {
 	size_t capacity = cLen / (Glob::FragLen * 100);
 	DataByInd().SetPotentialRegions(cover.DataByInd(), capacity, cutoff);
@@ -674,6 +674,7 @@ void DataValuesMap::Print(chrid cID, chrlen stopNumb) const
 //===== BoundsValues
 
 void BoundsValues::PushIncline(
+	chrlen grpNumb,
 	BYTE reverse,
 	const TracedPosVal& posVal,
 	const TreatedCover& cover,
@@ -700,25 +701,35 @@ void BoundsValues::PushIncline(
 	cover.LinearRegr(itStart, itStop, opDir, incline);
 	if (!incline.Valid())	return;
 
+	//if (grpNumb == 21)	printf("> %d %d\n", int(reverse), itStop->first);
+	//if (lwriter.IsWriterSet()) {
+	//	auto it = itStop;
+	//	opInv.Next(it);
+	//	lwriter.WriteOblique(reverse, incline.Pos, it);
+	//}
+
 	coviter it0 = itStop;
 	Incline incline1{};
 	auto compare = [&](coviter& it) {
 		cover.LinearRegr(itStart, it, opDir, incline1);
+		//if (grpNumb == 21)	printf("$ %d %d\n", int(reverse), it->first);
 		if (!incline1.Valid() || opDir.EqLess(incline.Pos, incline1.Pos))	return true;
 		std::swap(incline, incline1);
 		itStop = it;
 		return false;
 	};
 
-	// iterate itStop opposed to start
+	 //iterate itStop opposed to start
 	for (auto it = it0;
 		opDir.RetNext(it)->second > itStop->second || opDir.RetNext(it)->second > itStop->second;)
+	{
 		if (compare(it))	break;
+	}
+
 	// iterate itStop towards start
 	bool nextStep = false;
 	for (auto it = it0;
-		opInv.RetNext(it)->second > itStop->second
-		|| (nextStep = opInv.RetNext(it)->second >= itStop->second);)
+		opInv.RetNext(it)->second > itStop->second || (nextStep = opInv.RetNext(it)->second >= itStop->second);)
 	{
 		if (reverse && nextStep) { nextStep = false; it++; }
 		if (compare(it))	break;
@@ -732,6 +743,7 @@ void BoundsValues::PushIncline(
 	else
 		inclines.push_back(incline);
 
+	//if (grpNumb == 21)	printf("> %d %d\n", int(reverse), itStop->first);
 	if (lwriter.IsWriterSet()) {
 		opInv.Next(itStop);
 		lwriter.WriteOblique(reverse, incline.Pos, itStop);
@@ -741,10 +753,9 @@ void BoundsValues::PushIncline(
 void BoundsValues::CollectDirectInclines(const TreatedCover& rCover, vector<Incline>& inclines, OLinearWriter& lwriter) const
 {
 	TracedPosVal posVal;
-
 	for (auto it = rbegin(); it != rend(); it++) {		// loop through one group
 		posVal.Set(0, it);
-		PushIncline(0, posVal, rCover, inclines, lwriter);
+		PushIncline(_grpNumb, 0, posVal, rCover, inclines, lwriter);
 		posVal.Retain();
 	}
 }
@@ -755,7 +766,7 @@ void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Inc
 
 	for (auto it = begin(); it != end(); it++) {		// loop through derivatives
 		posVal.Set(1, it);
-		PushIncline(1, posVal, rCover, inclines, lwriter);
+		PushIncline(_grpNumb, 1, posVal, rCover, inclines, lwriter);
 		posVal.Retain();
 	}
 }
@@ -804,7 +815,7 @@ void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 
 		// last floats region
 		if (deriv.MaxVal())
-			if (derivSet.back().End() == spline.first + pos)
+			if (derivSet.size() && derivSet.back().End() == spline.first + pos)
 				derivSet.back().AddValues(deriv);	// add adjacent region
 			else
 				derivSet.AddValues(spline, pos, deriv);
@@ -850,6 +861,7 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 
 void BS_map::AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 {
+	if (!inclines.size())	return;
 	/*
 	now all inclines are sorted in ascending order;
 	left and right positions (borders) are inserted in the same order
@@ -934,8 +946,8 @@ void BS_map::Refine()
 	//	@param it: iterator pointing to the first extra entry
 	//	@param entryCnt: count of extra entries which should be reset; becomes zero
 	//	@returns: iterator pointing to the first non-extra entry
-	auto ResetExtraEntries = [](iter& it, uint16_t& entryCnt) {
-		for (; entryCnt; entryCnt--, --it)
+	auto ResetExtraEntries = [&](iter& it, uint16_t& entryCnt) {
+		for (; entryCnt && it != end(); entryCnt--, --it)
 			it->second.Score = 0;
 		return it;
 	};
@@ -946,9 +958,8 @@ void BS_map::Refine()
 		if (lastExtraRight_it != end()) {
 			if (someBS)
 				ResetExtraEntries(lastExtraRight_it, extraRightCnt);
-			else {		// register 'negative' BS width
-				//lastExtraRight_it->second.BS_NegWidth = true;				// set 'negative' flag to the last extra entry
-				lastExtraRight_it->second.Reverse = true;
+			else {		// 'negative' BS width
+				lastExtraRight_it->second.Reverse = true;					// change 'right' border to 'left'
 				ResetExtraEntries(--lastExtraRight_it, --extraRightCnt);	// reset other extra entries
 			}
 			lastExtraRight_it = end();
@@ -956,13 +967,10 @@ void BS_map::Refine()
 		// reset extra left entries
 		if (someBS)
 			ResetExtraEntries(--it, extraLeftCnt);
-		else			// register 'negative' BS width
-			// set 'negative' flag to the first extra entry and reset other extra ones
-			//ResetExtraEntries(--it, --extraLeftCnt)->second.BS_NegWidth = true;
-		{
-			auto bs1 = ResetExtraEntries(--it, --extraLeftCnt);
-			//bs1->second.BS_NegWidth = true;
-			bs1->second.Reverse = false;
+		else {			// 'negative' BS width
+			auto bs1 = ResetExtraEntries(it, --extraLeftCnt);	// reset other extra entries
+			if (bs1 != end())
+				bs1->second.Reverse = false;					// change 'left' border to 'right
 		}
 	};
 
