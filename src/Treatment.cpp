@@ -1077,7 +1077,7 @@ void BS_map::PrintStat() const
 	minNegRatio = minPosRatio = minScore = 1000;
 
 	DoBasic([&](citer& start, citer& end) {
-		const chrlen len = end->first - start->first;
+		const fraglen len = end->first - start->first;
 		++bsNumb;
 		if (minLen > len)		minLen = len, minNumb = bsNumb;
 		else if (maxLen < len)	maxLen = len, maxNumb = bsNumb;
@@ -1100,7 +1100,7 @@ void BS_map::PrintStat() const
 	vector<chrlen> minLenNumbers, maxLenNumbers;
 	bsNumb = 0;
 	DoBasic([&](citer& start, citer& end) {
-		const chrlen len = end->first - start->first;
+		const fraglen len = end->first - start->first;
 		++bsNumb;
 		if (len == minLen)
 			minLenNumbers.push_back(bsNumb);
@@ -1172,6 +1172,29 @@ void BS_map::CheckScoreHierarchy()
 		});
 
 	if (!issues)	printf("OK\n");
+}
+
+void BS_map::PrintWidthDistrib() const
+{
+	map<fraglen, vector<USHORT>> freq;
+	USHORT	bsNumb = 0;
+
+	// collect numbers
+	DoBasic([&](citer& start, citer& end) {
+		freq[end->first - start->first].push_back(++bsNumb);
+		}
+	);
+	// print numbers
+	std::printf("\nBS NUMBERS FREQUENCY\n");
+	std::printf("length numbers\n");
+	for (const auto& item : freq) {
+		std::printf("%5d  ", item.first);
+		auto it = item.second.begin();
+		std::printf("%d", *it);
+		for(it++; it != item.second.end(); it++)
+			std::printf(",%d", *it);
+		std::printf("\n");
+	}
 }
 
 void BS_map::Print(chrid cID, bool selected, chrlen stopPos) const

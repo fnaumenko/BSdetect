@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/16/2024
+Last modified: 05/17/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -642,7 +642,7 @@ public:
 	using citer = map<chrlen, BS_PosVal>::const_iterator;
 
 private:
-	iter _lastIt;	// last inserted iterator (for left borders only)
+	iter _lastIt;	// last inserted iterator (for the left borders only)
 
 	// Inserts BS position (border)
 	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
@@ -733,6 +733,9 @@ public:
 #ifdef MY_DEBUG
 	// Prints "unsorted" scores
 	void CheckScoreHierarchy();
+
+	// Prints BS width distribution
+	void PrintWidthDistrib() const;
 
 	// Prints positions
 	//	@param selected: if true then prints position with unzero score 
