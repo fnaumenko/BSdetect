@@ -1004,7 +1004,7 @@ void BS_map::NormalizeScore()
 	float maxScore = 0;
 
 	// *** set direct&reversed position scores as sum of each other
-	Do([&maxScore](vector<PosValue>* VP) {
+	DoExtend([&maxScore](vector<PosValue>* VP) {
 		const float val[2]{ VP[0].front().Val ,VP[1].back().Val };	// first direct, last reversed
 		const float ratio = val[0] / val[1];						// direct/reversed score ratio
 
@@ -1140,7 +1140,7 @@ void BS_map::CheckScoreHierarchy()
 	bool issues = false;
 
 	printf("\nCHECK SCORES HIERARCHY\n");
-	Do([&](const vector<PosValue>* VP) {
+	DoExtend([&](const vector<PosValue>* VP) {
 		bool prNeg = false, prPos = false;
 		float val = 0;
 		auto prVals = [](bool sep, char sign, const vector<PosValue>& VP) {
@@ -1176,17 +1176,22 @@ void BS_map::CheckScoreHierarchy()
 
 void BS_map::PrintWidthDistrib() const
 {
-	map<fraglen, vector<USHORT>> freq;
-	USHORT	bsNumb = 0;
+	map<fraglen, vector<chrlen>> freq;
+	chrlen	totalLen = 0;
+	chrlen	bsNumb = 0;
 
 	// collect numbers
 	DoBasic([&](citer& start, citer& end) {
-		freq[end->first - start->first].push_back(++bsNumb);
+		auto len = fraglen(end->first - start->first);
+		totalLen += len;
+		freq[len].push_back(++bsNumb);
+
 		}
 	);
 	// print numbers
+	const char* length = "width";
 	std::printf("\nBS NUMBERS FREQUENCY\n");
-	std::printf("length numbers\n");
+	std::printf("%s  numbers\n", length);
 	for (const auto& item : freq) {
 		std::printf("%5d  ", item.first);
 		auto it = item.second.begin();
@@ -1195,6 +1200,7 @@ void BS_map::PrintWidthDistrib() const
 			std::printf(",%d", *it);
 		std::printf("\n");
 	}
+	std::printf("average %s: %.2f\n", length, float(totalLen) / bsNumb);
 }
 
 void BS_map::Print(chrid cID, bool selected, chrlen stopPos) const
@@ -1255,7 +1261,7 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 	bool lastSep[]{ false, false };
 	chrlen bsNumb = 0;
 
-	bss.Do([&](const vector<BS_map::PosValue>* VP) {
+	bss.DoExtend([&](const vector<BS_map::PosValue>* VP) {
 		// *** save basic info
 		const auto& itStart = VP[1].back().Iter;
 		const auto& itEnd = VP[0].front().Iter;
@@ -1302,7 +1308,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 	const reclen offset = AddChromToLine(cID);
 	const BYTE COLORS_CNT = 4;
 
-	bss.Do([&](const vector<BS_map::PosValue>* VP) {
+	bss.DoExtend([&](const vector<BS_map::PosValue>* VP) {
 		static const string colors[]{
 			// color		 ind	feature_score/BS_score
 			"155,233,168",	// 1	>=0.2	light light green

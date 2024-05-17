@@ -695,7 +695,7 @@ public:
 
 	// Applies lambda to each group of binding sites, passing borders collection
 	template<typename F>
-	void Do(F&& lambda)
+	void DoExtend(F&& lambda)
 	{
 		vector<PosValue> VP[2];	// 0 - direct, 1 - reversed
 
