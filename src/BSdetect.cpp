@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/17/2024
+Last modified: 05/18/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -130,7 +130,7 @@ void Detector::CallBS(chrid cID)
 	_lineWriter.SetChromID(cID);
 
 	if (IsPEReads) {
-		rgns.SetPotentialRegionsPE(fragCovers, cLen, 3);					_fragÑovers.WriteChrom(cID);
+		rgns.SetPotentialRegionsPE(fragCovers, cLen, 3);				_fragÑovers.WriteChrom(cID);
 		splines.BuildSplinePE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID);
 	}
 	else {
@@ -156,8 +156,8 @@ void Detector::CallBS(chrid cID)
 		}
 
 		Verb::PrintMsg(Verb::DBG, "Locate binding sites");
-		rgns.SetPotentialRegionsSE(fragCovers, cLen, 3, false);
-		splines.BuildSplineSE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID); _fragÑovers.WriteChrom(cID);
+		rgns.SetPotentialRegionsSE(fragCovers, cLen, 3, false);			_fragÑovers.WriteChrom(cID);
+		splines.BuildSplineSE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID);
 	}
 
 	splines.Data()->EliminateNonOverlaps();

@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/17/2024
+Last modified: 05/18/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -292,7 +292,12 @@ class CoverRegions : public vector<CoverRegion>
 	//	@param cover: fragment coverage
 	//	@param capacity: capacity to reserve the instance
 	//	@param cutoff: fragment coverage cut off value
-	void SetPotentialRegions(const TreatedCover& cover, size_t capacity, coval cutoff);
+	void SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff);
+
+#ifdef MY_DEBUG
+	// Prints frequency distribution of potentail regions value ('score')
+	void PrintScoreDistrib() const;
+#endif
 
 public:
 	// methods used in EliminateNonOverlaps()

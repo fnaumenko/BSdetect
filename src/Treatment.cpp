@@ -277,7 +277,7 @@ void EliminateMultiOverlapsRegions(T rgns[2])
 
 // prints regions before and after selection
 template<typename T>
-void PrintRegionStats(const T* rgns, chrlen chrLen, bool isSE = true)
+void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 {
 	const char* format[] = {
 		"%s:  %d (%2.2f%%)   %d (%2.2f%%)\n",	// features
@@ -291,7 +291,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool isSE = true)
 
 	printf("\n%s\nstrand     received        selected\n", title[isFeatures]);
 	printf("------------------------------------\n");
-	for (BYTE s = 0; s < 1 + isSE; s++) {
+	for (BYTE s = 0; s < 1 + strands; s++) {
 		chrlen rawLen = 0, refineLen = 0;
 		const auto& rgn = rgns[s];
 		const auto itEnd = rgn.end();
@@ -302,7 +302,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool isSE = true)
 			rawLen += len;
 			if (T::IsNotEmpty(it)) refineLen += len, realCnt++;
 		}
-		std::printf(format[isFeatures], sStrandTITLES[s + isSE],
+		std::printf(format[isFeatures], sStrandTITLES[s + strands],
 			rgn.size(), Percent(rawLen, chrLen),
 			realCnt, Percent(refineLen, chrLen));
 	}
@@ -310,7 +310,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool isSE = true)
 
 //===== CoverRegions
 
-void CoverRegions::SetPotentialRegions(const TreatedCover& cover, size_t capacity, coval cutoff)
+void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff)
 {
 	const fraglen minLen = 3 * (Glob::FragLen / 2);		//1.5 fragment lengths
 	chrlen	start = 0, end = 0;
@@ -336,6 +336,21 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, size_t capacit
 		}
 }
 
+#ifdef MY_DEBUG
+void CoverRegions::PrintScoreDistrib() const
+{
+	map<coval, chrlen> freq;
+
+	for (const auto& rgn : *this)
+		freq[rgn.value]++;
+
+	std::printf("\nREGIONS LENGTH FREQUENCY\n");
+	std::printf("length freq\n");
+	for (const auto& item : freq)
+		printf("%5d %d\n", item.first, item.second);
+}
+#endif
+
 //===== DataCoverRegions
 
 bool PositiveVal(int16_t val) { return val > 0; }
@@ -343,7 +358,7 @@ bool NegativeVal(int16_t val) { return val < 0; }
 
 void DataCoverRegions::SetPotentialRegionsSE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
 {
-	size_t capacity = cLen / (Glob::FragLen * 100);
+	chrlen capacity = cLen / (Glob::FragLen * 100);
 	StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
 	StrandData(NEG).SetPotentialRegions(cover.StrandData(NEG), capacity, cutoff);
 
@@ -356,9 +371,11 @@ void DataCoverRegions::SetPotentialRegionsSE(const DataSet<TreatedCover>& cover,
 
 void DataCoverRegions::SetPotentialRegionsPE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff)
 {
-	size_t capacity = cLen / (Glob::FragLen * 100);
+	chrlen capacity = cLen / (Glob::FragLen * 100);
 	DataByInd().SetPotentialRegions(cover.DataByInd(), capacity, cutoff);
-
+#ifdef MY_DEBUG
+	//DataByInd().PrintScoreDistrib();
+#endif
 	//if (Verb::Level(Verb::DBG))
 	//	PrintRegionStats<CoverRegions>(Data(), cLen, false);
 }
