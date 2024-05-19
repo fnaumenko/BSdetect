@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/18/2024
+Last modified: 05/19/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -123,15 +123,15 @@ void Detector::CallBS(chrid cID)
 	DataValuesMap& splines		 = static_cast<DataValuesMap&>(_splines.ChromData(cID));
 	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
 	BS_map& bss = *_bss.ChromData(cID).Data();
-	const chrlen cLen = _cSizes[cID];	// !!! can be passed from Pass() methods?
+	const chrlen cLen = _cSizes[cID];
 
 	_timer.Start();
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 	_lineWriter.SetChromID(cID);
 
 	if (IsPEReads) {
-		rgns.SetPotentialRegionsPE(fragCovers, cLen, 3);				_fragÑovers.WriteChrom(cID);
-		splines.BuildSplinePE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID);
+		rgns.SetPotentialRegionsPE(fragCovers, cLen, 3);	_fragÑovers.WriteChrom(cID);
+		splines.BuildSplinePE(readCovers, rgns, true);		_rgns.WriteChrom(cID);
 	}
 	else {
 		if (IsFragMeanUnset) {
@@ -148,16 +148,14 @@ void Detector::CallBS(chrid cID)
 			Glob::FragLen = splines.GetFragMean();				splines.Clear();
 			printf("Mean fragment length: %d\n", Glob::FragLen);
 
-			//_rgns.WriteChrom(cID); _fragÑovers.WriteChrom(cID); _splines.WriteChrom(cID);
-			//return;
 			_fragÑovers.Fill(_reads, _saveCover);				_reads.Clear();
 			IsFragMeanUnset = false;
 			_timer.Stop(0, false, true);
 		}
 
 		Verb::PrintMsg(Verb::DBG, "Locate binding sites");
-		rgns.SetPotentialRegionsSE(fragCovers, cLen, 3, false);			_fragÑovers.WriteChrom(cID);
-		splines.BuildSplineSE(readCovers, rgns, true, ReadSplineBASE);	_rgns.WriteChrom(cID);
+		rgns.SetPotentialRegionsSE(fragCovers, cLen, 3, false);	_fragÑovers.WriteChrom(cID);
+		splines.BuildSplineSE(readCovers, rgns, true);			_rgns.WriteChrom(cID);
 	}
 
 	splines.Data()->EliminateNonOverlaps();

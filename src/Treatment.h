@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/18/2024
+Last modified: 05/19/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -451,14 +451,14 @@ public:
 	//	@param rgns: potential regions
 	//	@param redifineRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSplineSE(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase);// = SSpliner::ReadSplineBase);
+	void BuildSplineSE(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase = ReadSplineBASE);
 
 	// Filters and fill spline curve by PE read cover within potential regions
 	//	@param cover: raw read/frag cover
 	//	@param rgns: potential regions
 	//	@param redifineRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSplinePE(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase);// = SSpliner::ReadSplineBase);
+	void BuildSplinePE(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase = ReadSplineBASE);
 
 	//void BuildSpline(const DataSet<TreatedCover>& cover, const DataFeatureVals& rgns, fraglen splineBase = SSpliner::ReadSplineBase);
 	

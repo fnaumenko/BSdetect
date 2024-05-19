@@ -343,7 +343,6 @@ void CoverRegions::PrintScoreDistrib() const
 
 	for (const auto& rgn : *this)
 		freq[rgn.value]++;
-
 	std::printf("\nREGIONS LENGTH FREQUENCY\n");
 	std::printf("length freq\n");
 	for (const auto& item : freq)
