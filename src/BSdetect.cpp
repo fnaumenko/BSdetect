@@ -82,9 +82,9 @@ int main(int argc, char* argv[])
 #ifdef MY_DEBUG
 		TreatedCover::WriteDelim = true;
 #endif
-		//if (!gName && !FS::HasExt(iName, FT::Ext(FT::eType::BAM)))
-		//	Err(Options::OptionToStr(oGEN) + " is required while file is not BAM",
-		//		iName).Throw();
+		if (!gName && !FS::HasExt(iName, FT::Ext(FT::eType::BAM)))
+			Err(Options::OptionToStr(oGEN) + " is required while input file is not BAM",
+				iName).Throw();
 
 		BedWriter::SetRankScore(Options::GetBVal(oRANK_SCORE));
 		Verb::Set(Options::GetUIVal(oVERB));
