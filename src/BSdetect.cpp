@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/19/2024
+Last modified: 05/21/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -26,7 +26,7 @@ const char* ProgParam = "<in-file>";	// program parameter tip
 const string OutFileExt = FT::Ext(FT::eType::DIST);
 
 //const char* inputs[] = { "FRAG","READ" };	// input option; corresponds to Inp
-//const char* dTypes[] = { "N","LN","G" };	// input distrib option; corresponds to InType	
+const char* smodes[] = { "SE","PE" };				// corresponds to DataWriter::eMode
 
 // *** Options definition
 
@@ -54,7 +54,14 @@ Options::Option Options::List[] = {
 	{ 't',	sTime,	tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL, 0, NULL, sPrTime, NULL },
 	{ 'V',"verbose",tOpt::NONE,	tENUM,	gOTHER, Verb::RT, Verb::CRIT, float(Verb::Size()), (char*)Verb::ValTitles, Verb::ValDescr, NULL },
 	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrVersion, NULL },
-	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrUsage, NULL }
+	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrUsage, NULL },
+
+	{ 'D', "read-cover-dir",	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "direct read coverage file", NULL},
+	{ 'R', "read-cover-rev",	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "reversed read coverage file", NULL},
+	{ 'm', "smode",	tOpt::NONE,	tENUM,	gOTHER, 0, 0, ArrCnt(smodes), (char*)smodes,
+	"sequencing mode: ? - single end, ? - paired end", NULL },
+	{ 'L',"rd-len",	tOpt::NONE,	tINT,	gOTHER, 50, 20, 1000, NULL,
+	"fixed length of output read, or minimum length of variable reads", NULL },
 };
 const BYTE Options::OptCount = ArrCnt(Options::List);
 
@@ -82,29 +89,45 @@ int main(int argc, char* argv[])
 #ifdef MY_DEBUG
 		TreatedCover::WriteDelim = true;
 #endif
-		if (!gName && !FS::HasExt(iName, FT::Ext(FT::eType::BAM)))
-			Err(Options::OptionToStr(oGEN) + " is required while input file is not BAM",
-				iName).Throw();
+		auto ftype = FT::GetType(iName);
+
+		//if (!gName && !FS::HasExt(iName, FT::Ext(FT::BAM)))
+		if (!gName && ftype != FT::BAM)
+			Err(Options::OptionToStr(oGEN) + " is required while input file is not BAM", iName).Throw();
 
 		BedWriter::SetRankScore(Options::GetBVal(oRANK_SCORE));
 		Verb::Set(Options::GetUIVal(oVERB));
 		ChromSizes cSizes(gName, true);
 
-		// pre-read first item to check for PE sequence
-		RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, Verb::Level(Verb::DBG), false, true, true);
-		if (Verb::Level(Verb::DBG))	cout << LF;
-		file.GetNextItem();		// no need to check for empty sequence
-		Detector::IsPEReads = file.IsPaired();
+		if (ftype == FT::BED) {
+			// pre-read first item to check for PE sequence
+			RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, Verb::Level(Verb::DBG), false, true, true);
+			if (Verb::Level(Verb::DBG))	cout << LF;
+			file.GetNextItem();		// no need to check for empty sequence
+			Detector::IsPEReads = file.IsPaired();
 
-		// detect BS
-		Detector bsd(
-			file,
-			FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
-			cSizes,
-			Options::GetBVal(oCOVER),
-			Options::GetBVal(oINTERM)
-		);
+			// detect BS
+			Detector bsd(
+				file,
+				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
+				cSizes,
+				Options::GetBVal(oSAVE_COVER),
+				Options::GetBVal(oSAVE_INTER)
+			);
+		}
+		else {
+			Detector::IsPEReads = Options::GetBVal(oSMODE);
+			Glob::ReadLen = Options::GetUIVal(oRD_LEN);
 
+			Detector bsd(
+				iName,
+				FS::CheckedFileName(Options::GetSVal(oPOS_READ_COVER)),
+				FS::CheckedFileName(Options::GetSVal(oNEG_READ_COVER)),
+				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
+				cSizes,
+				Options::GetBVal(oSAVE_INTER)
+			);
+		}
 	}
 	catch (const Err& e) { ret = 1; cerr << e.what() << endl; }
 	catch (const exception& e) { ret = 1; cerr << e.what() << endl; }
@@ -117,6 +140,8 @@ bool Detector::IsPEReads = false;
 
 void Detector::CallBS(chrid cID)
 {
+	const char* noRgnsMsg = "No potential regions found";
+
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
 	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
 	DataCoverRegions& rgns		 = static_cast<DataCoverRegions&>(_rgns.ChromData(cID));
@@ -125,13 +150,18 @@ void Detector::CallBS(chrid cID)
 	BS_map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];
 
+	if (fragCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty fragment coverage"); return; }
+	if (readCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty read coverage"); return; }
 	_timer.Start();
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 	_lineWriter.SetChromID(cID);
 
 	if (IsPEReads) {
-		rgns.SetPotentialRegionsPE(fragCovers, cLen, 3);	_frag—overs.WriteChrom(cID);
-		splines.BuildSplinePE(readCovers, rgns, true);		_rgns.WriteChrom(cID);
+		rgns.SetPotentialRegionsPE(fragCovers, cLen, 3);
+		if (rgns.Empty()) { Verb::PrintMsg(Verb::RT, noRgnsMsg); return; }
+
+		splines.BuildSplinePE(readCovers, rgns, true);
+		_rgns.WriteChrom(cID);	_frag—overs.WriteChrom(cID);	// now we can release both
 	}
 	else {
 		if (IsFragMeanUnset) {
@@ -140,6 +170,7 @@ void Detector::CallBS(chrid cID)
 			coval maxVal = readCovers.StrandData(POS).GetMaxVal();
 			printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
 			rgns.SetPotentialRegionsSE(fragCovers, cLen, maxVal / 3, true);	//10
+			if (rgns.Empty()) { Verb::PrintMsg(Verb::RT, noRgnsMsg); return; }
 
 			//auto flen = rgns.GetFragMean(fragCovers);
 			//printf("\nMass Mean fragment length: %d\n", flen);
@@ -154,8 +185,11 @@ void Detector::CallBS(chrid cID)
 		}
 
 		Verb::PrintMsg(Verb::DBG, "Locate binding sites");
-		rgns.SetPotentialRegionsSE(fragCovers, cLen, 3, false);	_frag—overs.WriteChrom(cID);
-		splines.BuildSplineSE(readCovers, rgns, true);			_rgns.WriteChrom(cID);
+		rgns.SetPotentialRegionsSE(fragCovers, cLen, 3, false);
+		if (rgns.Empty()) { Verb::PrintMsg(Verb::RT, noRgnsMsg); return; }
+
+		splines.BuildSplineSE(readCovers, rgns, true);
+		_rgns.WriteChrom(cID);	_frag—overs.WriteChrom(cID);	// now we can release both
 	}
 
 	splines.Data()->EliminateNonOverlaps();

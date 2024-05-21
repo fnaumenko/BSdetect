@@ -352,9 +352,6 @@ void CoverRegions::PrintScoreDistrib() const
 
 //===== DataCoverRegions
 
-bool PositiveVal(int16_t val) { return val > 0; }
-bool NegativeVal(int16_t val) { return val < 0; }
-
 void DataCoverRegions::SetPotentialRegionsSE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
 {
 	chrlen capacity = cLen / (Glob::FragLen * 100);
@@ -628,6 +625,9 @@ void DataValuesMap::BuildSplinePE(
 	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.DataByInd(), redifineRgns, splineBase);
 }
 
+bool PositiveVal(int16_t val) { return val > 0; }
+bool NegativeVal(int16_t val) { return val < 0; }
+
 fraglen DataValuesMap::GetFragMean() const
 {
 	auto& pData = StrandData(POS);
@@ -867,7 +867,7 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 		// find the iterator that will follow the inserted element
 		for (; lastIt != end() && lastIt->first < pos; lastIt++);
 		// the inserted position can duplicate an already inserted right one; reduce it by 1
-		if (lastIt->first == pos)
+		if (lastIt != end() && lastIt->first == pos)
 			--pos;
 		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb, incl));
 	}

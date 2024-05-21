@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/19/2024
+Last modified: 05/21/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -232,6 +232,7 @@ public:
 class CombCover : public OrderedData<TreatedCover, BedGrWriter>
 {
 	string	_outFName;				// common name of output files
+	UniBedReader* _file;
 
 public:
 	// Primer constructor
@@ -264,6 +265,61 @@ public:
 	void Fill(const Reads& reads, bool addTotal);
 };
 
+using tChromsFreq = map<chrid, BYTE>;
+
+// Wrapper for initializing a coverage from a file
+class CombCoverReader
+{
+	CombCover&	 _cover;
+	tChromsFreq& _chrFreq;
+	eStrand		 _strand;
+	UniBedReader _file;
+
+public:
+	// Constructor-initializer
+	//	@param fName[in]: file name
+	//	@param cSizes[in]: chrom sizes
+	//	@param cover[out]: coverage to initialize
+	//	@param chrFreq[out]: chrom reading frequency
+	//	@param strand[in]: strand
+	CombCoverReader(
+		const char* fName,
+		ChromSizes& cSizes,
+		CombCover& cover,
+		tChromsFreq& chrFreq,
+		eStrand strand
+	)
+		: _cover(cover), _chrFreq(chrFreq), _strand(strand)
+		, _file(fName, FT::eType::BGRAPH, &cSizes, 4, 0, eOInfo::LAC, Verb::Level(Verb::DBG), false, true)
+	{
+		Verb::PrintMsg(Verb::DBG, "\n");
+		_file.Pass(*this);
+	}
+
+	// treats current item
+	//	@returns: true if item is accepted
+	bool operator()() {
+		_cover.AddNextRegion(_strand, _file.ItemRegion(), coval(_file.ItemValue()));
+		return true;
+	}
+
+	// Closes current chrom, open next one
+	//	@param cID: current chrom ID
+	//	@param cLen: chrom length
+	//	@param cnt: current chrom items count
+	//	@param nextcID: next chrom ID
+	void operator()(chrid cID, chrlen cLen, size_t cnt, chrid nextcID) {
+		_cover.SetChrom(nextcID);
+		_chrFreq[nextcID]++;
+	}
+
+	// Closes last chrom
+	//	@param cID: last chrom ID
+	//	@param cLen: chrom length
+	//	@param cnt: last chrom items count
+	//	@param tCnt: total items count
+	void operator()(chrid cID, chrlen cLen, size_t cnt, size_t)	{}
+};
 
 //=== COVER REGION & COLLECTION
 

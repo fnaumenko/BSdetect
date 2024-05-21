@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05/092024
+Last modified: 05/21/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -14,8 +14,8 @@ enum optValue {		// options id
 	oGEN,
 	oCHROM,
 	oDUP_LVL,
-	oCOVER,
-	oINTERM,
+	oSAVE_COVER,
+	oSAVE_INTER,
 	oALARM,
 	oRANK_SCORE,
 	oOUTFILE,
@@ -23,6 +23,11 @@ enum optValue {		// options id
 	oVERB,
 	oVERSION,
 	oHELP,
+
+	oPOS_READ_COVER,
+	oNEG_READ_COVER,
+	oSMODE,
+	oRD_LEN
 };
 
 bool IsFragMeanUnset = true;	// common to the entire genome
@@ -30,7 +35,7 @@ bool IsFragMeanUnset = true;	// common to the entire genome
 // BS detector
 class Detector
 {
-	const ChromSizes& _cSizes;
+	ChromSizes& _cSizes;
 	bool			  _saveCover;
 	CombCover		  _frag—overs;		// extended reads cover to find frag Mean
 	CombCover		  _read—overs;
@@ -50,6 +55,7 @@ class Detector
 public:
 	static bool IsPEReads;			// common to the entire genome
 
+	// basic constructor
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
@@ -69,6 +75,45 @@ public:
 		file.Pass(*this);
 		_file = nullptr;
 		_timer.Start();
+	}
+
+	// pre-coverage constructor
+	Detector(
+		const char* inName_fCover,
+		const char* inName_rCoverDirect,
+		const char* inName_rCoverReversed,
+		const string& outFName,
+		ChromSizes& cSizes, 
+		bool saveInter
+	)
+		: _cSizes(cSizes)
+		, _saveCover(false)
+		, _frag—overs(cSizes, 1, false, outFName + "_frag", "fragment coverage")
+		, _read—overs(cSizes, 2, false, outFName + "_read", "read coverage")
+		, _rgns(cSizes, 2 - IsPEReads, saveInter, outFName + ".RGNS", "potential regions")
+		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
+		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
+		, _lineWriter(cSizes, 2, saveInter, outFName + ".LINE", "linear regression")
+		, _bss(cSizes, 1, true, outFName + ".BSs", "called binding sites")
+		, _fIdent(true)
+	{
+		{	// preparing coverages
+			tChromsFreq	chrFreq;
+			_timer.Start();
+			CombCoverReader a(inName_fCover,		cSizes, _frag—overs, chrFreq, TOTAL);
+			CombCoverReader b(inName_rCoverDirect,	cSizes, _read—overs, chrFreq, POS);
+			CombCoverReader c(inName_rCoverReversed,cSizes, _read—overs, chrFreq, NEG);
+
+			cSizes.SetAllTreatedOff();
+			for (const auto& c : chrFreq)
+				_cSizes.SetTreatedChrom(c.first, c.second == 3);
+			//_cSizes.Print();
+			_timer.Stop("Reading coverage: "); cout << LF;
+		}
+		// treatment
+		for(const auto& c : _cSizes)
+			if(c.second.Treated)
+				CallBS(c.first);
 	}
 
 	// treats current item
@@ -99,8 +144,7 @@ public:
 	//	@param cnt: current chrom items count
 	//	@param nextcID: next chrom ID
 	void operator()(chrid cID, chrlen cLen, size_t cnt, chrid nextcID) {
-		if (Verb::Level(Verb::RT))
-			dout << Chrom::ShortName(nextcID) << LF;
+		Verb::PrintMsg(Verb::RT, Chrom::ShortName(nextcID).c_str());
 		if (cnt) {		// not the first readed chrom
 			CallBS(cID);
 		}

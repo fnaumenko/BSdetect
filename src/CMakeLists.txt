@@ -7,6 +7,7 @@ add_compile_definitions(
 	_PE_READ
 	_FILE_WRITE
 	_MULTITHREAD
+	_WIG
 	)
 	
 # ZLIB
