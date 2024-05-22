@@ -104,7 +104,7 @@ int main(int argc, char* argv[])
 			RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, Verb::Level(Verb::DBG), false, true, true);
 			if (Verb::Level(Verb::DBG))	cout << LF;
 			file.GetNextItem();		// no need to check for empty sequence
-			Detector::IsPEReads = file.IsPaired();
+			Glob::SetPE(file.IsPaired());
 
 			// detect BS
 			Detector bsd(
@@ -116,7 +116,7 @@ int main(int argc, char* argv[])
 			);
 		}
 		else {
-			Detector::IsPEReads = Options::GetBVal(oSMODE);
+			Glob::SetPE(Options::GetBVal(oSMODE));
 			Glob::ReadLen = Options::GetUIVal(oRD_LEN);
 
 			Detector bsd(
@@ -136,12 +136,9 @@ int main(int argc, char* argv[])
 }
 
 //===== Detector
-bool Detector::IsPEReads = false;
 
 void Detector::CallBS(chrid cID)
 {
-	const char* noRgnsMsg = "No potential regions found";
-
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
 	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
 	DataCoverRegions& rgns		 = static_cast<DataCoverRegions&>(_rgns.ChromData(cID));
@@ -150,57 +147,45 @@ void Detector::CallBS(chrid cID)
 	BS_map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];
 
-	if (fragCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty fragment coverage"); return; }
-	if (readCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty read coverage"); return; }
-	_timer.Start();
+	//if (fragCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty fragment coverage"); return; }
+	//if (readCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty read coverage"); return; }
+
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 	_lineWriter.SetChromID(cID);
 
-	if (IsPEReads) {
-		rgns.SetPotentialRegionsPE(fragCovers, cLen, 3);
-		if (rgns.Empty()) { Verb::PrintMsg(Verb::RT, noRgnsMsg); return; }
+	if (Glob::IsMeanFragUndef) {	// can be true for SE sequence only
+		Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
+		_timer.Start();
+		coval maxVal = readCovers.StrandData(POS).GetMaxVal();
+		printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
+		if (rgns.SetPotentialRegions(fragCovers, cLen, maxVal / 3, true))	return;
 
-		splines.BuildSplinePE(readCovers, rgns, true);
-		_rgns.WriteChrom(cID);	_frag—overs.WriteChrom(cID);	// now we can release both
+		//auto flen = rgns.GetFragMean(fragCovers);
+		//printf("\nMass Mean fragment length: %d\n", flen);
+
+		splines.BuildSpline(fragCovers, rgns, false, 50);	_frag—overs.Clear();	rgns.Clear();
+		Glob::FragLen = splines.GetFragMean();				splines.Clear();
+
+		_frag—overs.Fill(_reads, _saveCover);				_reads.Clear();
+		Glob::IsMeanFragUndef = false;
+		printf("Mean fragment length: %d\n", Glob::FragLen);
+		_timer.Stop(0, false, true);
 	}
-	else {
-		if (IsFragMeanUnset) {
-			Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
-			_timer.Start();
-			coval maxVal = readCovers.StrandData(POS).GetMaxVal();
-			printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
-			rgns.SetPotentialRegionsSE(fragCovers, cLen, maxVal / 3, true);	//10
-			if (rgns.Empty()) { Verb::PrintMsg(Verb::RT, noRgnsMsg); return; }
+	Verb::PrintMsg(Verb::DBG, "Locate binding sites");
+	_timer.Start();
+	if (rgns.SetPotentialRegions(fragCovers, cLen, 3))	return;
 
-			//auto flen = rgns.GetFragMean(fragCovers);
-			//printf("\nMass Mean fragment length: %d\n", flen);
+	splines.BuildSpline(readCovers, rgns, true);
+	_rgns.WriteChrom(cID);	_frag—overs.WriteChrom(cID);	// now we can release both
 
-			splines.BuildSplineSE(fragCovers, rgns, false, 50);	_frag—overs.Clear();	rgns.Clear();
-			Glob::FragLen = splines.GetFragMean();				splines.Clear();
-			printf("Mean fragment length: %d\n", Glob::FragLen);
-
-			_frag—overs.Fill(_reads, _saveCover);				_reads.Clear();
-			IsFragMeanUnset = false;
-			_timer.Stop(0, false, true);
-		}
-
-		Verb::PrintMsg(Verb::DBG, "Locate binding sites");
-		rgns.SetPotentialRegionsSE(fragCovers, cLen, 3, false);
-		if (rgns.Empty()) { Verb::PrintMsg(Verb::RT, noRgnsMsg); return; }
-
-		splines.BuildSplineSE(readCovers, rgns, true);
-		_rgns.WriteChrom(cID);	_frag—overs.WriteChrom(cID);	// now we can release both
-	}
-
-	splines.Data()->EliminateNonOverlaps();
-	splines.Data()->PrintStat(cLen);
-	splines.Data()->Numerate();
+	splines.EliminateNonOverlaps();
+	splines.PrintStat(cLen);
+	splines.Numerate();
 	//splines.Print(cID);
 	derivs.Set(splines);						_splines.WriteChrom(cID);
 	//derivs.Print();
 	bss.Set(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
 	//bss.Print(cID, false);
-	//return;
 	bss.Refine();
 	bss.NormalizeScore();
 	bss.NormalizeBSwidth();

@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/21/2024
+Last modified: 05/22/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -48,6 +48,9 @@ public:
 	// Return true if given level is allowed
 	static bool Level(eVerb level) { return _level >= level; }
 
+	// Return true if given level is set
+	static bool StrictLevel(eVerb level) { return _level == level; }
+
 private:
 	static eVerb _level;
 } verb;
@@ -80,9 +83,13 @@ static const StrandOp StrandOps[2]{
 };
 
 static struct Glob {
-	static readlen ReadLen;
-	static fraglen FragLen;		// average fragment length
-	static fraglen ROI_ext;		// Regions of interest extention	
+	static bool		IsPE;		// is sequense paired-end
+	static bool		IsMeanFragUndef;
+	static readlen	ReadLen;	// length of read
+	static fraglen	FragLen;	// average fragment length
+	static fraglen	ROI_ext;	// Regions of interest extention
+
+	static void SetPE(bool isPE) { if ((IsPE = isPE)) IsMeanFragUndef = false; }
 } glob;
 
 
@@ -373,13 +380,8 @@ public:
 	//	@param cLen: length of chromosome
 	//	@param cutoff: fragment coverage cut off value
 	//	@param noMultiOverl: if true then eliminate multi overlaps regions as well
-	void SetPotentialRegionsSE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl);
-
-	// Fills the instance by potential regions of fragment coverage
-	//	@param cover: fragment coverage
-	//	@param cLen: length of chromosome
-	//	@param cutoff: fragment coverage cut off value
-	void SetPotentialRegionsPE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff);
+	//	@returns: true in case of empty instance (and print message), false otherwise
+	bool SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl = false);
 
 	// Returns mean fragment length based on cover regions mass centre comparison
 	//	@param cover: fragment coverage
@@ -390,7 +392,6 @@ public:
 		StrandData(POS).clear();
 		StrandData(NEG).clear();
 	}
-
 };
 
 
@@ -502,24 +503,24 @@ public:
 class DataValuesMap : public DataSet<ValuesMap>
 {
 public:
-	// Filters and fill spline curve by [extended] SE read cover within potential regions
-	//	@param cover: raw read/frag cover
-	//	@param rgns: potential regions
-	//	@param redifineRgns: if true then redifine regions position
-	//	@param splineBase: half-length of spliner moving window
-	void BuildSplineSE(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase = ReadSplineBASE);
-
 	// Filters and fill spline curve by PE read cover within potential regions
 	//	@param cover: raw read/frag cover
 	//	@param rgns: potential regions
 	//	@param redifineRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSplinePE(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase = ReadSplineBASE);
+	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase = ReadSplineBASE);
 
-	//void BuildSpline(const DataSet<TreatedCover>& cover, const DataFeatureVals& rgns, fraglen splineBase = SSpliner::ReadSplineBase);
-	
 	// Returns fragment's mean calculated by minimizing the difference between peak positions
 	fraglen GetFragMean() const;
+
+	// Resets non overlapping spline value
+	void EliminateNonOverlaps() { Data()->EliminateNonOverlaps(); }
+
+	// Sets a single consecutive number (group number) to each overlapped not empty spline
+	void Numerate() { Data()->Numerate(); }
+
+	// Prints potential regions before and after selection
+	void PrintStat(chrlen clen) const { Data()->PrintStat(clen); }
 
 	void Clear();
 

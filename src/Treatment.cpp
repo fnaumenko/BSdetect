@@ -8,6 +8,8 @@ const char* Verb::ValTitles[] = { "SL","RES","RT","DBG" };
 const char* Verb::ValDescr = "set verbose level:\n?  -\tsilent mode (show critical messages only)\n? -\tshow result summary\n?  -\tshow run-time information\n? -\tshow debug messages";
 Verb::eVerb Verb::_level;
 
+bool Glob::IsPE = false;
+bool Glob::IsMeanFragUndef = true;
 readlen Glob::ReadLen = 0;
 fraglen Glob::FragLen = FragDefLEN;
 fraglen Glob::ROI_ext = 500;
@@ -353,28 +355,23 @@ void CoverRegions::PrintScoreDistrib() const
 
 //===== DataCoverRegions
 
-void DataCoverRegions::SetPotentialRegionsSE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
+bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
 {
 	chrlen capacity = cLen / (Glob::FragLen * 100);
-	StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
-	StrandData(NEG).SetPotentialRegions(cover.StrandData(NEG), capacity, cutoff);
+	if(Glob::IsPE)
+		DataByInd().SetPotentialRegions(cover.DataByInd(), capacity, cutoff);
+	else {
+		StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
+		StrandData(NEG).SetPotentialRegions(cover.StrandData(NEG), capacity, cutoff);
 
-	EliminateNonOverlapsRegions<CoverRegions>(Data(), Glob::FragLen);
-	if (noMultiOverl)
-		EliminateMultiOverlapsRegions<CoverRegions>(Data());
-	if (Verb::Level(Verb::DBG))
-		PrintRegionStats<CoverRegions>(Data(), cLen);
-}
-
-void DataCoverRegions::SetPotentialRegionsPE(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff)
-{
-	chrlen capacity = cLen / (Glob::FragLen * 100);
-	DataByInd().SetPotentialRegions(cover.DataByInd(), capacity, cutoff);
-#ifdef MY_DEBUG
-	//DataByInd().PrintScoreDistrib();
-#endif
-	//if (Verb::Level(Verb::DBG))
-	//	PrintRegionStats<CoverRegions>(Data(), cLen, false);
+		EliminateNonOverlapsRegions<CoverRegions>(Data(), Glob::FragLen);
+		if (noMultiOverl)
+			EliminateMultiOverlapsRegions<CoverRegions>(Data());
+		if (Verb::Level(Verb::DBG))
+			PrintRegionStats<CoverRegions>(Data(), cLen);
+	}
+	if (Empty()) { Verb::PrintMsg(Verb::CRIT, "No enriched regions found"); return true; }
+	return false;
 }
 
 //fraglen DataCoverRegions::GetFragMean(const DataSet<TreatedCover>& cover) const
@@ -607,23 +604,18 @@ void ValuesMap::Numerate()
 
 void ValuesMap::PrintStat(chrlen clen) const
 {
-	PrintRegionStats<ValuesMap>(this, clen);
+	if (Verb::Level(Verb::DBG))
+		PrintRegionStats<ValuesMap>(this, clen);
 }
 
 //===== DataValuesMap
 
-void DataValuesMap::BuildSplineSE(
+void DataValuesMap::BuildSpline(
 	const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase)
 {
-	StrandData(POS).BuildSpline(cover.StrandData(POS), rgns.StrandData(POS), redifineRgns, splineBase);
-	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.StrandData(NEG), redifineRgns, splineBase);
-}
-
-void DataValuesMap::BuildSplinePE(
-	const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase)
-{
-	StrandData(POS).BuildSpline(cover.StrandData(POS), rgns.DataByInd(), redifineRgns, splineBase);
-	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.DataByInd(), redifineRgns, splineBase);
+	BYTE strand = !Glob::IsPE;	// TOTAL for PE or POS for SE
+	StrandData(POS).BuildSpline(cover.StrandData(POS), rgns.StrandData(eStrand(  strand)), redifineRgns, splineBase);
+	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.StrandData(eStrand(2*strand)), redifineRgns, splineBase);
 }
 
 bool PositiveVal(int16_t val) { return val > 0; }
@@ -1093,33 +1085,41 @@ void BS_map::NormalizeBSwidth()
 
 void BS_map::PrintStat() const
 {
-	if (!Verb::Level(Verb::DBG))	return;
+	if (Verb::StrictLevel(Verb::CRIT))	return;
 
+	const bool stat = Verb::Level(Verb::DBG);	// collect and print statistics
 	chrlen	bsNumb = 0;
 	chrlen	minNumb, maxNumb, minLen = CHRLEN_MAX, maxLen = 0;
 	chrlen	minNegNumb, maxNegNumb, minPosNumb, maxPosNumb, minScoreNumb;
 	float	minNegRatio, minPosRatio, minScore, maxNegRatio = 0, maxPosRatio = 0;
 	minNegRatio = minPosRatio = minScore = 1000;
 
+	// define min/max length, minScore, min***Ratio/max***Ratio
 	DoBasic([&](citer& start, citer& end) {
-		const fraglen len = end->first - start->first;
 		++bsNumb;
-		if (minLen > len)		minLen = len, minNumb = bsNumb;
-		else if (maxLen < len)	maxLen = len, maxNumb = bsNumb;
+		if (stat) {
+			const fraglen len = end->first - start->first;
 
-		float val = start->second.Score;
-		if (minScore > val)		minScore = val, minScoreNumb = bsNumb;
+			if (minLen > len)		minLen = len, minNumb = bsNumb;
+			else if (maxLen < len)	maxLen = len, maxNumb = bsNumb;
 
-		val = end->second.Score;
-		if (val < 1) {
-			if (minNegRatio > val)		minNegRatio = val, minNegNumb = bsNumb;
-			else if (maxNegRatio < val)	maxNegRatio = val, maxNegNumb = bsNumb;
+			float val = start->second.Score;
+			if (minScore > val)		minScore = val, minScoreNumb = bsNumb;
+
+			val = end->second.Score;
+			if (val < 1) {
+				if (minNegRatio > val)		minNegRatio = val, minNegNumb = bsNumb;
+				else if (maxNegRatio < val)	maxNegRatio = val, maxNegNumb = bsNumb;
+			}
+			else
+				if (minPosRatio > val)		minPosRatio = val, minPosNumb = bsNumb;
+				else if (maxPosRatio < val)	maxPosRatio = val, maxPosNumb = bsNumb;
 		}
-		else
-			if (minPosRatio > val)		minPosRatio = val, minPosNumb = bsNumb;
-			else if (maxPosRatio < val)	maxPosRatio = val, maxPosNumb = bsNumb;
 		}
 	);
+	if (stat)	std::printf("\n");
+	std::printf("BS count: %d\n", bsNumb);
+	if (!bsNumb || !stat) return;
 
 	// collect items with min/max len
 	vector<chrlen> minLenNumbers, maxLenNumbers;
@@ -1133,9 +1133,6 @@ void BS_map::PrintStat() const
 			maxLenNumbers.push_back(bsNumb);
 		}
 	);
-
-	std::printf("\nBS count: %d\n", bsNumb);
-	if (!bsNumb) return;
 
 	auto ptTableTitle = [](const char* title) {
 		auto len = USHORT(strlen(title) + 1);
@@ -1166,6 +1163,8 @@ void BS_map::PrintStat() const
 #ifdef MY_DEBUG
 void BS_map::CheckScoreHierarchy()
 {
+	if (!Verb::Level(Verb::DBG))	return;
+
 	chrlen bsNumb = 0;
 	bool issues = false;
 
@@ -1262,7 +1261,7 @@ void BS_map::Print(chrid cID, bool selected, chrlen stopPos) const
 			);
 	}
 }
-#endif
+#endif // MY_DEBUG
 
 //===== BedWriter
 

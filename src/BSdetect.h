@@ -30,8 +30,6 @@ enum optValue {		// options id
 	oRD_LEN
 };
 
-bool IsFragMeanUnset = true;	// common to the entire genome
-
 // BS detector
 class Detector
 {
@@ -53,8 +51,6 @@ class Detector
 	void CallBS(chrid cID);
 
 public:
-	static bool IsPEReads;			// common to the entire genome
-
 	// Basic constructor
 	//	@param file: input BAM/BED file
 	//	@param outFName: common output file name
@@ -64,17 +60,17 @@ public:
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		, _frag—overs(cSizes, IsPEReads ? 1 : 2+saveCover, saveCover, outFName + "_frag", "fragment coverage")
+		, _frag—overs(cSizes, Glob::IsPE ? 1 : 2+saveCover, saveCover, outFName + "_frag", "fragment coverage")
 		, _read—overs(cSizes,	2,	saveCover,	outFName + "_read"	, "read coverage")
-		, _rgns(cSizes,2-IsPEReads,	saveInter,	outFName + ".RGNS"	, "potential regions")
+		, _rgns(cSizes,2-Glob::IsPE,saveInter,	outFName + ".RGNS"	, "potential regions")
 		, _splines	(cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
 		, _derivs	(cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
 		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression")
 		, _bss		(cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
 	{
-		if (Verb::Level(Verb::DBG))
-			printf("%s-end sequencing\n", IsPEReads ? "paired" : "single");
+		if (Verb::Level(Verb::RT))
+			printf("%s-end sequencing\n", Glob::IsPE ? "paired" : "single");
 		_file = &file;
 		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
 		file.Pass(*this);
@@ -101,7 +97,7 @@ public:
 		, _saveCover(false)
 		, _frag—overs(cSizes,	1,	false,		outFName + "_frag"	, "fragment coverage")
 		, _read—overs(cSizes,	2,	false,		outFName + "_read"	, "read coverage")
-		, _rgns(cSizes,2-IsPEReads,	saveInter,	outFName + ".RGNS"	, "potential regions")
+		, _rgns(cSizes,2-Glob::IsPE,saveInter,	outFName + ".RGNS"	, "potential regions")
 		, _splines	 (cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
 		, _derivs	 (cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
 		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression")
@@ -133,7 +129,7 @@ public:
 		auto& rgn = _file->ItemRegion();
 		bool reverse = !_file->ItemStrand();
 
-		if (IsPEReads) {
+		if (Glob::IsPE) {
 			Region frag;
 			const Read read(*_file);
 
@@ -141,8 +137,8 @@ public:
 				_frag—overs.AddFrag(frag);
 		}
 		else {
-			_frag—overs.AddExtRead(rgn, reverse, _saveCover && !IsFragMeanUnset);
-			if (IsFragMeanUnset)
+			_frag—overs.AddExtRead(rgn, reverse, _saveCover && !Glob::IsMeanFragUndef);
+			if (Glob::IsMeanFragUndef)
 				_reads.AddRead(rgn, reverse);
 		}
 		_read—overs.AddRead(rgn, reverse);
