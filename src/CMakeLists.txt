@@ -5,9 +5,9 @@ project(${PROJECT_NAME})
 
 add_compile_definitions(
 	_PE_READ
-	_FILE_WRITE
+	_TXT_WRITER
 	_MULTITHREAD
-	_WIG
+	_WIG_READER
 	)
 	
 # ZLIB
