@@ -207,7 +207,7 @@ void Detector::CallBS(chrid cID)
 #ifdef MY_DEBUG
 	//bss.Print(cID, false);
 	bss.CheckScoreHierarchy();
-	bss.PrintWidthDistrib();
+	//bss.PrintWidthDistrib();
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);

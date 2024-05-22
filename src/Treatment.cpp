@@ -283,14 +283,15 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 		"%s:  %d (%2.2f%%)   %d (%2.2f%%)\n",	// features
 		"%s:  %d (%1.3f%%)   %d (%1.3f%%)\n"	// splines
 	};
-	const char* title[] = {
+	const char* titles[] = {
 		"POTENTIAL REGIONS:",
 		"SPLINED REGIONS:"
 	};
 	const bool isFeatures = is_same<T, ValuesMap>::value;
 
-	printf("\n%s\nstrand     received        selected\n", title[isFeatures]);
-	printf("------------------------------------\n");
+	const char* title = "strand     received        selected";
+	printf("\n%s\n%s\n", titles[isFeatures], title);
+	PrintSolidLine(USHORT(strlen(title) + 1));
 	for (BYTE s = 0; s < 1 + strands; s++) {
 		chrlen rawLen = 0, refineLen = 0;
 		const auto& rgn = rgns[s];
@@ -1136,25 +1137,30 @@ void BS_map::PrintStat() const
 	std::printf("\nBS count: %d\n", bsNumb);
 	if (!bsNumb) return;
 
-	// lengths
-	const char* line = "-----------------\n";
+	auto ptTableTitle = [](const char* title) {
+		auto len = USHORT(strlen(title) + 1);
+		PrintSolidLine(len);
+		std::printf("%s\n", title);
+		PrintSolidLine(len);
+	};
 	auto prLenNumbs = [](const char* title, chrlen len, vector<chrlen>& numbers) {
 		std::printf("%s %4d  %d", title, len, numbers[0]);
 		for (short i = 1; i < numbers.size(); i++)	std::printf(",%d", numbers[i]);
 		std::printf("\n");
 	};
-	std::printf("%s", line);
-	std::printf("   length numbers\n");
-	std::printf("%s", line);
+
+	// lengths
+	ptTableTitle("   length numbers");
 	prLenNumbs("min", minLen, minLenNumbers);
 	prLenNumbs("max", maxLen, maxLenNumbers);
 
+	// score
 	std::printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
-	std::printf("----------------------------\n");
-	std::printf("RATIO:\tmin  (N)   max  (N)\n");
-	std::printf("----------------------------\n");
-	std::printf("reverse\t%2.2f (%d)  %2.2f (%d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
-	std::printf("direct\t%2.2f (%d)  %2.2f (%d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
+	ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
+	std::printf("reverse\t%2.2f (%3d)   %2.2f (%3d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
+	std::printf("direct\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
+
+	std::printf("\n");
 }
 
 #ifdef MY_DEBUG
