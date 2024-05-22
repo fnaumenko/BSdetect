@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05/21/2024
+Last modified: 05/22/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -55,7 +55,12 @@ class Detector
 public:
 	static bool IsPEReads;			// common to the entire genome
 
-	// basic constructor
+	// Basic constructor
+	//	@param file: input BAM/BED file
+	//	@param outFName: common output file name
+	//	@param cSizes: chrom sizes
+	//	@param saveCover: if true then save covered fragments and reads to files
+	//	@param saveInter: if true then save intermediate data to files
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
@@ -77,37 +82,43 @@ public:
 		_timer.Start();
 	}
 
-	// pre-coverage constructor
+	// Pre-covered data constructor
+	//	@param fCover_fName: fragment coverage file name
+	//	@param rCoverPos_fName: direct read coverage file name
+	//	@param rCoverNeg_fName: reversed read coverage file name
+	//	@param outFName: common output file name
+	//	@param cSizes: chrom sizes
+	//	@param saveInter: if true then save intermediate data to files
 	Detector(
-		const char* inName_fCover,
-		const char* inName_rCoverDirect,
-		const char* inName_rCoverReversed,
+		const char* fCover_fName,
+		const char* rCoverPos_fName,
+		const char* rCoverNeg_fName,
 		const string& outFName,
 		ChromSizes& cSizes, 
 		bool saveInter
 	)
 		: _cSizes(cSizes)
 		, _saveCover(false)
-		, _frag—overs(cSizes, 1, false, outFName + "_frag", "fragment coverage")
-		, _read—overs(cSizes, 2, false, outFName + "_read", "read coverage")
-		, _rgns(cSizes, 2 - IsPEReads, saveInter, outFName + ".RGNS", "potential regions")
-		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
-		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
-		, _lineWriter(cSizes, 2, saveInter, outFName + ".LINE", "linear regression")
-		, _bss(cSizes, 1, true, outFName + ".BSs", "called binding sites")
+		, _frag—overs(cSizes,	1,	false,		outFName + "_frag"	, "fragment coverage")
+		, _read—overs(cSizes,	2,	false,		outFName + "_read"	, "read coverage")
+		, _rgns(cSizes,2-IsPEReads,	saveInter,	outFName + ".RGNS"	, "potential regions")
+		, _splines	 (cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
+		, _derivs	 (cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
+		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression")
+		, _bss		 (cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
 	{
-		{	// preparing coverages
+		{	// preparing covered data
 			tChromsFreq	chrFreq;
 			_timer.Start();
-			CombCoverReader a(inName_fCover,		cSizes, _frag—overs, chrFreq, TOTAL);
-			CombCoverReader b(inName_rCoverDirect,	cSizes, _read—overs, chrFreq, POS);
-			CombCoverReader c(inName_rCoverReversed,cSizes, _read—overs, chrFreq, NEG);
+			// initialize covered data
+			CombCoverReader a(fCover_fName,		cSizes, _frag—overs, chrFreq, TOTAL);
+			CombCoverReader b(rCoverPos_fName,	cSizes, _read—overs, chrFreq, POS);
+			CombCoverReader c(rCoverNeg_fName,	cSizes, _read—overs, chrFreq, NEG);
 
-			cSizes.SetAllTreatedOff();
+			cSizes.TreateAll(false);
 			for (const auto& c : chrFreq)
-				_cSizes.SetTreatedChrom(c.first, c.second == 3);
-			//_cSizes.Print();
+				_cSizes.TreateChrom(c.first, c.second == 3);	// all 3 readers have read the chromosome
 			_timer.Stop("Reading coverage: "); cout << LF;
 		}
 		// treatment
