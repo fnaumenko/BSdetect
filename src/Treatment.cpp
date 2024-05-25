@@ -618,17 +618,14 @@ void DataValuesMap::BuildSpline(
 	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.StrandData(eStrand(2*strand)), redifineRgns, splineBase);
 }
 
-bool PositiveVal(int16_t val) { return val > 0; }
-bool NegativeVal(int16_t val) { return val < 0; }
-
 fraglen DataValuesMap::GetFragMean() const
 {
 	auto& pData = StrandData(POS);
 	auto& nData = StrandData(NEG);
 	assert(pData.size() == nData.size());
-	uint32_t missed = 0, negCnt = 0;
+	int missed = 0;
 	vector<int16_t> diffs;
-	vector<chrlen> pPos, nPos;	// number of max positions in one spline
+	vector<chrlen> pPos, nPos;	// max positions in a positive, negative splines
 	//IGVlocus locus(0);
 
 	// get the difference of the splines maximums 
@@ -640,9 +637,8 @@ fraglen DataValuesMap::GetFragMean() const
 		itN->second.GetMaxValPos(itN->first, nPos);
 		if (pPos.size() == nPos.size())
 			for (auto itP = pPos.begin(), itN = nPos.begin(); itP != pPos.end(); itP++, itN++) {
-				int16_t diff = *itP - *itN;
-				negCnt += diff < 0;
-				diffs.push_back(diff);
+				//int diff = *itP - *itN;
+				diffs.push_back(int16_t(*itP - *itN));
 				//printf("%d\t%d\t%s\n", diff, pPos.size(), locus.Print(*itP));
 			}
 		else
@@ -654,15 +650,10 @@ fraglen DataValuesMap::GetFragMean() const
 		printf("\n%2.1f%% regions were rejected while determining the fragment length\n", Percent(missed, pData.size()));
 
 	// average the difference, get frag length
-	bool mostPositive = negCnt < diffs.size() / 2;
-	auto CompareVal = mostPositive ? &PositiveVal : &NegativeVal;
 	int sum = 0;
-
 	for (auto diff : diffs)
-		if (CompareVal(diff))
-			sum += diff;
-
-	return FragDefLEN - fraglen(round(float(sum) / (mostPositive ? (diffs.size() - negCnt) : negCnt)));
+		sum += diff;
+	return FragDefLEN - fraglen(round(float(sum) / diffs.size()));
 }
 
 void DataValuesMap::Clear()

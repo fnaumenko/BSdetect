@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/22/2024
+Last modified: 05/25/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -168,7 +168,6 @@ public:
 
 
 //=== TREATED COVER & COLLECTION
-struct CoverRegion;
 
 // Inclined line represents average derivative of the area of read's coverage growth/decline,
 // as a resul of Linear Regression
@@ -197,6 +196,8 @@ struct Incline
 	}
 #endif
 };
+
+//struct CoverRegion;
 
 class TreatedCover : public AccumCover
 {
