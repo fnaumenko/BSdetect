@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/21/2024
+Last modified: 05/26/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -137,6 +137,44 @@ int main(int argc, char* argv[])
 
 //===== Detector
 
+bool Detector::SetFragMean(chrid cID)
+{
+	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
+	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
+	DataCoverRegions& rgns = static_cast<DataCoverRegions&>(_rgns.ChromData(cID));
+	DataValuesMap& splines = static_cast<DataValuesMap&>(_splines.ChromData(cID));
+
+	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
+	_timer.Start();
+	coval maxVal = readCovers.StrandData(POS).GetMaxVal();
+	printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
+	if (rgns.SetPotentialRegions(fragCovers, _cSizes[cID], maxVal / 3, true))	return false;
+
+	//auto flen = rgns.GetFragMean(fragCovers);		// by mass centre
+	//printf("\nMass Mean fragment length: %d\n", flen);
+
+	// calculate mean difference as the average of three attempts
+	float peakDiff = 0;
+	BYTE cnt = 0;
+	for (BYTE splineBase = 15; splineBase <= 85; splineBase += 35) {
+		splines.BuildSpline(fragCovers, rgns, false, splineBase);
+		peakDiff += splines.GetPeakPosDiff();
+		splines.Clear();
+		cnt++;
+	}
+	peakDiff /= cnt;
+	auto roundPeakDiff = fraglen(round(peakDiff));
+	printf("Mean fragment length: %d\n", FragDefLEN - roundPeakDiff);
+	_timer.Stop(0, false, true);
+
+	if (roundPeakDiff <= 5)
+		return false;
+	Glob::FragLen -= roundPeakDiff;
+	_frag—overs.Clear();
+	//_splines.WriteChrom(cID);
+	return true;
+}
+
 void Detector::CallBS(chrid cID)
 {
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
@@ -146,6 +184,7 @@ void Detector::CallBS(chrid cID)
 	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
 	BS_map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];
+	bool	resetCover = true;
 
 	//if (fragCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty fragment coverage"); return; }
 	//if (readCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty read coverage"); return; }
@@ -154,26 +193,13 @@ void Detector::CallBS(chrid cID)
 	_lineWriter.SetChromID(cID);
 
 	if (Glob::IsMeanFragUndef) {	// can be true for SE sequence only
-		Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
-		_timer.Start();
-		coval maxVal = readCovers.StrandData(POS).GetMaxVal();
-		printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
-		if (rgns.SetPotentialRegions(fragCovers, cLen, maxVal / 3, true))	return;
-
-		//auto flen = rgns.GetFragMean(fragCovers);
-		//printf("\nMass Mean fragment length: %d\n", flen);
-
-		splines.BuildSpline(fragCovers, rgns, false, 50);	_frag—overs.Clear();	rgns.Clear();
-		Glob::FragLen = splines.GetFragMean();				splines.Clear();
-
-		_frag—overs.Fill(_reads, _saveCover);				_reads.Clear();
+		if ((resetCover = SetFragMean(cID)))
+			_frag—overs.Fill(_reads, _saveCover);				_reads.Clear();
 		Glob::IsMeanFragUndef = false;
-		printf("Mean fragment length: %d\n", Glob::FragLen);
-		_timer.Stop(0, false, true);
 	}
 	Verb::PrintMsg(Verb::DBG, "Locate binding sites");
 	_timer.Start();
-	if (rgns.SetPotentialRegions(fragCovers, cLen, 3))	return;
+	if (resetCover && rgns.SetPotentialRegions(fragCovers, cLen, 3))	return;
 
 	splines.BuildSpline(readCovers, rgns, true);
 	_rgns.WriteChrom(cID);	_frag—overs.WriteChrom(cID);	// now we can release both

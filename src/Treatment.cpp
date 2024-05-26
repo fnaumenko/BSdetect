@@ -3,7 +3,8 @@
 
 //const float PI = 3.14159265F;
 
-const eCurveType CurveTYPE = SPIKED;
+//const eCurveType CurveTYPE = eCurveType::SMOOTH;
+const eCurveType CurveTYPE = eCurveType::ROUGH;
 const char* Verb::ValTitles[] = { "SL","RES","RT","DBG" };
 const char* Verb::ValDescr = "set verbose level:\n?  -\tsilent mode (show critical messages only)\n? -\tshow result summary\n?  -\tshow run-time information\n? -\tshow debug messages";
 Verb::eVerb Verb::_level;
@@ -432,13 +433,19 @@ void Values::GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const
 {
 	float val0 = front();
 	bool increase = false;
+	USHORT equalCnt = 0;
 
 	for (auto it = next(begin()); it != end(); val0 = *it, it++, startPos++)
-		if (*it > val0)		// increase
-			increase = true;
-		else if (increase) {
-			pos.push_back(startPos);
-			increase = false;
+		if (*it == val0)
+			equalCnt++;
+		else {
+			if (*it > val0)	// increase value
+				increase = true;
+			else if (increase) {	// decrease value
+				pos.push_back(startPos - equalCnt / 2);	// correct startPos for the 'flat' summit
+				increase = false;
+			}
+			equalCnt = 0;
 		}
 }
 
@@ -618,15 +625,15 @@ void DataValuesMap::BuildSpline(
 	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.StrandData(eStrand(2*strand)), redifineRgns, splineBase);
 }
 
-fraglen DataValuesMap::GetFragMean() const
+float DataValuesMap::GetPeakPosDiff() const
 {
 	auto& pData = StrandData(POS);
 	auto& nData = StrandData(NEG);
 	assert(pData.size() == nData.size());
-	int missed = 0;
+	USHORT missed = 0;
 	vector<int16_t> diffs;
 	vector<chrlen> pPos, nPos;	// max positions in a positive, negative splines
-	//IGVlocus locus(0);
+	IGVlocus locus(18);
 
 	// get the difference of the splines maximums 
 	pPos.reserve(2);
@@ -637,23 +644,26 @@ fraglen DataValuesMap::GetFragMean() const
 		itN->second.GetMaxValPos(itN->first, nPos);
 		if (pPos.size() == nPos.size())
 			for (auto itP = pPos.begin(), itN = nPos.begin(); itP != pPos.end(); itP++, itN++) {
-				//int diff = *itP - *itN;
-				diffs.push_back(int16_t(*itP - *itN));
-				//printf("%d\t%d\t%s\n", diff, pPos.size(), locus.Print(*itP));
+				auto diff = USHORT(*itP - *itN);
+				diffs.push_back(diff);
+				//if(abs(diff)>20)
+					//printf("%d\t%d\t%d\t%s\n", diff, *itN, *itP, locus.Print(*itP));
 			}
-		else
+		else {
 			missed++;		// just ignore splines with different max positions
+			//printf("MISSED %d\n", pPos.front());
+		}
 		pPos.clear();
 		nPos.clear();
 	}
 	if (Verb::Level(Verb::DBG) && missed)
 		printf("\n%2.1f%% regions were rejected while determining the fragment length\n", Percent(missed, pData.size()));
 
-	// average the difference, get frag length
-	int sum = 0;
+	int sum0 = 0;
 	for (auto diff : diffs)
-		sum += diff;
-	return FragDefLEN - fraglen(round(float(sum) / diffs.size()));
+		sum0 += diff;
+
+	return float(sum0) / diffs.size();
 }
 
 void DataValuesMap::Clear()

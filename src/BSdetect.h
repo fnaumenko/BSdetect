@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05/22/2024
+Last modified: 05/26/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -43,10 +43,17 @@ class Detector
 	OLinearWriter	  _lineWriter;
 	OBS_Map			  _bss;
 
-	RBedReader* _file;		// needs only in constructor
-	FragIdent _fIdent;		// needs only in constructor
+	RBedReader* _file;		// needs only for input reading
+	FragIdent _fIdent;		// needs only for input reading
 	Reads	_reads;
 	Timer	_timer;
+
+	// Calculates average SE fragment length and sets it
+	// if the difference with the default is greater than the critical one
+	//	@param cID: current chromosome's ID
+	//	@returns: true if the difference with the default average fragment length is greater than the critical one;
+	//	in this case SE fragment coverage and potential regions should be recalculated
+	bool SetFragMean(chrid cID);
 
 	void CallBS(chrid cID);
 

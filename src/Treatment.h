@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/25/2024
+Last modified: 05/26/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -511,8 +511,8 @@ public:
 	//	@param splineBase: half-length of spliner moving window
 	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase = ReadSplineBASE);
 
-	// Returns fragment's mean calculated by minimizing the difference between peak positions
-	fraglen GetFragMean() const;
+	// Returns average difference between peak positions
+	float GetPeakPosDiff() const;
 
 	// Resets non overlapping spline value
 	void EliminateNonOverlaps() { Data()->EliminateNonOverlaps(); }
@@ -903,7 +903,7 @@ public:
 	//	@param strand: strand
 	//	@param fields: BED/WIG track fields
 	FixWigWriter(eStrand strand, const TrackFields& fields)
-		: WigWriter(FT::eType::WIG_FIX, strand, fields) {}
+		: WigWriter(FT::eType::WIG_FIX, strand, fields, 3) {}
 
 	void WriteChromData(chrid cID, const ValuesMap& vals);
 };
@@ -915,7 +915,7 @@ public:
 	//	@param strand: strand
 	//	@param fields: BED/WIG track fields
 	FixWigWriterSet(eStrand strand, const TrackFields& fields)
-		: WigWriter(FT::eType::WIG_FIX, strand, fields) {}
+		: WigWriter(FT::eType::WIG_FIX, strand, fields, 3) {}
 
 	void WriteChromData(chrid cID, const BoundsValuesMap& set);
 };
