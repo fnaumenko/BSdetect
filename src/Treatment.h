@@ -43,7 +43,9 @@ public:
 
 	static void Set(uint8_t level) { _level = eVerb(level); }
 
-	static void PrintMsg(eVerb level, const char* msg) { if (Level(level))	printf("%s\n", msg); }
+	static void PrintMsg(eVerb level, const char* msg = NULL);
+
+	static void PrintMsgVar(eVerb level, const char* format, ...);
 
 	// Return true if given level is allowed
 	static bool Level(eVerb level) { return _level >= level; }

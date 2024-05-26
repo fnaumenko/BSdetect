@@ -147,7 +147,7 @@ float Detector::GetPeakPosDiff(chrid cID)
 	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
 	_timer.Start();
 	coval maxVal = readCovers.StrandData(POS).GetMaxVal();
-	printf("Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
+	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
 	if (rgns.SetPotentialRegions(fragCovers, _cSizes[cID], maxVal / 3, true))	return false;
 
 	//auto flen = rgns.GetFragMean(fragCovers);		// by mass centre
@@ -156,6 +156,8 @@ float Detector::GetPeakPosDiff(chrid cID)
 	// calculate mean difference as the average of three attempts
 	float peakDiff = 0;
 	BYTE cnt = 0;
+
+	Verb::PrintMsg(Verb::DBG);
 	for (BYTE splineBase = 15; splineBase <= 85; splineBase += 35) {
 		splines.BuildSpline(fragCovers, rgns, false, splineBase);
 		peakDiff += splines.GetPeakPosDiff();
@@ -185,7 +187,7 @@ void Detector::CallBS(chrid cID)
 
 	if (Glob::IsMeanFragUndef) {	// can be true for SE sequence only
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
-		printf("Mean fragment length: %d\n", FragDefLEN - peakDiff);
+		Verb::PrintMsgVar(Verb::RT, "Mean fragment length: %d\n", FragDefLEN - peakDiff);
 		if (peakDiff > 5) {
 			Glob::FragLen -= peakDiff;
 			_frag—overs.Clear();
@@ -196,7 +198,8 @@ void Detector::CallBS(chrid cID)
 		_reads.Clear();
 		Glob::IsMeanFragUndef = false;
 	}
-	Verb::PrintMsg(Verb::DBG, "Locate binding sites");
+	Verb::PrintMsg(Verb::RT, "Locate binding sites");
+	return;
 	_timer.Start();
 	if (resetCover && rgns.SetPotentialRegions(fragCovers, cLen, 3))	return;
 

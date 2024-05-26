@@ -5,16 +5,13 @@
 
 //const eCurveType CurveTYPE = eCurveType::SMOOTH;
 const eCurveType CurveTYPE = eCurveType::ROUGH;
-const char* Verb::ValTitles[] = { "SL","RES","RT","DBG" };
-const char* Verb::ValDescr = "set verbose level:\n?  -\tsilent mode (show critical messages only)\n? -\tshow result summary\n?  -\tshow run-time information\n? -\tshow debug messages";
-Verb::eVerb Verb::_level;
 
 bool Glob::IsPE = false;
 bool Glob::IsMeanFragUndef = true;
 readlen Glob::ReadLen = 0;
 fraglen Glob::FragLen = FragDefLEN;
 fraglen Glob::ROI_ext = 500;
-
+ 
 //===== IGVlocus
 
 #ifdef MY_DEBUG
@@ -44,6 +41,28 @@ public:
 };
 #endif
 
+//===== Verb
+
+const char* Verb::ValTitles[] = { "SL","RES","RT","DBG" };
+const char* Verb::ValDescr = "set verbose level:\n?  -\tsilent mode (show critical messages only)\n? -\tshow result summary\n?  -\tshow run-time information\n? -\tshow debug messages";
+Verb::eVerb Verb::_level;
+
+void Verb::PrintMsg(eVerb level, const char* msg)
+{
+	if (Level(level))
+		if (msg)	printf("%s\n", msg);
+		else		printf("\n");
+}
+
+void Verb::PrintMsgVar(eVerb level, const char* format, ...)
+{
+	if (Level(level)) {
+		va_list argptr;
+		va_start(argptr, format);
+		vfprintf(stdout, format, argptr);
+		va_end(argptr);
+	}
+}
 
 //===== OLinearWriter
 
@@ -656,8 +675,8 @@ float DataValuesMap::GetPeakPosDiff() const
 		pPos.clear();
 		nPos.clear();
 	}
-	if (Verb::Level(Verb::DBG) && missed)
-		printf("\n%2.1f%% regions were rejected while determining the fragment length\n", Percent(missed, pData.size()));
+	if (missed)
+		Verb::PrintMsgVar(Verb::DBG, "%4.1f%% regions were rejected while determining the fragment length\n", Percent(missed, pData.size()));
 
 	int sum0 = 0;
 	for (auto diff : diffs)
