@@ -302,8 +302,8 @@ template<typename T>
 void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 {
 	const char* format[] = {
-		"%s:  %d (%2.2f%%)   %d (%2.2f%%)\n",	// features
-		"%s:  %d (%1.3f%%)   %d (%1.3f%%)\n"	// splines
+		"%s: %4d (%2.2f%%) %4d (%2.2f%%)\n",	// features
+		"%s: %4d (%1.3f%%) %4d (%1.3f%%)\n"	// splines
 	};
 	const char* titles[] = {
 		"POTENTIAL REGIONS:",
@@ -311,9 +311,9 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 	};
 	const bool isFeatures = is_same<T, ValuesMap>::value;
 
-	const char* title = "strand     received        selected";
+	const char* title = "strand      received      selected";
 	printf("\n%s\n%s\n", titles[isFeatures], title);
-	PrintSolidLine(USHORT(strlen(title) + 1));
+	PrintSolidLine(USHORT(strlen(title) + 2));
 	for (BYTE s = 0; s < 1 + strands; s++) {
 		chrlen rawLen = 0, refineLen = 0;
 		const auto& rgn = rgns[s];

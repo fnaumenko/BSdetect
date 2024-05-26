@@ -164,7 +164,7 @@ float Detector::GetPeakPosDiff(chrid cID)
 		splines.Clear();
 		cnt++;
 	}
-	_timer.Stop(0, false, true);
+	_timer.Stop(0, false, true);	cout << LF;
 	return peakDiff / cnt;
 }
 
@@ -199,7 +199,6 @@ void Detector::CallBS(chrid cID)
 		Glob::IsMeanFragUndef = false;
 	}
 	Verb::PrintMsg(Verb::RT, "Locate binding sites");
-	return;
 	_timer.Start();
 	if (resetCover && rgns.SetPotentialRegions(fragCovers, cLen, 3))	return;
 
