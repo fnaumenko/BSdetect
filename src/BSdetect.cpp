@@ -137,7 +137,7 @@ int main(int argc, char* argv[])
 
 //===== Detector
 
-bool Detector::SetFragMean(chrid cID)
+float Detector::GetPeakPosDiff(chrid cID)
 {
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
 	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
@@ -162,17 +162,8 @@ bool Detector::SetFragMean(chrid cID)
 		splines.Clear();
 		cnt++;
 	}
-	peakDiff /= cnt;
-	auto roundPeakDiff = fraglen(round(peakDiff));
-	printf("Mean fragment length: %d\n", FragDefLEN - roundPeakDiff);
 	_timer.Stop(0, false, true);
-
-	if (roundPeakDiff <= 5)
-		return false;
-	Glob::FragLen -= roundPeakDiff;
-	_frag—overs.Clear();
-	//_splines.WriteChrom(cID);
-	return true;
+	return peakDiff / cnt;
 }
 
 void Detector::CallBS(chrid cID)
@@ -193,8 +184,16 @@ void Detector::CallBS(chrid cID)
 	_lineWriter.SetChromID(cID);
 
 	if (Glob::IsMeanFragUndef) {	// can be true for SE sequence only
-		if ((resetCover = SetFragMean(cID)))
-			_frag—overs.Fill(_reads, _saveCover);				_reads.Clear();
+		auto peakDiff = short(round(GetPeakPosDiff(cID)));
+		printf("Mean fragment length: %d\n", FragDefLEN - peakDiff);
+		if (peakDiff > 5) {
+			Glob::FragLen -= peakDiff;
+			_frag—overs.Clear();
+			_frag—overs.Fill(_reads, _saveCover);
+		}
+		else
+			resetCover = false;
+		_reads.Clear();
 		Glob::IsMeanFragUndef = false;
 	}
 	Verb::PrintMsg(Verb::DBG, "Locate binding sites");

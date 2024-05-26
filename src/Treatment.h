@@ -511,7 +511,7 @@ public:
 	//	@param splineBase: half-length of spliner moving window
 	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase = ReadSplineBASE);
 
-	// Returns average difference between peak positions
+	// Calculates the deviation from the default average fragment length
 	float GetPeakPosDiff() const;
 
 	// Resets non overlapping spline value

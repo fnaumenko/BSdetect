@@ -48,12 +48,10 @@ class Detector
 	Reads	_reads;
 	Timer	_timer;
 
-	// Calculates average SE fragment length and sets it
-	// if the difference with the default is greater than the critical one
+	// Calculates the deviation from the default average fragment length
 	//	@param cID: current chromosome's ID
-	//	@returns: true if the difference with the default average fragment length is greater than the critical one;
-	//	in this case SE fragment coverage and potential regions should be recalculated
-	bool SetFragMean(chrid cID);
+	//	@returns: deviation from the default average fragment length
+	float GetPeakPosDiff(chrid cID);
 
 	void CallBS(chrid cID);
 
