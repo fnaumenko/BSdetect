@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/26/2024
+Last modified: 05/27/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -44,6 +44,7 @@ Options::Option Options::List[] = {
 	{ 'c',Chrom::Abbr,tOpt::NONE,tNAME,	gOTHER,	NO_DEF, 0, 0, NULL, "treat specified chromosome only", NULL },
 	{ 'd',"dup-lvl",tOpt::OBLIG,	tINT,	gOTHER,	1, 0, 2, NULL,
 	"duplicate reads rejection level:\n-1 - keep all duplicates, 1 - keep one among duplicates, 2 - keep two among duplicates", NULL },
+	{ 'F',"fr-len",	tOpt::NONE,	tINT,	gOTHER, vUNDEF, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]", NULL },
 	{ 's',"save-cover",tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save coverage", NULL },
 	{ 'i',"save-inter",tOpt::HIDDEN,tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save intermediate data", NULL },
 	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL,
@@ -97,12 +98,14 @@ int main(int argc, char* argv[])
 
 		BedWriter::SetRankScore(Options::GetBVal(oRANK_SCORE));
 		Verb::Set(Options::GetUIVal(oVERB));
+		Glob::SetFragLen(Options::GetIVal(oFRAG_LEN));
+
 		ChromSizes cSizes(gName, true);
 
 		if (ftype == FT::BED) {
 			// pre-read first item to check for PE sequence
 			RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, Verb::Level(Verb::DBG), false, true, true);
-			if (Verb::Level(Verb::DBG))	cout << LF;
+			Verb::PrintMsg(Verb::DBG);
 			file.GetNextItem();		// no need to check for empty sequence
 			Glob::SetPE(file.IsPaired());
 
@@ -117,7 +120,7 @@ int main(int argc, char* argv[])
 		}
 		else {
 			Glob::SetPE(Options::GetBVal(oSMODE));
-			Glob::ReadLen = Options::GetUIVal(oRD_LEN);
+			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
 
 			Detector bsd(
 				iName,
@@ -185,7 +188,7 @@ void Detector::CallBS(chrid cID)
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 	_lineWriter.SetChromID(cID);
 
-	if (Glob::IsMeanFragUndef) {	// can be true for SE sequence only
+	if (Glob::FragLenUndef) {	// can be true for SE sequence only
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
 		Verb::PrintMsgVar(Verb::RT, "Mean fragment length: %d\n", FragDefLEN - peakDiff);
 		if (peakDiff > 5) {
@@ -196,7 +199,7 @@ void Detector::CallBS(chrid cID)
 		else
 			resetCover = false;
 		_reads.Clear();
-		Glob::IsMeanFragUndef = false;
+		Glob::FragLenUndef = false;
 	}
 	Verb::PrintMsg(Verb::RT, "Locate binding sites");
 	_timer.Start();

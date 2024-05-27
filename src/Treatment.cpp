@@ -7,7 +7,7 @@
 const eCurveType CurveTYPE = eCurveType::ROUGH;
 
 bool Glob::IsPE = false;
-bool Glob::IsMeanFragUndef = true;
+bool Glob::FragLenUndef = true;
 readlen Glob::ReadLen = 0;
 fraglen Glob::FragLen = FragDefLEN;
 fraglen Glob::ROI_ext = 500;

@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05/26/2024
+Last modified: 05/27/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -14,6 +14,7 @@ enum optValue {		// options id
 	oGEN,
 	oCHROM,
 	oDUP_LVL,
+	oFRAG_LEN,
 	oSAVE_COVER,
 	oSAVE_INTER,
 	oALARM,
@@ -27,7 +28,7 @@ enum optValue {		// options id
 	oPOS_READ_COVER,
 	oNEG_READ_COVER,
 	oSMODE,
-	oRD_LEN
+	oREAD_LEN
 };
 
 // BS detector
@@ -142,8 +143,8 @@ public:
 				_frag—overs.AddFrag(frag);
 		}
 		else {
-			_frag—overs.AddExtRead(rgn, reverse, _saveCover && !Glob::IsMeanFragUndef);
-			if (Glob::IsMeanFragUndef)
+			_frag—overs.AddExtRead(rgn, reverse, _saveCover && !Glob::FragLenUndef);
+			if (Glob::FragLenUndef)
 				_reads.AddRead(rgn, reverse);
 		}
 		_read—overs.AddRead(rgn, reverse);

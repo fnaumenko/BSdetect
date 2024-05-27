@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/26/2024
+Last modified: 05/27/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -86,12 +86,20 @@ static const StrandOp StrandOps[2]{
 
 static struct Glob {
 	static bool		IsPE;		// is sequense paired-end
-	static bool		IsMeanFragUndef;
+	static bool		FragLenUndef;
 	static readlen	ReadLen;	// length of read
 	static fraglen	FragLen;	// average fragment length
 	static fraglen	ROI_ext;	// Regions of interest extention
 
-	static void SetPE(bool isPE) { if ((IsPE = isPE)) IsMeanFragUndef = false; }
+	static void SetPE(bool isPE) { if ((IsPE = isPE)) FragLenUndef = false; }
+
+	static void SetFragLen(int fragLen)
+	{
+		if (fragLen != vUNDEF) {
+			FragLenUndef = false;
+			FragLen = fragLen;
+		}
+	}
 } glob;
 
 
