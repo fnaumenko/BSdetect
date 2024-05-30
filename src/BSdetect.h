@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05/27/2024
+Last modified: 05/30/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -35,14 +35,15 @@ enum optValue {		// options id
 class Detector
 {
 	ChromSizes& _cSizes;
-	bool			  _saveCover;
-	CombCover		  _frag—overs;		// extended reads cover to find frag Mean
-	CombCover		  _read—overs;
-	OCoverRegions	  _rgns;
-	OValuesMap		  _splines;
-	OBoundsValuesMap  _derivs;
-	OLinearWriter	  _lineWriter;
-	OBS_Map			  _bss;
+	bool			 _saveCover;
+	CombCover		 _frag—overs;		// extended reads cover to find frag Mean
+	CombCover		 _read—overs;
+	OCoverRegions	 _rgns;
+	OValuesMap		 _splines;
+	OBoundsValuesMap _derivs;
+	OSpecialWriter	 _lineWriter;
+	OSpecialWriter	 _splineWriter;
+	OBS_Map			 _bss;
 
 	RBedReader* _file;		// needs only for input reading
 	FragIdent _fIdent;		// needs only for input reading
@@ -66,12 +67,14 @@ public:
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		, _frag—overs(cSizes, Glob::IsPE ? 1 : 2+saveCover, saveCover, outFName + "_frag", "fragment coverage")
+		//, _frag—overs(cSizes, Glob::IsPE ? 1 : 2+saveCover, saveCover, outFName + "_frag", "fragment coverage")
+		, _frag—overs(cSizes,	3,	saveCover,	outFName + "_frag", "fragment coverage")
 		, _read—overs(cSizes,	2,	saveCover,	outFName + "_read"	, "read coverage")
 		, _rgns(cSizes,2-Glob::IsPE,saveInter,	outFName + ".RGNS"	, "potential regions")
 		, _splines	(cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
 		, _derivs	(cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
 		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression")
+		, _splineWriter(cSizes,	1,	saveInter,	outFName + ".FR_SPLINE", "fragment coverage spline")
 		, _bss		(cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
 	{
@@ -107,6 +110,7 @@ public:
 		, _splines	 (cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
 		, _derivs	 (cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
 		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression")
+		, _splineWriter(cSizes,	1,	saveInter,	outFName + ".FR_SPLINE", "fragment coverage spline")
 		, _bss		 (cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
 	{
@@ -143,7 +147,8 @@ public:
 				_frag—overs.AddFrag(frag);
 		}
 		else {
-			_frag—overs.AddExtRead(rgn, reverse, _saveCover && !Glob::FragLenUndef);
+			//_frag—overs.AddExtRead(rgn, reverse, _saveCover && !Glob::FragLenUndef);
+			_frag—overs.AddExtRead(rgn, reverse, true);
 			if (Glob::FragLenUndef)
 				_reads.AddRead(rgn, reverse);
 		}

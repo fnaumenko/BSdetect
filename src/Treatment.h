@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/27/2024
+Last modified: 05/30/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -103,31 +103,86 @@ static struct Glob {
 } glob;
 
 
-//===== WRITING AN OBLIQUE CURVE
+// Sequential float values
+class Values : public vector<float>
+{
+	float _maxVal;
 
-// 'LinearWriter' implements the method of writing an oblique curve in FixedStep wig format
-class LinearWriter : WigWriter
+public:
+	chrlen GrpNumb = 0;
+
+	Values() noexcept : _maxVal(0) { Reserve(); }
+	Values(Values&& rvals) noexcept : _maxVal(rvals._maxVal), GrpNumb(0), vector<float>(move(rvals)) { rvals._maxVal = 0; }
+	Values(const Values& rvals) = default;
+
+	// Returns values length
+	fraglen Length() const { return fraglen(size()); }
+
+	// Returns value for given relative position within sequential values
+	float Value(chrlen relPos) const { return (*this)[relPos]; }
+
+	// Returns maximum value within sequential values
+	float MaxVal() const { return _maxVal; }
+
+	void MarkAsEmpty() { _maxVal = 0; }
+
+	void Reserve() { reserve(40); }
+
+	void Clear() { _maxVal = 0; clear(); }
+
+	void AddValue(float val);
+
+	// Adds sequential values to the instance
+	void AddValues(const Values& vals);
+
+	// Adds positions with local maximum value
+	//	@param startPos[in]: start position to search
+	//	@oaram pos[out]: vector of maximum value positions to which the value is added
+	void GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const;
+
+#ifdef MY_DEBUG
+	void Print(bool prValues = false) const;
+#endif
+};
+
+
+//===== SPECIAL WRITERS
+
+// 'SpecialWriter' implements the method of debug writing for the specified chromosome in FixedStep wig format
+class SpecialWriter : WigWriter
 {
 public:
 	// Creates new instance for writing cover to wiggle_0 file.
 	//	@param strand: strand
 	//	@param fields: BED/WIG track fields
-	LinearWriter(eStrand strand, const TrackFields& fields)
-		: WigWriter(FT::eType::WIG_FIX, strand, fields) {}
+	SpecialWriter(eStrand strand, const TrackFields& fields)
+		: WigWriter(FT::eType::WIG_FIX, strand, fields)
+	{
+		SetFloatFractDigits(3);
+	}
 
-	// Writes oblique line
+	// Writes inclined line
 	//	@param cID: chrom's ID
 	//	@param start: start (left) position
-	//	@param ptCnt: number of points in oblique line
-	//	@param shift: shift of value at each point of the oblique line: if < 0 then direct (positive) line, otherwise reversed (negative) one
-	void WriteOblique(chrid cID, chrlen start, chrlen ptCnt, float shift)
+	//	@param ptCnt: number of points in incline
+	//	@param shift: shift of value at each point of the incline: if < 0 then direct (positive) line, otherwise reversed (negative) one
+	void WriteIncline(chrid cID, chrlen start, chrlen ptCnt, float shift)
 	{
 		WriteFixStepLine(cID, start + 1, ptCnt, shift);	// +1 to match "0-start, half-open" coordinates used by bedGraph format
 	}
+
+	// Writes curve
+	//	@param cID: chrom's ID
+	//	@param start: start (left) position
+	//	@param vals: values to write
+	void WriteChromData(chrid cID, chrlen start, const Values& vals)
+	{
+		WriteFixStepRange(cID, start, vals);
+	}
 };
 
-// Ordered LinearWriter
-class OLinearWriter : OrderedData<int, LinearWriter>
+// Ordered SpecialWriter
+class OSpecialWriter : OrderedData<int, SpecialWriter>
 {
 	chrid _cID = Chrom::UnID;
 
@@ -138,9 +193,9 @@ public:
 	//	@param write: if true then data sould be save to output file
 	//	@param fname: name of output file
 	//	@param descr: track decsription in declaration line 
-	//OLinearWriter(const ChromSizes& cSizes, BYTE dim, bool write, const TrackFields& fields)
-	OLinearWriter(const ChromSizes& cSizes, BYTE dim, bool write, const string& name, const char* descr)
-		: OrderedData<int, LinearWriter>(cSizes, dim, write, name, descr) {}
+	//OSpecialWriter(const ChromSizes& cSizes, BYTE dim, bool write, const TrackFields& fields)
+	OSpecialWriter(const ChromSizes& cSizes, BYTE dim, bool write, const string& name, const char* descr)
+		: OrderedData<int, SpecialWriter>(cSizes, dim, write, name, descr) {}
 
 	void SetChromID(chrid cID) { _cID = cID; }
 
@@ -150,9 +205,16 @@ public:
 	//	@param reverse: true if tag is reversed (neg strand)
 	//	@param start: start (zero value) position
 	//	@param itStop: stop (max value) iterator
-	void WriteOblique(BYTE reverse, chrlen start, coviter& itStop);
-};
+	void WriteIncline(BYTE reverse, chrlen start, coviter& itStop);
 
+	// Writes curve for TOTAL
+	//	@param start: start (left) position
+	//	@param vals: values to write
+	void WriteChromData(chrlen start, const Values& vals)
+	{
+		(_writers->_files)[TOTAL]->WriteChromData(_cID, start, vals);
+	}
+};
 
 //===== DATA
 
@@ -175,7 +237,6 @@ public:
 		for (BYTE s : {0, 1}) { _reads[s].clear(); _reads[s].shrink_to_fit(); }
 	}
 };
-
 
 //=== TREATED COVER & COLLECTION
 
@@ -244,6 +305,20 @@ public:
 	//	@param op: strand operations
 	//	@incline[out]: resulting inclined line
 	void LinearRegr(coviter it, const coviter& itStop, const StrandOp& op, Incline& incline) const;
+
+	// Sets spline of the instance between start-end positions
+	//	@param spliner[in]: spliner that does the work
+	//	@param startPos[in,out]: start position; returns modified (real) position
+	//	@param endPos[in]: end position
+	//	@param vals[out]: step (one bp) splineed values
+	//	@param splineWriter[out]: writer so save spline
+	void SetLocalSpline(
+		SSpliner<coval>& spliner,
+		chrlen& startPos,
+		chrlen endPos,
+		Values& vals,
+		OSpecialWriter& splineWriter
+	) const;
 };
 
 // 'CombCover' keeps the chromosome covers and optionally the set of writers these covers to file.
@@ -341,7 +416,7 @@ public:
 
 //=== COVER REGION & COLLECTION
 
-// 'CoverRegion' represetns potential region
+// 'CoverRegion' represents potential region
 struct CoverRegion
 {
 	coviter	itStart;
@@ -408,48 +483,6 @@ public:
 
 //=== SPLINE & COLLECTION
 
-// Sequential float values
-class Values : public vector<float>
-{
-	float _maxVal;
-
-public:
-	chrlen GrpNumb = 0;
-
-	Values() noexcept : _maxVal(0) { Reserve(); }
-	Values(Values&& rvals) noexcept : _maxVal(rvals._maxVal), GrpNumb(0), vector<float>(move(rvals)) { rvals._maxVal = 0; }
-	Values(const Values& rvals) = default;
-
-	// Returns values length
-	fraglen Length() const { return fraglen(size()); }
-
-	// Returns value for given relative position within sequential values
-	float Value(chrlen relPos) const { return (*this)[relPos]; }
-
-	// Returns maximum value within sequential values
-	float MaxVal() const { return _maxVal; }
-
-	void MarkAsEmpty() { _maxVal = 0; }
-
-	void Reserve() { reserve(40); }
-
-	void Clear() { _maxVal = 0; clear(); }
-
-	void AddValue(float val);
-
-	// Adds sequential values to the instance
-	void AddValues(const Values& vals);
-
-	// Adds positions with local maximum value
-	//	@param startPos[in]: start position to search
-	//	@oaram pos[out]: vector of maximum value positions to which the value is added
-	void GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const;
-
-#ifdef MY_DEBUG
-	void Print(bool prValues = false) const;
-#endif
-};
-
 using tValuesMap = map<chrlen, Values>;
 
 // Maped collections of float values
@@ -469,9 +502,9 @@ class ValuesMap : public tValuesMap
 	// Filters and fill spline curve by read cover within potential region
 	//	@param cover: raw read cover
 	//	@param rgn: potential region
-	//	@param redifRgns: if true then redifine regions position
+	//	@param redifineRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildRegionSpline(const TreatedCover& cover, const CoverRegion& rgn, bool redifRgns, fraglen splineBase);
+	void BuildRegionSpline(const TreatedCover& cover, const CoverRegion& rgn, bool redifineRgns, fraglen splineBase);
 
 	// Adds values with given position
 	//	@param pos: starting position of values
@@ -620,7 +653,7 @@ class BoundsValues : public vector<BoundValues>
 		const TracedPosVal& posVal,
 		const TreatedCover& cover,
 		vector<Incline>& inclines,
-		OLinearWriter& lwriter
+		OSpecialWriter& lwriter
 	) const;
 
 public:
@@ -636,13 +669,13 @@ public:
 	//	@param rCover[in]: read coverage
 	//	@param inclines[out]: filled collection of direct inclined lines
 	//	@param lwriter[out]: line writer to save inclined 
-	void CollectDirectInclines	(const TreatedCover& cover, vector<Incline>& inclines, OLinearWriter& lwriter) const;
+	void CollectDirectInclines	(const TreatedCover& cover, vector<Incline>& inclines, OSpecialWriter& lwriter) const;
 
 	// Collects reversed inclined lines
 	//	@param rCover[in]: read coverage
 	//	@param inclines[out]: filled collection of reversed inclined lines
 	//	@param lwriter[out]: line writer to save inclined 
-	void CollectReverseInclines(const TreatedCover& cover, vector<Incline>& inclines, OLinearWriter& lwriter) const;
+	void CollectReverseInclines(const TreatedCover& cover, vector<Incline>& inclines, OSpecialWriter& lwriter) const;
 
 	// Adds derivative values for given spline relative position
 	//	@param spline: given spline
@@ -735,7 +768,7 @@ private:
 	//	@param derivs[in]: derivatives
 	//	@param rCover[in]: read coverage
 	//	@param lwriter[out]: line writer to save inclined 
-	void SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OLinearWriter& lwriter);
+	void SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OSpecialWriter& lwriter);
 
 public:
 	// positioned value
@@ -750,7 +783,7 @@ public:
 	//	@param derivs[in]: derivatives
 	//	@param rCover[in]: read coverage
 	//	@param lwriter[out]: line writer to save inclined lines
-	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover, OLinearWriter& lwriter)
+	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover, OSpecialWriter& lwriter)
 	{
 		SetBorders(0, derivs.StrandData(POS), rCover.StrandData(POS), lwriter);
 		_lastIt = begin();
@@ -759,6 +792,11 @@ public:
 
 	// Brings the instance to canonical order of placing BS borders
 	void Refine();
+
+	// Sets score for each binding sites and normalizes it
+	//	@param fragCovers[in]: fragment total coverage
+	//	@param splineWriter[out]: fragment coverage spline writer to save splines
+	void SetScore(const DataSet<TreatedCover>& fragCovers, OSpecialWriter& splineWriter);
 
 	void NormalizeScore();
 

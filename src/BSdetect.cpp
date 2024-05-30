@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/27/2024
+Last modified: 05/30/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -182,11 +182,10 @@ void Detector::CallBS(chrid cID)
 	const chrlen cLen = _cSizes[cID];
 	bool	resetCover = true;
 
-	//if (fragCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty fragment coverage"); return; }
-	//if (readCovers.Empty()) { Verb::PrintMsg(Verb::RT, "Empty read coverage"); return; }
-
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
+
 	_lineWriter.SetChromID(cID);
+	_splineWriter.SetChromID(cID);
 
 	if (Glob::FragLenUndef) {	// can be true for SE sequence only
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
@@ -194,7 +193,8 @@ void Detector::CallBS(chrid cID)
 		if (peakDiff > 5) {
 			Glob::FragLen -= peakDiff;
 			_frag—overs.Clear();
-			_frag—overs.Fill(_reads, _saveCover);
+			//_frag—overs.Fill(_reads, _saveCover);
+			_frag—overs.Fill(_reads, true);
 		}
 		else
 			resetCover = false;
@@ -205,23 +205,20 @@ void Detector::CallBS(chrid cID)
 	_timer.Start();
 	if (resetCover && rgns.SetPotentialRegions(fragCovers, cLen, 3))	return;
 
-	splines.BuildSpline(readCovers, rgns, true);
-	_rgns.WriteChrom(cID);	_frag—overs.WriteChrom(cID);	// now we can release both
-
+	splines.BuildSpline(readCovers, rgns, true);	_rgns.WriteChrom(cID);
 	splines.EliminateNonOverlaps();
 	splines.PrintStat(cLen);
-	splines.Numerate();
-	//splines.Print(cID);
+	splines.Numerate();			//splines.Print(cID);
 	derivs.Set(splines);						_splines.WriteChrom(cID);
-	//derivs.Print();
+	
 	bss.Set(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
-	//bss.Print(cID, false);
 	bss.Refine();
-	bss.NormalizeScore();
+	bss.SetScore(fragCovers, _splineWriter);	_frag—overs.WriteChrom(cID);
 	bss.NormalizeBSwidth();
 #ifdef MY_DEBUG
+	//bss.Print(cID, false, 5044000);
 	//bss.Print(cID, false);
-	bss.CheckScoreHierarchy();
+	//bss.CheckScoreHierarchy();
 	//bss.PrintWidthDistrib();
 #endif
 	bss.PrintStat();

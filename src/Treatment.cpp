@@ -64,9 +64,9 @@ void Verb::PrintMsgVar(eVerb level, const char* format, ...)
 	}
 }
 
-//===== OLinearWriter
+//===== OSpecialWriter
 
-void OLinearWriter::WriteOblique(BYTE reverse, chrlen start, coviter& itStop)
+void OSpecialWriter::WriteIncline(BYTE reverse, chrlen start, coviter& itStop)
 {
 	assert(_cID != Chrom::UnID);
 
@@ -78,7 +78,7 @@ void OLinearWriter::WriteOblique(BYTE reverse, chrlen start, coviter& itStop)
 		start = stop;
 		--itStop;
 	}
-	(_writers->_files)[reverse]->WriteOblique(_cID, start, k * ptCnt, float(itStop->second) / ptCnt);
+	(_writers->_files)[reverse]->WriteIncline(_cID, start, k * ptCnt, float(itStop->second) / ptCnt);
 }
 
 
@@ -172,6 +172,33 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 		_fDdelim->Write("%1.3f\t%d\t%s\n", incline.Deriv, incline.Pos, locus.Print(incline.Pos));
 	}
 #endif
+}
+
+void TreatedCover::SetLocalSpline(SSpliner<coval>& spliner, chrlen& startPos, chrlen endPos, Values& vals, OSpecialWriter& splineWriter) const
+{
+	startPos -= spliner.SilentLength();
+	endPos += spliner.SilentLength();
+
+	coviter itCov = prev(upper_bound(startPos));	// no check for end() since cover is well-defined in this region
+	coviter itCovEnd = itCov;
+
+	// set itCovEnd
+	for (itCovEnd++; itCovEnd->first <= endPos; itCovEnd++);
+
+	// build spline
+	chrlen pos = itCov->first + 1;
+	for (auto it = next(itCov); itCov != itCovEnd; itCov++, it++)	// loop through the cover
+		for (; pos <= it->first; pos++) {							// loop through positions between iterators
+			float val = spliner.Push(itCov->second);
+			if (val) {
+				if (!vals.MaxVal())
+					startPos = spliner.CorrectX(pos);	// just once
+				vals.AddValue(val);
+			}
+		}
+	if (splineWriter.IsWriterSet())
+		splineWriter.WriteChromData(startPos, vals);
+	spliner.Clear();
 }
 
 
@@ -503,13 +530,14 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 }
 #endif
 
-void ValuesMap::BuildRegionSpline(const TreatedCover& cover, const CoverRegion& rgn, bool redifRgns, fraglen splineBase)
+void ValuesMap::BuildRegionSpline(const TreatedCover& cover, const CoverRegion& rgn, bool redifineRgns, fraglen splineBase)
 {
 	assert(Glob::ReadLen);
-	coviter it0, itEnd;
+	coviter it0;	// at the beginning the start it, then used as a variable
+	coviter itEnd;	// the end it
 
 	// set up start/end iterators
-	if (redifRgns) {
+	if (redifineRgns) {
 		it0 = cover.upper_bound(rgn.itStart->first);
 		itEnd = cover.lower_bound(rgn.itEnd->first);		// !!! optimize
 
@@ -537,7 +565,6 @@ void ValuesMap::BuildRegionSpline(const TreatedCover& cover, const CoverRegion& 
 				vals.Clear();
 	};
 
-	//for (auto it = next(it0); it0 != itEnd; it0++, it++) {	// loop through the cover
 	for (auto it = next(it0); it != itEnd; it0++, it++) {	// loop through the cover
 
 		if (isZeroBefore)
@@ -708,7 +735,7 @@ void BoundsValues::PushIncline(
 	const TracedPosVal& posVal,
 	const TreatedCover& cover,
 	vector<Incline>& inclines,
-	OLinearWriter& lwriter
+	OSpecialWriter& lwriter
 
 ) const
 {
@@ -734,7 +761,7 @@ void BoundsValues::PushIncline(
 	//if (lwriter.IsWriterSet()) {
 	//	auto it = itStop;
 	//	opInv.Next(it);
-	//	lwriter.WriteOblique(reverse, incline.Pos, it);
+	//	lwriter.WriteIncline(reverse, incline.Pos, it);
 	//}
 
 	coviter it0 = itStop;
@@ -775,11 +802,11 @@ void BoundsValues::PushIncline(
 	//if (grpNumb == 21)	printf("> %d %d\n", int(reverse), itStop->first);
 	if (lwriter.IsWriterSet()) {
 		opInv.Next(itStop);
-		lwriter.WriteOblique(reverse, incline.Pos, itStop);
+		lwriter.WriteIncline(reverse, incline.Pos, itStop);
 	}
 }
 
-void BoundsValues::CollectDirectInclines(const TreatedCover& rCover, vector<Incline>& inclines, OLinearWriter& lwriter) const
+void BoundsValues::CollectDirectInclines(const TreatedCover& rCover, vector<Incline>& inclines, OSpecialWriter& lwriter) const
 {
 	TracedPosVal posVal;
 	for (auto it = rbegin(); it != rend(); it++) {		// loop through one group
@@ -789,7 +816,7 @@ void BoundsValues::CollectDirectInclines(const TreatedCover& rCover, vector<Incl
 	}
 }
 
-void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Incline>& inclines, OLinearWriter& lwriter) const
+void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Incline>& inclines, OSpecialWriter& lwriter) const
 {
 	TracedPosVal posVal;
 
@@ -907,7 +934,7 @@ void BS_map::AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 	if (reverse) {
 		chrlen pos = it0->TopPos;
 		for (auto it = next(it0); it != inclines.cend(); it0++, it++) {
-			if (pos < it->TopPos)
+			if (pos <= it->TopPos)
 				AddPos(reverse, grpNumb, *it0);
 			pos = it->TopPos;
 		}
@@ -917,24 +944,16 @@ void BS_map::AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 		chrlen pos = it0->Pos;
 		AddPos(reverse, grpNumb, *it0);		// always add the first, steepest (tightest) incline
 		for (auto it = next(it0); it != inclines.cend(); it++) {
-			if (pos < it->TopPos)
+			if (pos <= it->TopPos)
 				AddPos(reverse, grpNumb, *it);
 			pos = it->TopPos;
 		}
 	}
-	//chrlen pos = it0->Pos;
-	//AddPos(reverse, grpNumb, *it0);		// always add the first, steepest (tightest) incline
-	//// left to right (reverse==0) or right to left (reverse==1)
-	//for (auto it = next(it0); it != inclines.cend(); it0++, it++) {
-	//	if (Less(pos, it->TopPos))
-	//		AddPos(reverse, grpNumb, *it);
-	//	pos = it->TopPos;
-	//}
 }
 
-void BS_map::SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OLinearWriter& lwriter)
+void BS_map::SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OSpecialWriter& lwriter)
 {
-	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines, OLinearWriter&) const;
+	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines, OSpecialWriter&) const;
 	tSetBSpos fcollectInclines = reverse ?
 		&BoundsValues::CollectReverseInclines :
 		&BoundsValues::CollectDirectInclines;
@@ -1036,71 +1055,104 @@ void BS_map::Refine()
 	ResetBothExtraEntries(end());
 }
 
-void BS_map::NormalizeScore()
+const BYTE L = 1;	// left == reversed
+const BYTE R = 0;	// right == direct
+
+void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers, OSpecialWriter& splineWriter)
 {
 	float maxScore = 0;
+	auto& cover = fragCovers.DataByInd();
+	SSpliner<coval> spliner(eCurveType::ROUGH, 5);
+	Values	vals;
+	vals.Reserve();
 
 	// *** set direct&reversed position scores as sum of each other
-	DoExtend([&maxScore](vector<PosValue>* VP) {
-		const float val[2]{ VP[0].front().Val ,VP[1].back().Val };	// first direct, last reversed
-		const float ratio = val[0] / val[1];						// direct/reversed score ratio
+	DoExtend([&](vector<PosValue>* VP) {
 
-		auto setScore = [&maxScore](const vector<PosValue>& vp, BYTE i, float val) {
-			float score = (vp[i].Iter->second.Score += val);
-			if (maxScore < score)	maxScore = score;
+		const auto& itStart = VP[L].front().Iter;
+		const auto& itEnd = VP[R].back().Iter;
+		if (itStart->second.GrpNumb != itEnd->second.GrpNumb)	return;
+
+		chrlen	startPos = itStart->first;
+		cover.SetLocalSpline(spliner, startPos, itEnd->first, vals, splineWriter);
+
+		// *** set score
+
+		// set score for the BS extention
+		auto setExtScore = [&vals](BYTE reverse, const vector<PosValue>& vp, USHORT shift, BYTE ind) {
+			float score = 0;
+			auto len = vp[ind + reverse].Iter->first - vp[ind - !reverse].Iter->first;
+
+			for (chrlen i = 0; i < len; i++, shift++)
+				score += vals[shift];
+			vp[ind].Iter->second.Score = score / len;
 		};
 
-		setScore(VP[1], BYTE(VP[1].size() - 1), val[0]);	// set basic reverse score to sum of direct & reversed
-		VP[0].front().Iter->second.Score = ratio;			// set basic direct score to direct/reversed score ratio
-
-		for (BYTE s : {0, 1}) {
-			const BYTE vpLen = BYTE(VP[s].size() - 1);
-			const auto& vp = VP[s];
-			for (BYTE i = !s + 1; i < vpLen; i++)
-				setScore(vp, i, val[!s]);
+		USHORT shift;
+		{	// left BS extentions
+			const auto& vp = VP[L];
+			shift = USHORT(vp.front().Iter->first - startPos);
+			const BYTE vpLen = BYTE(vp.size() - 1);
+			for (BYTE b = 0; b < vpLen; b++)
+				setExtScore(L, vp, shift, b);
 		}
+		{	// right BS extentions
+			const auto& vp = VP[R];
+			shift = USHORT(vp.back().Iter->first - startPos);
+			for (BYTE b = BYTE(vp.size() - 1); b; b--)
+				setExtScore(R, vp, shift, b);
+		}
+		// base BS
+		const auto& itStartBS = VP[L].back().Iter;
+		const auto& itEndBS = VP[R].front().Iter;
+		shift = itStartBS->first - startPos;
+		const auto len = USHORT(itEndBS->first - itStartBS->first);
+		float score = 0;
+
+		for (USHORT i = 0; i < len; i++, shift++)
+			score += vals[shift];
+		score /= len;
+		if (maxScore < score)	maxScore = score;
+		itStartBS->second.Score = itEndBS->second.Score = score;
+
+		vals.Clear();
 		});
 
-	// *** normalize scores relative to maximum
-	bool reversed = false;
+	// *** normalize score
 	for (auto& x : *this)
-		if (x.second.Score) {
-			if (x.second.Reverse)
-				reversed = true;
-			else if (reversed) {
-				reversed = false;
-				continue;		// skip basic direct score as it keeps direct/reversed ratio
-			}
+		if (x.second.Score)
 			x.second.Score /= maxScore;
-		}
 }
 
 void BS_map::NormalizeBSwidth()
 {
 	const BYTE MIN_BS_WIDTH = 5;
-
 	vector<BS_map::iter> toErase;
 	toErase.reserve(10);
-	// accumulate abd expand narrow BSs
+
+	// accumulate and expand narrow BSs
 	DoBasic([&](iter& start, iter& end) {
 		if (start->second.GrpNumb != end->second.GrpNumb)	return;
+		// treat one group
 		const fraglen len = end->first - start->first;
+
 		if (len < MIN_BS_WIDTH) {
 			const auto diff = BYTE(MIN_BS_WIDTH - len);
-			auto Expand = [&](iter& it, chrlen newPos, bool newPosIsLess) {
+			auto Expand = [&](const iter& it, chrlen newPos, const iter&& itHint) {
 				if (it->first != newPos) {
-					auto it1 = emplace_hint(newPosIsLess ? it : next(it), newPos, it->second);
+					emplace_hint(itHint, newPos, it->second);
 					toErase.push_back(it);
 				}
 			};
 
-			Expand(start, start->first - diff / 2, true);
-			Expand(end, end->first + diff / 2 + diff % 2, false);
+			Expand(start, start->first - diff / 2, move(start));
+			Expand(end, end->first + diff / 2 + diff % 2, next(start));
 		}
 		});
-	// erase narrow BSs
-	for (auto i = toErase.size(); i; i--)	// reverse bypass
-		erase(toErase[i - 1]);
+
+	// erase narrow BS borders
+	for (auto i = toErase.size(); i; erase(toErase[--i]));	// reverse bypass
+	//for (auto i = toErase.size(); i; (toErase[--i])->second.Score = 0);	// reverse bypass
 }
 
 void BS_map::PrintStat() const
@@ -1376,8 +1428,8 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 			//"130,140,30",	// 3	>=0.6	dark yellow-green
 			//"30,100,30",	// 4	>=0.8	dark green
 		};
-		const auto& start = VP[1].back().Iter;
-		const float score = VP[1].back().Val;
+		const auto& start = VP[1].back().Iter;	// basic feature start
+		const float score = VP[1].back().Val;	// basic feature score
 
 		auto addExtraLines = [=, &bsNumb](const vector<BS_map::PosValue>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
 			if (vp.size() == 1)	return;
