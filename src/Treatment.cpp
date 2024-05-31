@@ -534,11 +534,11 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 	printf("SPLINES %s\n", sStrandTITLES[reverse + 1]);
 	printf(" N start\tend\tval\tIGV view\n");
 	for (const auto& x : *this) {
-		if (stopNumb && x.second.GrpNumb > stopNumb)	break;
+		if (stopNumb && x.second.RgnNumb > stopNumb)	break;
 		if (x.second.MaxVal()) {
 			chrlen end = x.first + x.second.Length();
 			printf("%2d %d\t%d\t%2.2f\t%s\n",
-				x.second.GrpNumb, x.first, end, x.second.MaxVal(), locus.Print(x.first, end));
+				x.second.RgnNumb, x.first, end, x.second.MaxVal(), locus.Print(x.first, end));
 		}
 	}
 }
@@ -654,13 +654,13 @@ void ValuesMap::Numerate()
 		if (!it[0]->second.MaxVal()) { it[0]++; continue; }
 		if (!it[1]->second.MaxVal()) { it[1]++; continue; }
 
-		it[0]->second.GrpNumb = it[1]->second.GrpNumb = numb;
+		it[0]->second.RgnNumb = it[1]->second.RgnNumb = numb;
 
 		for(bool overlap = true; overlap; )
 			if (NextStart(0) + overLen < End(it[1]))
-				overlap = (++it[0])->second.GrpNumb = numb;
+				overlap = (++it[0])->second.RgnNumb = numb;
 			else if (NextStart(1) + overLen < End(it[0]))
-				overlap = (++it[1])->second.GrpNumb = numb;
+				overlap = (++it[1])->second.RgnNumb = numb;
 			else 
 				overlap = false;
 
@@ -824,9 +824,9 @@ void BoundsValues::PushIncline(
 void BoundsValues::CollectDirectInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
 {
 	TracedPosVal posVal;
-	for (auto it = rbegin(); it != rend(); it++) {		// loop through one group
+	for (auto it = rbegin(); it != rend(); it++) {		// loop through one region
 		posVal.Set(0, it);
-		PushIncline(_grpNumb, 0, posVal, rCover, inclines);
+		PushIncline(_rgnNumb, 0, posVal, rCover, inclines);
 		posVal.Retain();
 	}
 }
@@ -837,7 +837,7 @@ void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Inc
 
 	for (auto it = begin(); it != end(); it++) {		// loop through derivatives
 		posVal.Set(1, it);
-		PushIncline(_grpNumb, 1, posVal, rCover, inclines);
+		PushIncline(_rgnNumb, 1, posVal, rCover, inclines);
 		posVal.Retain();
 	}
 }
@@ -845,7 +845,7 @@ void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Inc
 void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
 {
 	if (_maxVal < deriv.MaxVal())	_maxVal = deriv.MaxVal();
-	_grpNumb = spline.second.GrpNumb;
+	_rgnNumb = spline.second.RgnNumb;
 	emplace_back(
 		spline.first + relPos,
 		spline.second.Value(relPos),
@@ -904,7 +904,7 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 			break;
 		printf("%d: %2.2f\n", rvss.first, rvss.second.MaxVal());
 		for (const auto& rvs : rvss.second)
-			printf("  %2.2f:\t%d %d\t%d\n", rvs.MaxVal(), rvs.GrpNumb, rvs.Start(), rvs.Length());
+			printf("  %2.2f:\t%d %d\t%d\n", rvs.MaxVal(), rvs.RgnNumb, rvs.Start(), rvs.Length());
 	}
 }
 #endif
@@ -944,7 +944,7 @@ void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 
 	/*
 	filter out intersecting inclines - thus inserting only the best bounds
-	(the bounds formed by the steepest inclines) in the group
+	(the bounds formed by the steepest inclines) in the region
 	*/
 	if (reverse) {
 		chrlen pos = it0->TopPos;
@@ -975,10 +975,10 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 	vector<Incline> inclines;
 	inclines.reserve(4);
 
-	for (auto it = derivs.begin(); it != derivs.end(); it++) {		// loop through the derivative groups
+	for (auto it = derivs.begin(); it != derivs.end(); it++) {		// loop through the derivative regions
 		inclines.clear();
 		(it->second.*fcollectInclines)(rCover, inclines);
-		AddBounds(reverse, it->second.GroupNumb(), inclines);
+		AddBounds(reverse, it->second.RgnNumb(), inclines);
 	}
 }
 
@@ -986,9 +986,8 @@ void BS_map::Refine()
 {
 	/*
 	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by direct reads
-	Group corresponds to potential region.
 
-	Options for placing bounds in a group:
+	Options for placing bounds in a region:
 	canonical:					[[L] [R]]
 	extra right/left bounds:	[R] [[L] [R]] [L]
 	'negative' BS width:		[R] [L]
@@ -997,13 +996,13 @@ void BS_map::Refine()
 	and marking BSs with 'negative' width.
 	*/
 
-	auto lastExtraRight_it = end();	// iterator pointing to the last Right entry that starts the group 
-	uint16_t extraRightCnt = 0;		// count of Right entry that starts the group
-	uint16_t extraLeftCnt = 0;		// count of Left entry that ends the group
-	bool newBS = true;				// if true then new BS in the group is registered
-	bool raisedLeft = false;		// if true then at least one Left entry in the group is processed
-	bool someBS = false;			// if true then at least one BS in the group is registered
-	chrlen grpNumb = 1;
+	auto lastExtraRight_it = end();	// iterator pointing to the last Right entry that starts the region 
+	uint16_t extraRightCnt = 0;		// count of Right entry that starts the region
+	uint16_t extraLeftCnt = 0;		// count of Left entry that ends the region
+	bool newBS = true;				// if true then new BS in the region is registered
+	bool raisedLeft = false;		// if true then at least one Left entry in the region is processed
+	bool someBS = false;			// if true then at least one BS in the region is registered
+	chrlen rgnNumb = 1;
 
 	// resets extra ('false') entries
 	//	@param it: iterator pointing to the first extra entry
@@ -1039,14 +1038,14 @@ void BS_map::Refine()
 
 	for (auto it = begin(); it != end(); it++)
 	{
-		const bool newGroup = grpNumb != it->second.GrpNumb;
+		const bool newRgn = rgnNumb != it->second.RgnNumb;
 
-		if (newGroup) {
-			// 'close' previous group
+		if (newRgn) {
+			// 'close' previous region
 			ResetBothExtraEntries(it);	// set extraRightCnt to zero
-			// reset current group
+			// reset current region
 			if (!newBS)		newBS = true;
-			grpNumb = it->second.GrpNumb;
+			rgnNumb = it->second.RgnNumb;
 			raisedLeft = someBS = false;
 		}
 
@@ -1057,7 +1056,7 @@ void BS_map::Refine()
 		}
 		else {						// Right bound
 			if (newBS && !extraLeftCnt)
-				if (!extraRightCnt || !newGroup)
+				if (!extraRightCnt || !newRgn)
 					lastExtraRight_it = it;
 			extraLeftCnt = 0;
 			if (raisedLeft)
@@ -1066,7 +1065,7 @@ void BS_map::Refine()
 				extraRightCnt++;
 		}
 	}
-	// 'close' last group
+	// 'close' last region
 	ResetBothExtraEntries(end());
 }
 
@@ -1085,7 +1084,7 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 
 		const auto& itStart = VP[L].front().Iter;
 		const auto& itEnd = VP[R].back().Iter;
-		if (itStart->second.GrpNumb != itEnd->second.GrpNumb)	return;
+		if (itStart->second.RgnNumb != itEnd->second.RgnNumb)	return;
 
 		chrlen	startPos = itStart->first;
 		cover.SetLocalSpline(spliner, startPos, itEnd->first, vals);
@@ -1146,8 +1145,8 @@ void BS_map::NormalizeBSwidth()
 
 	// accumulate and expand narrow BSs
 	DoBasic([&](iter& start, iter& end) {
-		if (start->second.GrpNumb != end->second.GrpNumb)	return;
-		// treat one group
+		if (start->second.RgnNumb != end->second.RgnNumb)	return;
+		// treat one region
 		const fraglen len = end->first - start->first;
 
 		if (len < MIN_BS_WIDTH) {
@@ -1324,14 +1323,14 @@ void BS_map::Print(chrid cID, bool selected, chrlen stopPos) const
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
-	printf("\npos\tgrp  bnd score  IGV view\n");
+	printf("\npos\trgn  bnd score  IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
 		if (selected && !x.second.Score)	continue;
-		format[4] = x.second.GrpNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
+		format[4] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
 		printf(format.c_str(),
 			x.first,
-			x.second.GrpNumb,
+			x.second.RgnNumb,
 			bound[x.second.Reverse],
 			x.second.Score,
 			locus.Print(x.first)

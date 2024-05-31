@@ -114,10 +114,10 @@ class Values : public vector<float>
 	float _maxVal;
 
 public:
-	chrlen GrpNumb = 0;
+	chrlen RgnNumb = 0;
 
 	Values() noexcept : _maxVal(0) { Reserve(); }
-	Values(Values&& rvals) noexcept : _maxVal(rvals._maxVal), GrpNumb(0), vector<float>(move(rvals)) { rvals._maxVal = 0; }
+	Values(Values&& rvals) noexcept : _maxVal(rvals._maxVal), RgnNumb(0), vector<float>(move(rvals)) { rvals._maxVal = 0; }
 	Values(const Values& rvals) = default;
 
 	// Returns values length
@@ -541,7 +541,7 @@ public:
 	// Resets non overlapping spline value
 	void EliminateNonOverlaps();
 
-	// Sets a single consecutive number (group number) to each overlapped not empty spline
+	// Sets a single consecutive potential region number to each overlapped not empty spline
 	void Numerate();
 
 	// Prints potential regions before and after selection
@@ -565,7 +565,7 @@ public:
 	// Resets non overlapping spline value
 	void EliminateNonOverlaps() { Data()->EliminateNonOverlaps(); }
 
-	// Sets a single consecutive number (group number) to each overlapped not empty spline
+	// Sets a single consecutive potential region number to each overlapped not empty spline
 	void Numerate() { Data()->Numerate(); }
 
 	// Prints potential regions before and after selection
@@ -653,10 +653,10 @@ class BoundsValues : public vector<BoundValues>
 	};
 
 	float _maxVal = 0;
-	chrlen _grpNumb;
+	chrlen _rgnNumb;	// potential region number
 
 	void PushIncline(
-		chrlen grpNumb,
+		chrlen rgnNumb,
 		BYTE reverse,
 		const TracedPosVal& posVal,
 		const TreatedCover& cover,
@@ -668,7 +668,8 @@ public:
 	static void SetSpecialWriter(OSpecialWriter& lineWriter) { LineWriter = &lineWriter; }
 #endif
 	float	MaxVal()	const { return _maxVal; }
-	chrlen	GroupNumb()	const { return _grpNumb; }
+	// Returns potential region number
+	chrlen	RgnNumb()	const { return _rgnNumb; }
 
 	//using cIter = vector<ValuesMap>::const_iterator;
 	//using rIter = vector<ValuesMap>::reverse_iterator;
@@ -737,14 +738,14 @@ public:
 struct BS_PosVal
 {
 	BYTE	Reverse;
-	chrlen	GrpNumb;
+	chrlen	RgnNumb;	// potential region number
 	float	Score = 1;
 
 	// Constructor
 	//	@param reverse: 0 for firect, 1 for reverse
-	//	@param grpNumb: group number
+	//	@param rgnNumb: potential region number
 	//	@param incln: inclined line
-	BS_PosVal(BYTE reverse, chrlen grpNumb) : Reverse(reverse), GrpNumb(grpNumb) {}
+	BS_PosVal(BYTE reverse, chrlen rgnNumb) : Reverse(reverse), RgnNumb(rgnNumb) {}
 };
 
 class BS_map : public map<chrlen, BS_PosVal>
@@ -758,15 +759,15 @@ private:
 
 	// Inserts BS position (bound)
 	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
-	//	@param grpNumb: group number
+	//	@param rgnNumb: potential region number
 	//	@param incl: inclined line
-	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl);
+	void AddPos(BYTE reverse, chrlen rgnNumb, const Incline& incl);
 
 	// Inserts BS positions (left/right bounds)
 	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
-	//	@param grpNumb: group number
+	//	@param rgnNumb: potential region number
 	//	@param inclines: direct/reversed (right/left) inclined lines
-	void AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines);
+	void AddBounds(BYTE reverse, chrlen rgnNumb, vector<Incline>& inclines);
 
 	// Fills the instance with recognized left/right BS positions (bounds)
 	//	@param reverse[in]: 0 for firect (right bounds), 1 for reverse (left bounds)
@@ -807,7 +808,7 @@ public:
 
 	void PrintStat() const;
 
-	// Applies lambda to each group of binding sites, passing borders collection
+	// Applies lambda to each potential region of binding sites, passing borders collection
 	template<typename F>
 	void DoExtend(F&& lambda)
 	{
@@ -828,7 +829,7 @@ public:
 			lambda(VP);
 	}
 
-	// Applies lambda to each group denotes the binding site, passing start-end iterators
+	// Applies lambda to each potential region denotes the binding site, passing start-end iterators
 	template<typename F>
 	void DoBasic(F&& lambda) const
 	{
