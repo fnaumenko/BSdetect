@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/30/2024
+Last modified: 05/31/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -175,8 +175,8 @@ void Detector::CallBS(chrid cID)
 {
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
 	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
-	DataCoverRegions& rgns		 = static_cast<DataCoverRegions&>(_rgns.ChromData(cID));
-	DataValuesMap& splines		 = static_cast<DataValuesMap&>(_splines.ChromData(cID));
+	DataCoverRegions& rgns		= static_cast<DataCoverRegions&>(_rgns.ChromData(cID));
+	DataValuesMap& splines		= static_cast<DataValuesMap&>(_splines.ChromData(cID));
 	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
 	BS_map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];
@@ -187,14 +187,14 @@ void Detector::CallBS(chrid cID)
 	_lineWriter.SetChromID(cID);
 	_splineWriter.SetChromID(cID);
 
-	if (Glob::FragLenUndef) {	// can be true for SE sequence only
+	if (Glob::FragLenUndef) {		// can be true for SE sequence only
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
 		Verb::PrintMsgVar(Verb::RT, "Mean fragment length: %d\n", FragDefLEN - peakDiff);
-		if (peakDiff > 5) {
+		if (peakDiff > 5) {			// significant difference
 			Glob::FragLen -= peakDiff;
 			_frag—overs.Clear();
-			//_frag—overs.Fill(_reads, _saveCover);
-			_frag—overs.Fill(_reads, true);
+			_frag—overs.Fill(_reads);
+			rgns.Clear();
 		}
 		else
 			resetCover = false;
@@ -207,8 +207,8 @@ void Detector::CallBS(chrid cID)
 
 	splines.BuildSpline(readCovers, rgns, true);	_rgns.WriteChrom(cID);
 	splines.EliminateNonOverlaps();
-	splines.PrintStat(cLen);
-	splines.Numerate();			//splines.Print(cID);
+	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
+	splines.Numerate();
 	derivs.Set(splines);						_splines.WriteChrom(cID);
 	
 	bss.Set(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);

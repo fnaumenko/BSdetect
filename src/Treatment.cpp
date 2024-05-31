@@ -204,20 +204,19 @@ void TreatedCover::SetLocalSpline(SSpliner<coval>& spliner, chrlen& startPos, ch
 
 //===== CombCover
 
-void CombCover::AddExtRead(const Region& read, bool reverse, bool addTotal)
+void CombCover::AddExtRead(const Region& read, bool reverse)
 {
 	Region frag(read, Glob::FragLen, reverse);
 
-	if(addTotal)
-		_data->DataByInd().AddRegion(frag);			// total frag coverage
+	_data->TotalData().AddRegion(frag);			// total frag coverage
 	AddRead(frag, reverse);
 }
 
-void CombCover::Fill(const Reads& reads, bool addTotal)
+void CombCover::Fill(const Reads& reads)
 {
 	for (BYTE s : {0, 1})
 		for (auto& rd : reads.GetReads(s))
-			AddExtRead(rd, s, addTotal);
+			AddExtRead(rd, s);
 }
 
 
@@ -406,7 +405,7 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 {
 	chrlen capacity = cLen / (Glob::FragLen * 100);
 	if(Glob::IsPE)
-		DataByInd().SetPotentialRegions(cover.DataByInd(), capacity, cutoff);
+		TotalData().SetPotentialRegions(cover.TotalData(), capacity, cutoff);
 	else {
 		StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
 		StrandData(NEG).SetPotentialRegions(cover.StrandData(NEG), capacity, cutoff);
@@ -657,8 +656,7 @@ void ValuesMap::Numerate()
 
 void ValuesMap::PrintStat(chrlen clen) const
 {
-	if (Verb::Level(Verb::DBG))
-		PrintRegionStats<ValuesMap>(this, clen);
+	PrintRegionStats<ValuesMap>(this, clen);
 }
 
 //===== DataValuesMap
@@ -915,12 +913,12 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 		emplace_hint(end(), pos, BS_PosVal(0, grpNumb, incl));
 }
 
-void BS_map::AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
+void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 {
 	if (!inclines.size())	return;
 	/*
 	now all inclines are sorted in ascending order;
-	left and right positions (borders) are inserted in the same order
+	left and right positions (bounds) are inserted in the same order
 	*/
 	sort(inclines.begin(), inclines.end(),
 		[](const Incline& i1, const Incline& i2) { return i1.Pos < i2.Pos; }
@@ -928,8 +926,8 @@ void BS_map::AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 	auto it0 = inclines.cbegin();
 
 	/*
-	filter out intersecting inclines - thus inserting only the best borders
-	(the borders formed by the steepest inclines) in the group
+	filter out intersecting inclines - thus inserting only the best bounds
+	(the bounds formed by the steepest inclines) in the group
 	*/
 	if (reverse) {
 		chrlen pos = it0->TopPos;
@@ -951,7 +949,7 @@ void BS_map::AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 	}
 }
 
-void BS_map::SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OSpecialWriter& lwriter)
+void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OSpecialWriter& lwriter)
 {
 	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines, OSpecialWriter&) const;
 	tSetBSpos fcollectInclines = reverse ?
@@ -963,19 +961,19 @@ void BS_map::SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const Treat
 	for (auto it = derivs.begin(); it != derivs.end(); it++) {		// loop through the derivative groups
 		inclines.clear();
 		(it->second.*fcollectInclines)(rCover, inclines, lwriter);
-		AddBorders(reverse, it->second.GroupNumb(), inclines);
+		AddBounds(reverse, it->second.GroupNumb(), inclines);
 	}
 }
 
 void BS_map::Refine()
 {
 	/*
-	BS Left entry (border): is formed by reverse reads; BS Right entry (border): is formed by direct reads
+	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by direct reads
 	Group corresponds to potential region.
 
-	Options for placing borders in a group:
+	Options for placing bounds in a group:
 	canonical:					[[L] [R]]
-	extra right/left borders:	[R] [[L] [R]] [L]
+	extra right/left bounds:	[R] [[L] [R]] [L]
 	'negative' BS width:		[R] [L]
 
 	Method brings the instance to canonical form, resetting the score of all extra elements to zero,
@@ -1007,7 +1005,7 @@ void BS_map::Refine()
 			if (someBS)
 				ResetExtraEntries(lastExtraRight_it, extraRightCnt);
 			else {		// 'negative' BS width
-				lastExtraRight_it->second.Reverse = true;					// change 'right' border to 'left'
+				lastExtraRight_it->second.Reverse = true;					// change 'right' bound to 'left'
 				ResetExtraEntries(--lastExtraRight_it, --extraRightCnt);	// reset other extra entries
 			}
 			lastExtraRight_it = end();
@@ -1018,7 +1016,7 @@ void BS_map::Refine()
 		else {			// 'negative' BS width
 			auto bs1 = ResetExtraEntries(it, --extraLeftCnt);	// reset other extra entries
 			if (bs1 != end())
-				bs1->second.Reverse = false;					// change 'left' border to 'right
+				bs1->second.Reverse = false;					// change 'left' bound to 'right
 		}
 	};
 
@@ -1035,12 +1033,12 @@ void BS_map::Refine()
 			raisedLeft = someBS = false;
 		}
 
-		if (it->second.Reverse) {	// Left border
+		if (it->second.Reverse) {	// Left bound
 			extraLeftCnt++;
 			raisedLeft = true;
 			newBS = false;
 		}
-		else {						// Right border
+		else {						// Right bound
 			if (newBS && !extraLeftCnt)
 				if (!extraRightCnt || !newGroup)
 					lastExtraRight_it = it;
@@ -1055,18 +1053,17 @@ void BS_map::Refine()
 	ResetBothExtraEntries(end());
 }
 
-const BYTE L = 1;	// left == reversed
-const BYTE R = 0;	// right == direct
+const BYTE L = 1;	// left bound: is formed by reversed reads
+const BYTE R = 0;	// right bound: is formed by direct reads
 
 void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers, OSpecialWriter& splineWriter)
 {
 	float maxScore = 0;
-	auto& cover = fragCovers.DataByInd();
+	auto& cover = fragCovers.TotalData();
 	SSpliner<coval> spliner(eCurveType::ROUGH, 5);
-	Values	vals;
+	Values	vals;			// spline values
 	vals.Reserve();
 
-	// *** set direct&reversed position scores as sum of each other
 	DoExtend([&](vector<PosValue>* VP) {
 
 		const auto& itStart = VP[L].front().Iter;
@@ -1093,14 +1090,14 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers, OSpecialWriter& s
 			const auto& vp = VP[L];
 			shift = USHORT(vp.front().Iter->first - startPos);
 			const BYTE vpLen = BYTE(vp.size() - 1);
-			for (BYTE b = 0; b < vpLen; b++)
-				setExtScore(L, vp, shift, b);
+			for (BYTE i = 0; i < vpLen; i++)			// left to right
+				setExtScore(L, vp, shift, i);
 		}
 		{	// right BS extentions
 			const auto& vp = VP[R];
 			shift = USHORT(vp.back().Iter->first - startPos);
-			for (BYTE b = BYTE(vp.size() - 1); b; b--)
-				setExtScore(R, vp, shift, b);
+			for (BYTE i = BYTE(vp.size() - 1); i; i--)	// right to left
+				setExtScore(R, vp, shift, i);
 		}
 		// base BS
 		const auto& itStartBS = VP[L].back().Iter;
@@ -1150,7 +1147,7 @@ void BS_map::NormalizeBSwidth()
 		}
 		});
 
-	// erase narrow BS borders
+	// erase narrow BS bounds
 	for (auto i = toErase.size(); i; erase(toErase[--i]));	// reverse bypass
 	//for (auto i = toErase.size(); i; (toErase[--i])->second.Score = 0);	// reverse bypass
 }
@@ -1253,21 +1250,21 @@ void BS_map::CheckScoreHierarchy()
 
 		bsNumb++;
 		// set prNeg; check all
-		for (const PosValue& vp : VP[1])
+		for (const PosValue& vp : VP[L])
 			if (prNeg = (val > vp.Val))		break;
 			else val = vp.Val;
 		// set prPos; check all except first element
-		const BYTE vpLen = BYTE(VP[0].size() - 1);
-		const auto& vp = VP[0];
+		const BYTE vpLen = BYTE(VP[R].size() - 1);
+		const auto& vp = VP[R];
 		val = 1000;
 		for (BYTE i = 1; i < vpLen; i++)
 			if (prPos = (val < vp[i].Val))	break;
 			else val = vp[i].Val;
 		// print of excess over basic score
 		if (prNeg || prPos) {
-			issues = printf("%4d  %d\t", bsNumb, VP[1].back().Iter->first);	// start position
-			if (prNeg)	prVals(false, '-', VP[1]);
-			if (prPos)	prVals(prNeg, '+', VP[0]);
+			issues = printf("%4d  %d\t", bsNumb, VP[L].back().Iter->first);	// start position
+			if (prNeg)	prVals(false, '-', VP[L]);
+			if (prPos)	prVals(prNeg, '+', VP[R]);
 			printf("\n");
 		}
 		});
@@ -1364,19 +1361,19 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 
 	bss.DoExtend([&](const vector<BS_map::PosValue>* VP) {
 		// *** save basic info
-		const auto& itStart = VP[1].back().Iter;
-		const auto& itEnd = VP[0].front().Iter;
+		const auto& itStart = VP[L].back().Iter;
+		const auto& itEnd = VP[R].front().Iter;
 
 		LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
 		LineAddScore(itStart->second.Score, true);					// BS score
 
 		// *** additional regions info
 		LineAddChar(DOT, true);
-		lastSep[1] = VP[0].size() - 1;
+		lastSep[1] = VP[R].size() - 1;
 		LineAddFloat(itEnd->second.Score, VP[1].size() - 1 || lastSep[1]);	// ratio
 
 		// *** extra deviations info
-		for (BYTE s : {1, 0}) {
+		for (BYTE s : {L, R}) {
 			const BYTE vpLen = BYTE(VP[s].size() - 1);
 			if (!vpLen) continue;
 
@@ -1428,8 +1425,8 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 			//"130,140,30",	// 3	>=0.6	dark yellow-green
 			//"30,100,30",	// 4	>=0.8	dark green
 		};
-		const auto& start = VP[1].back().Iter;	// basic feature start
-		const float score = VP[1].back().Val;	// basic feature score
+		const auto& start = VP[L].back().Iter;	// basic feature start
+		const float score = VP[L].back().Val;	// basic feature score
 
 		auto addExtraLines = [=, &bsNumb](const vector<BS_map::PosValue>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
 			if (vp.size() == 1)	return;
@@ -1446,12 +1443,12 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 			}
 		};
 
-		const auto& end = VP[0].front().Iter;
+		const auto& end = VP[R].front().Iter;
 		const char* delims = ".\t.\t.\t.\t";
 
 		++bsNumb;
 
-		addExtraLines(VP[1]);
+		addExtraLines(VP[L]);
 		// *** add basic feature
 		LineAddUInts(start->first, end->first, bsNumb, true);
 		LineAddFloat(start->second.Score, true);		// BS score
@@ -1459,7 +1456,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 		LineAddFloat(end->second.Score, false);			// reverse/direct ratio
 		LineToIOBuff(offset);
 
-		addExtraLines(VP[0]);
+		addExtraLines(VP[R]);
 		});
 }
 

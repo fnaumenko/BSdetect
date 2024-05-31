@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05/30/2024
+Last modified: 05/31/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -147,8 +147,7 @@ public:
 				_frag—overs.AddFrag(frag);
 		}
 		else {
-			//_frag—overs.AddExtRead(rgn, reverse, _saveCover && !Glob::FragLenUndef);
-			_frag—overs.AddExtRead(rgn, reverse, true);
+			_frag—overs.AddExtRead(rgn, reverse);
 			if (Glob::FragLenUndef)
 				_reads.AddRead(rgn, reverse);
 		}

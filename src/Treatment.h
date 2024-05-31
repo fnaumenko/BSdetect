@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/30/2024
+Last modified: 05/31/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -352,10 +352,9 @@ public:
 	// For current chrom adds extended SE tag to total coverage, and pure tag to strand coverage
 	//	@param[in] read: added tag
 	//	@param[in] reverse: true if tag is reversed (neg strand)
-	//	@param[in] addTotal: true if tag is added to total cover as well
-	void AddExtRead(const Region& read, bool reverse, bool addTotal);
+	void AddExtRead(const Region& read, bool reverse);
 
-	void Fill(const Reads& reads, bool addTotal);
+	void Fill(const Reads& reads);
 };
 
 using tChromsFreq = map<chrid, BYTE>;
@@ -749,26 +748,26 @@ public:
 	using citer = map<chrlen, BS_PosVal>::const_iterator;
 
 private:
-	iter _lastIt;	// last inserted iterator (for the left borders only)
+	iter _lastIt;	// last inserted iterator (for the left bounds only)
 
-	// Inserts BS position (border)
-	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
+	// Inserts BS position (bound)
+	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
 	//	@param incl: inclined line
 	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl);
 
-	// Inserts BS positions (left/right borders)
-	//	@param reverse: 0 for firect (right borders), 1 for reverse (left borders)
+	// Inserts BS positions (left/right bounds)
+	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
 	//	@param inclines: direct/reversed (right/left) inclined lines
-	void AddBorders(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines);
+	void AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines);
 
-	// Fills the instance with recognized left/right BS positions (borders)
-	//	@param reverse[in]: 0 for firect (right borders), 1 for reverse (left borders)
+	// Fills the instance with recognized left/right BS positions (bounds)
+	//	@param reverse[in]: 0 for firect (right bounds), 1 for reverse (left bounds)
 	//	@param derivs[in]: derivatives
 	//	@param rCover[in]: read coverage
 	//	@param lwriter[out]: line writer to save inclined 
-	void SetBorders(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OSpecialWriter& lwriter);
+	void SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OSpecialWriter& lwriter);
 
 public:
 	// positioned value
@@ -785,9 +784,9 @@ public:
 	//	@param lwriter[out]: line writer to save inclined lines
 	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover, OSpecialWriter& lwriter)
 	{
-		SetBorders(0, derivs.StrandData(POS), rCover.StrandData(POS), lwriter);
+		SetBounds(0, derivs.StrandData(POS), rCover.StrandData(POS), lwriter);
 		_lastIt = begin();
-		SetBorders(1, derivs.StrandData(NEG), rCover.StrandData(NEG), lwriter);
+		SetBounds(1, derivs.StrandData(NEG), rCover.StrandData(NEG), lwriter);
 	}
 
 	// Brings the instance to canonical order of placing BS borders
