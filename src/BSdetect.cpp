@@ -184,8 +184,10 @@ void Detector::CallBS(chrid cID)
 
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 
-	_lineWriter.SetChromID(cID);
-	_splineWriter.SetChromID(cID);
+#ifdef MY_DEBUG
+	_lineWriter.SetChromID(cID);	BoundsValues::SetSpecialWriter(_lineWriter);
+	_splineWriter.SetChromID(cID);	TreatedCover::SetSpecialWriter(_splineWriter);
+#endif
 
 	if (Glob::FragLenUndef) {		// can be true for SE sequence only
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
@@ -209,14 +211,14 @@ void Detector::CallBS(chrid cID)
 	splines.EliminateNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
 	splines.Numerate();
-	derivs.Set(splines);						_splines.WriteChrom(cID);
+	derivs.Set(splines);			_splines.WriteChrom(cID);
 	
-	bss.Set(derivs, readCovers, _lineWriter);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
+	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
 	bss.Refine();
-	bss.SetScore(fragCovers, _splineWriter);	_frag—overs.WriteChrom(cID);
+	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 	bss.NormalizeBSwidth();
 #ifdef MY_DEBUG
-	//bss.Print(cID, false, 5044000);
+	//bss.Print(cID, false, 5005000);
 	//bss.Print(cID, false);
 	//bss.CheckScoreHierarchy();
 	//bss.PrintWidthDistrib();

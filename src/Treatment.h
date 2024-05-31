@@ -145,7 +145,7 @@ public:
 #endif
 };
 
-
+#ifdef MY_DEBUG
 //===== SPECIAL WRITERS
 
 // 'SpecialWriter' implements the method of debug writing for the specified chromosome in FixedStep wig format
@@ -215,6 +215,8 @@ public:
 	}
 };
 
+#endif	// MY_DEBUG
+
 //===== DATA
 
 // temporary Reads collection
@@ -264,11 +266,11 @@ struct Incline
 #endif
 };
 
-//struct CoverRegion;
-
 class TreatedCover : public AccumCover
 {
 #ifdef MY_DEBUG
+	static OSpecialWriter* SplineWriter;	// spline writer to save local splines
+
 	class TxtOutFile
 	{
 		FILE* _file;
@@ -285,6 +287,7 @@ class TreatedCover : public AccumCover
 
 public:
 #ifdef MY_DEBUG
+	static void SetSpecialWriter(OSpecialWriter& splineWriter) { SplineWriter = &splineWriter; }
 	static bool WriteDelim;
 
 	TreatedCover() { if(WriteDelim) _fDdelim.reset(new TxtOutFile("delim.txt")); }
@@ -307,13 +310,11 @@ public:
 	//	@param startPos[in,out]: start position; returns modified (real) position
 	//	@param endPos[in]: end position
 	//	@param vals[out]: step (one bp) splineed values
-	//	@param splineWriter[out]: writer so save spline
 	void SetLocalSpline(
 		SSpliner<coval>& spliner,
 		chrlen& startPos,
 		chrlen endPos,
-		Values& vals,
-		OSpecialWriter& splineWriter
+		Values& vals
 	) const;
 };
 
@@ -593,6 +594,9 @@ public:
 // rising (for the right side of the peak) or falling (for the left side of the peak) derivatives
 class BoundsValues : public vector<BoundValues>
 {
+#ifdef MY_DEBUG
+	static OSpecialWriter* LineWriter;	// line writer to save inclined
+#endif
 	using citer = vector<BoundValues>::const_iterator;
 
 	// Start/end positions and min/max values with storage of previous ones
@@ -647,12 +651,13 @@ class BoundsValues : public vector<BoundValues>
 		BYTE reverse,
 		const TracedPosVal& posVal,
 		const TreatedCover& cover,
-		vector<Incline>& inclines,
-		OSpecialWriter& lwriter
+		vector<Incline>& inclines
 	) const;
 
 public:
-
+#ifdef MY_DEBUG
+	static void SetSpecialWriter(OSpecialWriter& lineWriter) { LineWriter = &lineWriter; }
+#endif
 	float	MaxVal()	const { return _maxVal; }
 	chrlen	GroupNumb()	const { return _grpNumb; }
 
@@ -663,14 +668,12 @@ public:
 	// Collects direct inclined lines
 	//	@param rCover[in]: read coverage
 	//	@param inclines[out]: filled collection of direct inclined lines
-	//	@param lwriter[out]: line writer to save inclined 
-	void CollectDirectInclines	(const TreatedCover& cover, vector<Incline>& inclines, OSpecialWriter& lwriter) const;
+	void CollectDirectInclines	(const TreatedCover& cover, vector<Incline>& inclines) const;
 
 	// Collects reversed inclined lines
 	//	@param rCover[in]: read coverage
 	//	@param inclines[out]: filled collection of reversed inclined lines
-	//	@param lwriter[out]: line writer to save inclined 
-	void CollectReverseInclines(const TreatedCover& cover, vector<Incline>& inclines, OSpecialWriter& lwriter) const;
+	void CollectReverseInclines(const TreatedCover& cover, vector<Incline>& inclines) const;
 
 	// Adds derivative values for given spline relative position
 	//	@param spline: given spline
@@ -760,8 +763,7 @@ private:
 	//	@param reverse[in]: 0 for firect (right bounds), 1 for reverse (left bounds)
 	//	@param derivs[in]: derivatives
 	//	@param rCover[in]: read coverage
-	//	@param lwriter[out]: line writer to save inclined 
-	void SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OSpecialWriter& lwriter);
+	void SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover);
 
 public:
 	// positioned value
@@ -775,21 +777,19 @@ public:
 	// Fills the instance with recognized binding sites
 	//	@param derivs[in]: derivatives
 	//	@param rCover[in]: read coverage
-	//	@param lwriter[out]: line writer to save inclined lines
-	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover, OSpecialWriter& lwriter)
+	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover)
 	{
-		SetBounds(0, derivs.StrandData(POS), rCover.StrandData(POS), lwriter);
+		SetBounds(0, derivs.StrandData(POS), rCover.StrandData(POS));
 		_lastIt = begin();
-		SetBounds(1, derivs.StrandData(NEG), rCover.StrandData(NEG), lwriter);
+		SetBounds(1, derivs.StrandData(NEG), rCover.StrandData(NEG));
 	}
 
 	// Brings the instance to canonical order of placing BS borders
 	void Refine();
 
 	// Sets score for each binding sites and normalizes it
-	//	@param fragCovers[in]: fragment total coverage
-	//	@param splineWriter[out]: fragment coverage spline writer to save splines
-	void SetScore(const DataSet<TreatedCover>& fragCovers, OSpecialWriter& splineWriter);
+	//	@param fragCovers: fragment total coverage
+	void SetScore(const DataSet<TreatedCover>& fragCovers);
 
 	void NormalizeScore();
 

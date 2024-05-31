@@ -64,6 +64,7 @@ void Verb::PrintMsgVar(eVerb level, const char* format, ...)
 	}
 }
 
+#ifdef MY_DEBUG
 //===== OSpecialWriter
 
 void OSpecialWriter::WriteIncline(BYTE reverse, chrlen start, coviter& itStop)
@@ -80,11 +81,11 @@ void OSpecialWriter::WriteIncline(BYTE reverse, chrlen start, coviter& itStop)
 	}
 	(_writers->_files)[reverse]->WriteIncline(_cID, start, k * ptCnt, float(itStop->second) / ptCnt);
 }
-
+#endif
 
 //===== TreatedCover
-
 #ifdef MY_DEBUG
+OSpecialWriter* TreatedCover::SplineWriter = nullptr;
 bool TreatedCover::WriteDelim = false;
 #endif
 
@@ -175,7 +176,7 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 #endif
 }
 
-void TreatedCover::SetLocalSpline(SSpliner<coval>& spliner, chrlen& startPos, chrlen endPos, Values& vals, OSpecialWriter& splineWriter) const
+void TreatedCover::SetLocalSpline(SSpliner<coval>& spliner, chrlen& startPos, chrlen endPos, Values& vals) const
 {
 	startPos -= spliner.SilentLength();
 	endPos += spliner.SilentLength();
@@ -197,8 +198,10 @@ void TreatedCover::SetLocalSpline(SSpliner<coval>& spliner, chrlen& startPos, ch
 				vals.AddValue(val);
 			}
 		}
-	if (splineWriter.IsWriterSet())
-		splineWriter.WriteChromData(startPos, vals);
+#ifdef MY_DEBUG
+	if (SplineWriter && SplineWriter->IsWriterSet())
+		SplineWriter->WriteChromData(startPos, vals);
+#endif
 	spliner.Clear();
 }
 
@@ -678,7 +681,7 @@ float DataValuesMap::GetPeakPosDiff() const
 	USHORT missed = 0;
 	vector<int16_t> diffs;
 	vector<chrlen> pPos, nPos;	// max positions in a positive, negative splines
-	IGVlocus locus(18);
+	//IGVlocus locus(18);
 
 	// get the difference of the splines maximums 
 	pPos.reserve(2);
@@ -727,14 +730,16 @@ void DataValuesMap::Print(chrid cID, chrlen stopNumb) const
 #endif
 
 //===== BoundsValues
+#ifdef MY_DEBUG
+OSpecialWriter* BoundsValues::LineWriter = nullptr;
+#endif
 
 void BoundsValues::PushIncline(
 	chrlen grpNumb,
 	BYTE reverse,
 	const TracedPosVal& posVal,
 	const TreatedCover& cover,
-	vector<Incline>& inclines,
-	OSpecialWriter& lwriter
+	vector<Incline>& inclines
 
 ) const
 {
@@ -797,30 +802,31 @@ void BoundsValues::PushIncline(
 	else
 		inclines.push_back(incline);
 
-	//if (grpNumb == 21)	printf("> %d %d\n", int(reverse), itStop->first);
-	if (lwriter.IsWriterSet()) {
+#ifdef MY_DEBUG
+	if (LineWriter && LineWriter->IsWriterSet()) {
 		opInv.Next(itStop);
-		lwriter.WriteIncline(reverse, incline.Pos, itStop);
+		LineWriter->WriteIncline(reverse, incline.Pos, itStop);
 	}
+#endif
 }
 
-void BoundsValues::CollectDirectInclines(const TreatedCover& rCover, vector<Incline>& inclines, OSpecialWriter& lwriter) const
+void BoundsValues::CollectDirectInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
 {
 	TracedPosVal posVal;
 	for (auto it = rbegin(); it != rend(); it++) {		// loop through one group
 		posVal.Set(0, it);
-		PushIncline(_grpNumb, 0, posVal, rCover, inclines, lwriter);
+		PushIncline(_grpNumb, 0, posVal, rCover, inclines);
 		posVal.Retain();
 	}
 }
 
-void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Incline>& inclines, OSpecialWriter& lwriter) const
+void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
 {
 	TracedPosVal posVal;
 
 	for (auto it = begin(); it != end(); it++) {		// loop through derivatives
 		posVal.Set(1, it);
-		PushIncline(_grpNumb, 1, posVal, rCover, inclines, lwriter);
+		PushIncline(_grpNumb, 1, posVal, rCover, inclines);
 		posVal.Retain();
 	}
 }
@@ -949,9 +955,9 @@ void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 	}
 }
 
-void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover, OSpecialWriter& lwriter)
+void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover)
 {
-	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines, OSpecialWriter&) const;
+	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines) const;
 	tSetBSpos fcollectInclines = reverse ?
 		&BoundsValues::CollectReverseInclines :
 		&BoundsValues::CollectDirectInclines;
@@ -960,7 +966,7 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 
 	for (auto it = derivs.begin(); it != derivs.end(); it++) {		// loop through the derivative groups
 		inclines.clear();
-		(it->second.*fcollectInclines)(rCover, inclines, lwriter);
+		(it->second.*fcollectInclines)(rCover, inclines);
 		AddBounds(reverse, it->second.GroupNumb(), inclines);
 	}
 }
@@ -1056,7 +1062,7 @@ void BS_map::Refine()
 const BYTE L = 1;	// left bound: is formed by reversed reads
 const BYTE R = 0;	// right bound: is formed by direct reads
 
-void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers, OSpecialWriter& splineWriter)
+void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 {
 	float maxScore = 0;
 	auto& cover = fragCovers.TotalData();
@@ -1071,7 +1077,7 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers, OSpecialWriter& s
 		if (itStart->second.GrpNumb != itEnd->second.GrpNumb)	return;
 
 		chrlen	startPos = itStart->first;
-		cover.SetLocalSpline(spliner, startPos, itEnd->first, vals, splineWriter);
+		cover.SetLocalSpline(spliner, startPos, itEnd->first, vals);
 
 		// *** set score
 
