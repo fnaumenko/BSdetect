@@ -193,7 +193,6 @@ public:
 	//	@param write: if true then data sould be save to output file
 	//	@param fname: name of output file
 	//	@param descr: track decsription in declaration line 
-	//OSpecialWriter(const ChromSizes& cSizes, BYTE dim, bool write, const TrackFields& fields)
 	OSpecialWriter(const ChromSizes& cSizes, BYTE dim, bool write, const string& name, const char* descr)
 		: OrderedData<int, SpecialWriter>(cSizes, dim, write, name, descr) {}
 
@@ -695,8 +694,8 @@ public:
 	void AddRegions(chrlen pos, BoundsValues& vals) { emplace(pos, move(vals)); }
 
 	// Fill instance with derivatives of splines
+	//	@param factor: 1 for direct reads, -1 for reversed ones
 	//	@param splines: splines from which derivatives are built
-	//void BuildDerivs(BYTE reverse, const ValuesMap& splines);
 	void BuildDerivs(int factor, const ValuesMap& splines);
 
 #ifdef MY_DEBUG
@@ -730,8 +729,8 @@ struct BS_PosVal
 {
 	BYTE	Reverse;
 	chrlen	GrpNumb;
-	coval	PointCount;
-	float	Score;
+	coval	PointCount = 0;
+	float	Score = 0;
 
 	// Constructor
 	//	@param reverse: 0 for firect, 1 for reverse
