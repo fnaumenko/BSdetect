@@ -785,8 +785,8 @@ public:
 	};
 
 	// Fills the instance with recognized binding sites
-	//	@param derivs[in]: derivatives
-	//	@param rCover[in]: read coverage
+	//	@param derivs: derivatives
+	//	@param rCover: read coverage
 	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover)
 	{
 		SetBounds(0, derivs.StrandData(POS), rCover.StrandData(POS));
