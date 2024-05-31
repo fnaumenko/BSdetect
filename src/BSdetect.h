@@ -69,7 +69,7 @@ public:
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		, _frag—overs(cSizes,	3,	saveCover,	outFName + "_frag", "fragment coverage")
+		, _frag—overs(cSizes, Glob::IsPE?1:3, saveCover, outFName + "_frag", "fragment coverage")
 		, _read—overs(cSizes,	2,	saveCover,	outFName + "_read"	, "read coverage")
 		, _rgns(cSizes,2-Glob::IsPE,saveInter,	outFName + ".RGNS"	, "potential regions")
 		, _splines	(cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
