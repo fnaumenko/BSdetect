@@ -76,7 +76,7 @@ public:
 		, _derivs	(cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
 #ifdef MY_DEBUG
 		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression")
-		, _splineWriter(cSizes,	1,	false,	outFName + ".FR_SPLINE", "fragment coverage spline")
+		, _splineWriter(cSizes,	1,	saveInter,	outFName + ".FR_SPLINE", "fragment coverage spline")
 #endif
 		, _bss		(cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
