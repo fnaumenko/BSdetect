@@ -45,7 +45,12 @@ public:
 
 	static void PrintMsg(eVerb level, const char* msg = NULL);
 
-	static void PrintMsgVar(eVerb level, const char* format, ...);
+	//static void PrintMsgVar(eVerb level, const char* format, ...);
+
+	template<typename... Args>
+	static void PrintMsgVar(eVerb level, const char* format, Args ... args) { 
+		if (Level(level)) printf(format, args...);
+	}
 
 	// Return true if given level is allowed
 	static bool Level(eVerb level) { return _level >= level; }
@@ -258,19 +263,12 @@ struct Incline
 
 	void Clear() { Deriv = 0; Pos = 0; }
 
-	bool operator != (const Incline& incl) const { return Pos != incl.Pos || TopPos != incl.TopPos;
-}
+	bool operator != (const Incline& incl) const { return Pos != incl.Pos || TopPos != incl.TopPos; }
 
 #ifdef MY_DEBUG
 	void Print() const { printf("%d %d, Deriv: %-2.2f\n", Pos, TopPos, Deriv); }
-#endif
-};
 
-class TreatedCover : public AccumCover
-{
-#ifdef MY_DEBUG
-	static OSpecialWriter* SplineWriter;	// spline writer to save local splines
-
+private:
 	class TxtOutFile
 	{
 		FILE* _file;
@@ -282,15 +280,26 @@ class TreatedCover : public AccumCover
 		void Write(const char* format, Args ... args) {	fprintf(_file, format, args...); }
 	};
 
-	shared_ptr<TxtOutFile> _fDdelim = nullptr;
+	static shared_ptr<TxtOutFile> OutFile;
+	static chrid cID;
+
+public:
+	static void SetOutFile(chrid cid, const char* fname) { cID = cid;  OutFile.reset(new TxtOutFile(fname)); }
+
+	void Write();
+#endif
+};
+
+class TreatedCover : public AccumCover
+{
+#ifdef MY_DEBUG
+	static OSpecialWriter* SplineWriter;	// spline writer to save local splines
 #endif
 
 public:
 #ifdef MY_DEBUG
 	static void SetSpecialWriter(OSpecialWriter& splineWriter) { SplineWriter = &splineWriter; }
 	static bool WriteDelim;
-
-	TreatedCover() { if(WriteDelim) _fDdelim.reset(new TxtOutFile("delim.txt")); }
 #endif
 	coval GetMaxVal() const;
 

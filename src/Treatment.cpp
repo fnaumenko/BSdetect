@@ -54,15 +54,15 @@ void Verb::PrintMsg(eVerb level, const char* msg)
 		else		printf("\n");
 }
 
-void Verb::PrintMsgVar(eVerb level, const char* format, ...)
-{
-	if (Level(level)) {
-		va_list argptr;
-		va_start(argptr, format);
-		vfprintf(stdout, format, argptr);
-		va_end(argptr);
-	}
-}
+//void Verb::PrintMsgVar(eVerb level, const char* format, ...)
+//{
+//	if (Level(level)) {
+//		va_list argptr;
+//		va_start(argptr, format);
+//		vfprintf(stdout, format, argptr);
+//		va_end(argptr);
+//	}
+//}
 
 #ifdef MY_DEBUG
 //===== OSpecialWriter
@@ -81,9 +81,23 @@ void OSpecialWriter::WriteIncline(BYTE reverse, chrlen start, coviter& itStop)
 	}
 	(_writers->_files)[reverse]->WriteIncline(_cID, start, k * ptCnt, float(itStop->second) / ptCnt);
 }
+
+//===== Incline
+
+shared_ptr<Incline::TxtOutFile> Incline::OutFile = nullptr;
+chrid Incline::cID;
+
+void Incline::Write()
+{
+	if (OutFile) {
+		IGVlocus locus(cID);
+		OutFile->Write("%1.3f\t%d\t%s\n", Deriv, Pos, locus.Print(Pos));
+	}
+}
 #endif
 
 //===== TreatedCover
+
 #ifdef MY_DEBUG
 OSpecialWriter* TreatedCover::SplineWriter = nullptr;
 bool TreatedCover::WriteDelim = false;
@@ -169,10 +183,7 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 	incline.TopPos = itStop->first;
 
 #ifdef MY_DEBUG
-	if (_fDdelim) {
-		IGVlocus locus(0);
-		_fDdelim->Write("%1.3f\t%d\t%s\n", incline.Deriv, incline.Pos, locus.Print(incline.Pos));
-	}
+	incline.Write();
 #endif
 }
 

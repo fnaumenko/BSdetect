@@ -187,6 +187,7 @@ void Detector::CallBS(chrid cID)
 #ifdef MY_DEBUG
 	_lineWriter.SetChromID(cID);	BoundsValues::SetSpecialWriter(_lineWriter);
 	_splineWriter.SetChromID(cID);	TreatedCover::SetSpecialWriter(_splineWriter);
+	//Incline::SetOutFile(cID, "incline.txt");
 #endif
 
 	if (Glob::FragLenUndef) {		// can be true for SE sequence only
