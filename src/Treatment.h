@@ -243,11 +243,9 @@ public:
 // as a resul of Linear Regression
 struct Incline
 {
-	chrlen	Pos;	// position of the incline on the x-axis (chromosome's position)
-	chrlen	TopPos;	// position of the top point of the incline
-	coval	PtCnt;	// number of points along which the incline was drawn
-	float	MaxDerVal;	// 
-	float	Deriv;	// derivative (tangent of the angle of incline)
+	chrlen	Pos;		// position of the incline on the x-axis (chromosome's position)
+	chrlen	TopPos;		// position of the top point of the incline
+	float	Deriv;		// derivative (tangent of the angle of incline)
 
 	bool Valid() const {
 		return
@@ -256,14 +254,13 @@ struct Incline
 			&& Deriv >= 0.01;	// too small angle is useless
 	}
 
-	void Clear() { Deriv = 0; PtCnt = Pos = 0; }
+	void Clear() { Deriv = 0; Pos = 0; }
 
-	bool Equal(const Incline& incl) const {	return (Pos == incl.Pos) && (TopPos == incl.TopPos); }
+	bool operator != (const Incline& incl) const { return Pos != incl.Pos || TopPos != incl.TopPos;
+}
 
 #ifdef MY_DEBUG
-	void Print() const {
-		printf("%d %d  cnt: %2d, derVal: %-2.2f\n", Pos, TopPos, PtCnt, MaxDerVal);
-	}
+	void Print() const { printf("%d %d, Deriv: %-2.2f\n", Pos, TopPos, Deriv); }
 #endif
 };
 
@@ -729,15 +726,13 @@ struct BS_PosVal
 {
 	BYTE	Reverse;
 	chrlen	GrpNumb;
-	coval	PointCount = 0;
-	float	Score = 0;
+	float	Score = 1;
 
 	// Constructor
 	//	@param reverse: 0 for firect, 1 for reverse
 	//	@param grpNumb: group number
 	//	@param incln: inclined line
-	BS_PosVal(BYTE reverse, chrlen grpNumb, const Incline& incln) :
-		Reverse(reverse), GrpNumb(grpNumb), PointCount(incln.PtCnt), Score(incln.Deriv * incln.MaxDerVal) {}
+	BS_PosVal(BYTE reverse, chrlen grpNumb) : Reverse(reverse), GrpNumb(grpNumb) {}
 };
 
 class BS_map : public map<chrlen, BS_PosVal>

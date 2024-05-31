@@ -145,9 +145,10 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 {
 	const int shift = op.Factor * itStop->first;
 	float sumX = 0, sumX2 = 0, sumY = 0, sumXY = 0;
+	coval PtCnt = 0;	// number of points along which the incline was drawn
 
 	incline.Clear();
-	for (; it != itStop; op.Next(it), incline.PtCnt++) {
+	for (; it != itStop; op.Next(it), PtCnt++) {
 		const int x = shift - op.Factor * it->first;
 		const coval y = op.GetPrev(it)->second;
 		sumX += x;
@@ -155,14 +156,14 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 		sumY += y;
 		sumXY += x * y;
 	}
-	if (incline.PtCnt < 2)	return;
+	if (PtCnt < 2)	return;
 
 	incline.Deriv = 
-		-(incline.PtCnt * sumXY - sumX * sumY) /		// numerator
-		(incline.PtCnt * sumX2 - sumX * sumX);		// denominator
+		-(PtCnt * sumXY - sumX * sumY) /	// numerator
+		(PtCnt * sumX2 - sumX * sumX);		// denominator
 	//angl = coeff * 180 / PI;	if (angl < 0) angl = -angl;
 
-	float x = (sumY + incline.Deriv * sumX) / (incline.PtCnt * incline.Deriv);
+	float x = (sumY + incline.Deriv * sumX) / (PtCnt * incline.Deriv);
 	incline.Pos = itStop->first - op.Factor * chrlen(round(x));
 	incline.TopPos = itStop->first;
 
@@ -789,9 +790,8 @@ void BoundsValues::PushIncline(
 		if (compare(it))	break;
 	}
 
-	incline.MaxDerVal = posVal.Val(reverse);
 	if (inclines.size()) {
-		if (!inclines.back().Equal(incline))	// skip duplicate incline
+		if (inclines.back() != incline)		// skip duplicate incline
 			inclines.push_back(incline);
 	}
 	else
@@ -907,10 +907,10 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 		// the inserted position can duplicate an already inserted right one; reduce it by 1
 		if (lastIt != end() && lastIt->first == pos)
 			--pos;
-		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb, incl));
+		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb));
 	}
 	else
-		emplace_hint(end(), pos, BS_PosVal(0, grpNumb, incl));
+		emplace_hint(end(), pos, BS_PosVal(0, grpNumb));
 }
 
 void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
@@ -1303,31 +1303,22 @@ void BS_map::PrintWidthDistrib() const
 
 void BS_map::Print(chrid cID, bool selected, chrlen stopPos) const
 {
-	const char* format[]{
-		//"%d %4d %c %c %s %5.2f %4d   %s\n",	// odd group numb to left
-		//"%d %-4d %c %c %s %5.2f %4d   %s\n"	// even group numb to right
-		"%d %4d %c %5.2f %4d   %s\n",	// odd group numb to left
-		"%d %-4d %c %5.2f %4d   %s\n"	// even group numb to right
-	};
+	string format = "%d % 4d  %c %5.2f   %s\n";
 	const char bound[]{ 'R','L' };
-	//const char reliable[]{ ' ','?' };
-	//const char* expand[]{ "   ","exp"};
 	IGVlocus locus(cID);
 
-	//printf("\npos\tgrp  brd exp score  pCnt  IGV view\n");
-	printf("\npos\tgrp  brd score  pCnt  IGV view\n");
+	printf("\npos\tgrp  bnd score  IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
-		if (!selected || x.second.Score)
-			printf(format[x.second.GrpNumb % 2],
-				x.first,
-				x.second.GrpNumb,
-				bound[x.second.Reverse],
-				//reliable[x.second.Unreliable],
-				//expand[x.second.BS_NegWidth],
-				x.second.Score,
-				x.second.PointCount, locus.Print(x.first)
-			);
+		if (selected && !x.second.Score)	continue;
+		format[4] = x.second.GrpNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
+		printf(format.c_str(),
+			x.first,
+			x.second.GrpNumb,
+			bound[x.second.Reverse],
+			x.second.Score,
+			locus.Print(x.first)
+		);
 	}
 }
 #endif // MY_DEBUG
