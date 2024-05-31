@@ -34,7 +34,7 @@ enum optValue {		// options id
 // BS detector
 class Detector
 {
-	ChromSizes& _cSizes;
+	ChromSizes&		 _cSizes;
 	bool			 _saveCover;
 	CombCover		 _frag—overs;		// extended reads cover to find frag Mean
 	CombCover		 _read—overs;
@@ -48,9 +48,9 @@ class Detector
 	OBS_Map			 _bss;
 
 	RBedReader* _file;		// needs only for input reading
-	FragIdent _fIdent;		// needs only for input reading
-	Reads	_reads;
-	Timer	_timer;
+	FragIdent	_fIdent;		// needs only for input reading
+	Reads		_reads;
+	Timer		_timer;
 
 	// Calculates the deviation from the default average fragment length
 	//	@param cID: current chromosome's ID
@@ -69,7 +69,6 @@ public:
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		//, _frag—overs(cSizes, Glob::IsPE ? 1 : 2+saveCover, saveCover, outFName + "_frag", "fragment coverage")
 		, _frag—overs(cSizes,	3,	saveCover,	outFName + "_frag", "fragment coverage")
 		, _read—overs(cSizes,	2,	saveCover,	outFName + "_read"	, "read coverage")
 		, _rgns(cSizes,2-Glob::IsPE,saveInter,	outFName + ".RGNS"	, "potential regions")
