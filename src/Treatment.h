@@ -22,9 +22,9 @@ Last modified: 05/31/2024
 using point = pair<chrlen, float>;
 using coviter = covmap::const_iterator;
 
-const fraglen FragDefLEN = 200;
-const coval CUTOFF_STRAND_EXT_RGN = 5;
-const uint16_t ReadSplineBASE = 10;	//half-length of moving window for reads spline
+const fraglen	FragDefLEN = 200;
+const coval		CUTOFF_STRAND_EXT_RGN = 5;
+const uint16_t	ReadSplineBASE = 10;	//half-length of moving window for reads spline
 
 // Message verbose level
 static class Verb

@@ -20,18 +20,18 @@ class IGVlocus
 	const string _chrom;
 	mutable char _buf[2 * 10 + 5 + 2];	// 2 * max position length + Chrom::MaxAbbrNameLength + 2 separators
 
-public:
-	IGVlocus(chrid cID) : _chrom(Chrom::AbbrName(cID)) {}
-
-	// Returns inner buffer
-	const char* Buff() const { return _buf; }
-
 	// Prints IGV locus to inner buffer
 	//	@return: the total number of characters written
 	chrlen NPrint(chrlen start, chrlen end) const
 	{
 		return sprintf(_buf, "%s:%d-%d", _chrom.c_str(), start - Glob::ROI_ext, end + Glob::ROI_ext);
 	}
+
+public:
+	IGVlocus(chrid cID) : _chrom(Chrom::AbbrName(cID)) {}
+
+	// Returns inner buffer
+	//const char* Buff() const { return _buf; }
 
 	// Prints IGV locus to inner buffer
 	//	@return: inner buffer
