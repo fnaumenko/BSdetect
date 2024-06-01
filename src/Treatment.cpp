@@ -746,7 +746,7 @@ OSpecialWriter* BoundsValues::LineWriter = nullptr;
 #endif
 
 void BoundsValues::PushIncline(
-	chrlen grpNumb,
+	chrlen rgnNumb,
 	BYTE reverse,
 	const TracedPosVal& posVal,
 	const TreatedCover& cover,
@@ -772,7 +772,7 @@ void BoundsValues::PushIncline(
 	cover.LinearRegr(itStart, itStop, opDir, incline);
 	if (!incline.Valid())	return;
 
-	//if (grpNumb == 21)	printf("> %d %d\n", int(reverse), itStop->first);
+	//if (rgnNumb == 21)	printf("> %d %d\n", int(reverse), itStop->first);
 	//if (lwriter.IsWriterSet()) {
 	//	auto it = itStop;
 	//	opInv.Next(it);
@@ -783,7 +783,7 @@ void BoundsValues::PushIncline(
 	Incline incline1{};
 	auto compare = [&](coviter& it) {
 		cover.LinearRegr(itStart, it, opDir, incline1);
-		//if (grpNumb == 21)	printf("$ %d %d\n", int(reverse), it->first);
+		//if (rgnNumb == 21)	printf("$ %d %d\n", int(reverse), it->first);
 		if (!incline1.Valid() || opDir.EqLess(incline.Pos, incline1.Pos))	return true;
 		std::swap(incline, incline1);
 		itStop = it;
@@ -912,7 +912,7 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 
 //===== BS_map
 
-void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
+void BS_map::AddPos(BYTE reverse, chrlen rgnNumb, const Incline& incl)
 {
 	// all positions are added in ascending order
 	chrlen pos = incl.Pos + StrandOps[reverse].Factor * Glob::ReadLen;
@@ -924,13 +924,13 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 		// the inserted position can duplicate an already inserted right one; reduce it by 1
 		if (lastIt != end() && lastIt->first == pos)
 			--pos;
-		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb));
+		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, rgnNumb));
 	}
 	else
-		emplace_hint(end(), pos, BS_PosVal(0, grpNumb));
+		emplace_hint(end(), pos, BS_PosVal(0, rgnNumb));
 }
 
-void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
+void BS_map::AddBounds(BYTE reverse, chrlen rgnNumb, vector<Incline>& inclines)
 {
 	if (!inclines.size())	return;
 	/*
@@ -938,32 +938,53 @@ void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 	left and right positions (bounds) are inserted in the same order
 	*/
 	sort(inclines.begin(), inclines.end(),
-		[](const Incline& i1, const Incline& i2) { return i1.Pos < i2.Pos; }
+		[&reverse](const Incline& i1, const Incline& i2) {
+			return StrandOps[reverse].Less(i1.Pos, i2.Pos);
+			//return i1.Pos < i2.Pos; 
+		}
 	);
-	auto it0 = inclines.cbegin();
+
+	auto it = inclines.cbegin();
+	AddPos(reverse, rgnNumb, *it);		// always add the first, steepest (tightest) incline
+	chrlen addedPos = it->TopPos;
+	for (it++; it != inclines.cend(); it++)
+		//if (it->TopPos <= addedPos) {
+		if (StrandOps[!reverse].EqLess(it->TopPos, addedPos)) {
+			AddPos(reverse, rgnNumb, *it);
+			addedPos = it->TopPos;
+		}
 
 	/*
-	filter out intersecting inclines - thus inserting only the best bounds
-	(the bounds formed by the steepest inclines) in the region
+	filter out intersecting inclines - thus inserting only the best bounds (formed by the steepest inclines)
 	*/
-	if (reverse) {
-		chrlen pos = it0->TopPos;
-		for (auto it = next(it0); it != inclines.cend(); it0++, it++) {
-			if (pos <= it->TopPos)
-				AddPos(reverse, grpNumb, *it0);
-			pos = it->TopPos;
-		}
-		AddPos(reverse, grpNumb, *prev(inclines.cend()));	// always add the last, steepest (tightest) incline
-	}
-	else {
-		chrlen pos = it0->Pos;
-		AddPos(reverse, grpNumb, *it0);		// always add the first, steepest (tightest) incline
-		for (auto it = next(it0); it != inclines.cend(); it++) {
-			if (pos <= it->TopPos)
-				AddPos(reverse, grpNumb, *it);
-			pos = it->TopPos;
-		}
-	}
+	//if (reverse) {
+	//	sort(inclines.begin(), inclines.end(),
+	//		[](const Incline& i1, const Incline& i2) { return i1.Pos > i2.Pos; }
+	//	);
+	//	
+	//	auto it = inclines.cbegin();
+	//	AddPos(reverse, rgnNumb, *it);		// always add the first, steepest (tightest) incline
+	//	chrlen addedPos = it->TopPos;
+	//	for (it++; it != inclines.cend(); it++)
+	//		if (it->TopPos <= addedPos) {
+	//			AddPos(reverse, rgnNumb, *it);
+	//			addedPos = it->TopPos;
+	//		}
+	//}
+	//else {
+	//	sort(inclines.begin(), inclines.end(),
+	//		[](const Incline& i1, const Incline& i2) { return i1.Pos < i2.Pos; }
+	//	);
+
+	//	auto it = inclines.cbegin();
+	//	AddPos(reverse, rgnNumb, *it);
+	//	chrlen addedPos = it->TopPos;
+	//	for (it++; it != inclines.cend(); it++)
+	//		if (it->TopPos >= addedPos) {
+	//			AddPos(reverse, rgnNumb, *it);
+	//			addedPos = it->TopPos;
+	//		}
+	//}
 }
 
 void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover)
@@ -1097,6 +1118,7 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 			auto len = vp[ind + reverse].Iter->first - vp[ind - !reverse].Iter->first;
 
 			for (chrlen i = 0; i < len; i++, shift++)
+			//for (chrlen i = 0; shift < vals.size() && i < len; i++, shift++)
 				score += vals[shift];
 			vp[ind].Iter->second.Score = score / len;
 		};

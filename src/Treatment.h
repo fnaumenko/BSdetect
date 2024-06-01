@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 05/31/2024
+Last modified: 06/01/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -68,7 +68,7 @@ struct StrandOp {
 	coviter (*RetNext)(coviter&);		// decrement/increment iterator (for direct/reversed)
 	coviter (*GetPrev)(const coviter&);	// returns prev/this iterator (for direct/reversed)
 	bool (*EqLess)(chrlen, chrlen);
-	//bool (*Less)(chrlen, chrlen);
+	bool (*Less)(chrlen, chrlen);
 };
 
 // strand-dependent operations: 0 - direct, 1 - reversed
@@ -78,14 +78,14 @@ static const StrandOp StrandOps[2]{
 	,[](coviter& it) { return --it; }
 	,[](const coviter& it) { return prev(it); }
 	,[](chrlen pos, chrlen lim) { return pos <= lim; }
-	//,[](chrlen pos, chrlen lim) { return pos < lim; }
+	,[](chrlen pos, chrlen lim) { return pos < lim; }
 	},
 	{ 1
 	,[](coviter& it) { it++; }
 	,[](coviter& it) { return ++it; }
 	,[](const coviter& it) { return it; }
 	,[](chrlen pos, chrlen lim) { return pos >= lim; }
-	//,[](chrlen pos, chrlen lim) { return pos > lim; }
+	,[](chrlen pos, chrlen lim) { return pos > lim; }
 	}
 };
 
@@ -390,7 +390,7 @@ public:
 		: _cover(cover), _chrFreq(chrFreq), _strand(strand)
 		, _file(fName, FT::eType::BGRAPH, &cSizes, 4, 0, eOInfo::LAC, Verb::Level(Verb::DBG), false, true)
 	{
-		Verb::PrintMsg(Verb::DBG, "\n");
+		Verb::PrintMsg(Verb::DBG);
 		_file.Pass(*this);
 	}
 
