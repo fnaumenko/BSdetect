@@ -217,12 +217,12 @@ void Detector::CallBS(chrid cID)
 	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
 	bss.Refine();
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
-	bss.Print(cID, true, false);
+	//bss.Print(cID, true, false);
 	bss.NormalizeBSwidth();
 #ifdef MY_DEBUG
 	//bss.Print(cID, true, false);
 	//bss.CheckScoreHierarchy();
-	//bss.PrintWidthDistrib();
+	bss.PrintWidthDistrib();
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);

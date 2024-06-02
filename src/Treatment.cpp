@@ -933,25 +933,31 @@ void BS_map::AddPos(BYTE reverse, chrlen rgnNumb, const Incline& incl)
 void BS_map::AddBounds(BYTE reverse, chrlen rgnNumb, vector<Incline>& inclines)
 {
 	if (!inclines.size())	return;
-	/*
-	now all inclines are sorted in ascending order;
-	left and right positions (bounds) are inserted in the same order
-	*/
+
+	// sort inclines by ascending (for forward) / descending (for reverde) reference positions
 	sort(inclines.begin(), inclines.end(),
 		[&reverse](const Incline& i1, const Incline& i2) {
 			return StrandOps[reverse].Less(i1.Pos, i2.Pos);
 		}
 	);
 
-	/*
-	filter out intersecting inclines - thus inserting only the best bounds (formed by the steepest inclines)
-	*/
+	// find permissible derivative limit
+	float limDeriv = 0;
+	for (const auto& i : inclines)
+		limDeriv += i.Deriv;
+	limDeriv /= inclines.size();
+	limDeriv *= 0.15;
+
+	// *** Intersection Filter & Insignificant Incline Filter:
+	// insert only the best bounds (formed by the steepest inclines), and with a significant derivative
 	auto it = inclines.cbegin();
 	chrlen addedPos = it->TopPos;
 
 	AddPos(reverse, rgnNumb, *it);		// definitely add the first, steepest (tightest) incline
 	for (it++; it != inclines.cend(); it++)
-		if (StrandOps[!reverse].EqLess(it->TopPos, addedPos)) {
+		if (StrandOps[!reverse].EqLess(it->TopPos, addedPos)
+		&& it->Deriv > limDeriv)	
+		{
 			AddPos(reverse, rgnNumb, *it);
 			addedPos = it->TopPos;
 		}
