@@ -84,7 +84,7 @@ void OSpecialWriter::WriteIncline(BYTE reverse, chrlen start, coviter& itStop)
 
 //===== Incline
 
-shared_ptr<Incline::TxtOutFile> Incline::OutFile = nullptr;
+shared_ptr<TxtOutFile> Incline::OutFile = nullptr;
 chrid Incline::cID;
 
 void Incline::Write()
@@ -754,10 +754,10 @@ void BoundsValues::PushIncline(
 
 ) const
 {
-	const StrandOp& opDir = StrandOps[reverse];		// direct operations
+	const StrandOp& opDir = StrandOps[reverse];		// forward operations
 	const StrandOp& opInv = StrandOps[!reverse];	// inversed operations
-	auto itStart = opDir.GetPrev(cover.upper_bound(posVal.Pos(0)));	// min val: right for direct, left for reverse
-	auto itStop = itStart;									// max val: left for direct, right for reverse
+	auto itStart = opDir.GetPrev(cover.upper_bound(posVal.Pos(0)));	// min val: right for forward, left for reverse
+	auto itStop = itStart;									// max val: left for forward, right for reverse
 
 	// *** set itStop
 	if (reverse)	for (itStop++; itStop->first < posVal.Pos(1); itStop++);
@@ -821,7 +821,7 @@ void BoundsValues::PushIncline(
 #endif
 }
 
-void BoundsValues::CollectDirectInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
+void BoundsValues::CollectForwardInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
 {
 	TracedPosVal posVal;
 	for (auto it = rbegin(); it != rend(); it++) {		// loop through one region
@@ -940,51 +940,21 @@ void BS_map::AddBounds(BYTE reverse, chrlen rgnNumb, vector<Incline>& inclines)
 	sort(inclines.begin(), inclines.end(),
 		[&reverse](const Incline& i1, const Incline& i2) {
 			return StrandOps[reverse].Less(i1.Pos, i2.Pos);
-			//return i1.Pos < i2.Pos; 
 		}
 	);
-
-	auto it = inclines.cbegin();
-	AddPos(reverse, rgnNumb, *it);		// always add the first, steepest (tightest) incline
-	chrlen addedPos = it->TopPos;
-	for (it++; it != inclines.cend(); it++)
-		//if (it->TopPos <= addedPos) {
-		if (StrandOps[!reverse].EqLess(it->TopPos, addedPos)) {
-			AddPos(reverse, rgnNumb, *it);
-			addedPos = it->TopPos;
-		}
 
 	/*
 	filter out intersecting inclines - thus inserting only the best bounds (formed by the steepest inclines)
 	*/
-	//if (reverse) {
-	//	sort(inclines.begin(), inclines.end(),
-	//		[](const Incline& i1, const Incline& i2) { return i1.Pos > i2.Pos; }
-	//	);
-	//	
-	//	auto it = inclines.cbegin();
-	//	AddPos(reverse, rgnNumb, *it);		// always add the first, steepest (tightest) incline
-	//	chrlen addedPos = it->TopPos;
-	//	for (it++; it != inclines.cend(); it++)
-	//		if (it->TopPos <= addedPos) {
-	//			AddPos(reverse, rgnNumb, *it);
-	//			addedPos = it->TopPos;
-	//		}
-	//}
-	//else {
-	//	sort(inclines.begin(), inclines.end(),
-	//		[](const Incline& i1, const Incline& i2) { return i1.Pos < i2.Pos; }
-	//	);
+	auto it = inclines.cbegin();
+	chrlen addedPos = it->TopPos;
 
-	//	auto it = inclines.cbegin();
-	//	AddPos(reverse, rgnNumb, *it);
-	//	chrlen addedPos = it->TopPos;
-	//	for (it++; it != inclines.cend(); it++)
-	//		if (it->TopPos >= addedPos) {
-	//			AddPos(reverse, rgnNumb, *it);
-	//			addedPos = it->TopPos;
-	//		}
-	//}
+	AddPos(reverse, rgnNumb, *it);		// definitely add the first, steepest (tightest) incline
+	for (it++; it != inclines.cend(); it++)
+		if (StrandOps[!reverse].EqLess(it->TopPos, addedPos)) {
+			AddPos(reverse, rgnNumb, *it);
+			addedPos = it->TopPos;
+		}
 }
 
 void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover)
@@ -992,7 +962,7 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines) const;
 	tSetBSpos fcollectInclines = reverse ?
 		&BoundsValues::CollectReverseInclines :
-		&BoundsValues::CollectDirectInclines;
+		&BoundsValues::CollectForwardInclines;
 	vector<Incline> inclines;
 	inclines.reserve(4);
 
@@ -1006,7 +976,7 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 void BS_map::Refine()
 {
 	/*
-	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by direct reads
+	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by forward reads
 
 	Options for placing bounds in a region:
 	canonical:					[[L] [R]]
@@ -1091,7 +1061,7 @@ void BS_map::Refine()
 }
 
 const BYTE L = 1;	// left bound: is formed by reversed reads
-const BYTE R = 0;	// right bound: is formed by direct reads
+const BYTE R = 0;	// right bound: is formed by forward reads
 
 void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 {
@@ -1118,7 +1088,6 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 			auto len = vp[ind + reverse].Iter->first - vp[ind - !reverse].Iter->first;
 
 			for (chrlen i = 0; i < len; i++, shift++)
-			//for (chrlen i = 0; shift < vals.size() && i < len; i++, shift++)
 				score += vals[shift];
 			vp[ind].Iter->second.Score = score / len;
 		};
@@ -1262,7 +1231,7 @@ void BS_map::PrintStat() const
 	std::printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
 	ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
 	std::printf("reverse\t%2.2f (%3d)   %2.2f (%3d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
-	std::printf("direct\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
+	std::printf("forward\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
 
 	std::printf("\n");
 }
@@ -1339,24 +1308,42 @@ void BS_map::PrintWidthDistrib() const
 	std::printf("average %s: %.2f\n", length, float(totalLen) / bsNumb);
 }
 
-void BS_map::Print(chrid cID, bool selected, chrlen stopPos) const
+void BS_map::Print(chrid cID, bool save, bool selected, chrlen stopPos) const
 {
 	string format = "%d % 4d  %c %5.2f   %s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
-	printf("\npos\trgn  bnd score  IGV view\n");
-	for (const auto& x : *this) {
-		if (stopPos && x.first > stopPos)	break;
-		if (selected && !x.second.Score)	continue;
-		format[4] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
-		printf(format.c_str(),
-			x.first,
-			x.second.RgnNumb,
-			bound[x.second.Reverse],
-			x.second.Score,
-			locus.Print(x.first)
-		);
+	if (save) {
+		TxtOutFile file("BSS.txt");
+		file.Write("pos\trgn  bnd score  IGV view\n");
+		for (const auto& x : *this) {
+			if (stopPos && x.first > stopPos)	break;
+			if (selected && !x.second.Score)	continue;
+			format[4] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
+			file.Write(format.c_str(),
+				x.first,
+				x.second.RgnNumb,
+				bound[x.second.Reverse],
+				x.second.Score,
+				locus.Print(x.first)
+			);
+		}
+	}
+	else {
+		printf("\npos\trgn  bnd score  IGV view\n");
+		for (const auto& x : *this) {
+			if (stopPos && x.first > stopPos)	break;
+			if (selected && !x.second.Score)	continue;
+			format[4] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
+			printf(format.c_str(),
+				x.first,
+				x.second.RgnNumb,
+				bound[x.second.Reverse],
+				x.second.Score,
+				locus.Print(x.first)
+			);
+		}
 	}
 }
 #endif // MY_DEBUG
@@ -1482,7 +1469,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 		LineAddUInts(start->first, end->first, bsNumb, true);
 		LineAddFloat(start->second.Score, true);		// BS score
 		LineAddChars(delims, reclen(strlen(delims)), false);
-		LineAddFloat(end->second.Score, false);			// reverse/direct ratio
+		LineAddFloat(end->second.Score, false);			// reverse/forward ratio
 		LineToIOBuff(offset);
 
 		addExtraLines(VP[R]);

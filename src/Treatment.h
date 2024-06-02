@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/01/2024
+Last modified: 06/02/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -63,15 +63,15 @@ private:
 } verb;
 
 struct StrandOp {
-	int Factor;							// 1 for direct reads, -1 for reversed ones
-	void (*Next)(coviter&);				// decrement/increment iterator (for direct/reversed)
-	coviter (*RetNext)(coviter&);		// decrement/increment iterator (for direct/reversed)
-	coviter (*GetPrev)(const coviter&);	// returns prev/this iterator (for direct/reversed)
+	int Factor;							// 1 for forward reads, -1 for reversed ones
+	void (*Next)(coviter&);				// decrement/increment iterator (for forward/reversed)
+	coviter (*RetNext)(coviter&);		// decrement/increment iterator (for forward/reversed)
+	coviter (*GetPrev)(const coviter&);	// returns prev/this iterator (for forward/reversed)
 	bool (*EqLess)(chrlen, chrlen);
 	bool (*Less)(chrlen, chrlen);
 };
 
-// strand-dependent operations: 0 - direct, 1 - reversed
+// strand-dependent operations: 0 - forward, 1 - reversed
 static const StrandOp StrandOps[2]{
 	{-1	
 	,[](coviter& it) { it--; }
@@ -170,7 +170,7 @@ public:
 	//	@param cID: chrom's ID
 	//	@param start: start (left) position
 	//	@param ptCnt: number of points in incline
-	//	@param shift: shift of value at each point of the incline: if < 0 then direct (positive) line, otherwise reversed (negative) one
+	//	@param shift: shift of value at each point of the incline: if < 0 then forward (positive) line, otherwise reversed (negative) one
 	void WriteIncline(chrid cID, chrlen start, chrlen ptCnt, float shift)
 	{
 		WriteFixStepLine(cID, start + 1, ptCnt, shift);	// +1 to match "0-start, half-open" coordinates used by bedGraph format
@@ -218,6 +218,19 @@ public:
 	{
 		(_writers->_files)[TOTAL]->WriteChromData(_cID, start, vals);
 	}
+};
+
+//===== TXT FILE AS DUMP
+
+class TxtOutFile
+{
+	FILE* _file;
+public:
+	TxtOutFile(const char* name) { _file = fopen(name, "w"); }
+	~TxtOutFile() { fclose(_file); }
+
+	template<typename... Args>
+	void Write(const char* format, Args ... args) { fprintf(_file, format, args...); }
 };
 
 #endif	// MY_DEBUG
@@ -269,17 +282,6 @@ struct Incline
 	void Print() const { printf("%d %d, Deriv: %-2.2f\n", Pos, TopPos, Deriv); }
 
 private:
-	class TxtOutFile
-	{
-		FILE* _file;
-	public:
-		TxtOutFile(const char* name) { _file = fopen(name, "w"); }
-		~TxtOutFile() { fclose(_file); }
-
-		template<typename... Args>
-		void Write(const char* format, Args ... args) {	fprintf(_file, format, args...); }
-	};
-
 	static shared_ptr<TxtOutFile> OutFile;
 	static chrid cID;
 
@@ -629,13 +631,13 @@ class BoundsValues : public vector<BoundValues>
 
 		// Set start/end positions and values by cover iterator, and merge successive raises
 		//	@param reverse: 0 for firect, 1 for reverse
-		//	@param it: direct/reverse cover iterator
+		//	@param it: forward/reverse cover iterator
 		template<typename T>
 		void Set(BYTE reverse, T it)
 		{
 			// set positions & values
-			_pos[!reverse] = it->Start();	// start: right for direct, left for reverse
-			_pos[reverse] = it->End();		// end: left for direct, right for reverse
+			_pos[!reverse] = it->Start();	// start: right for forward, left for reverse
+			_pos[reverse] = it->End();		// end: left for forward, right for reverse
 			it->GetValues(_val);
 			// merge successive raises
 			if (_val0[reverse] && _val[!reverse] / _val0[reverse] >= 0.9)
@@ -675,10 +677,10 @@ public:
 	//using rIter = vector<ValuesMap>::reverse_iterator;
 	//typedef vector<ValuesMap>::iterator iter_type;
 
-	// Collects direct inclined lines
+	// Collects forward inclined lines
 	//	@param rCover[in]: read coverage
-	//	@param inclines[out]: filled collection of direct inclined lines
-	void CollectDirectInclines	(const TreatedCover& cover, vector<Incline>& inclines) const;
+	//	@param inclines[out]: filled collection of forward inclined lines
+	void CollectForwardInclines	(const TreatedCover& cover, vector<Incline>& inclines) const;
 
 	// Collects reversed inclined lines
 	//	@param rCover[in]: read coverage
@@ -704,7 +706,7 @@ public:
 	void AddRegions(chrlen pos, BoundsValues& vals) { emplace(pos, move(vals)); }
 
 	// Fill instance with derivatives of splines
-	//	@param factor: 1 for direct reads, -1 for reversed ones
+	//	@param factor: 1 for forward reads, -1 for reversed ones
 	//	@param splines: splines from which derivatives are built
 	void BuildDerivs(int factor, const ValuesMap& splines);
 
@@ -766,7 +768,7 @@ private:
 	// Inserts BS positions (left/right bounds)
 	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
 	//	@param rgnNumb: potential region number
-	//	@param inclines: direct/reversed (right/left) inclined lines
+	//	@param inclines: forward/reversed (right/left) inclined lines
 	void AddBounds(BYTE reverse, chrlen rgnNumb, vector<Incline>& inclines);
 
 	// Fills the instance with recognized left/right BS positions (bounds)
@@ -812,7 +814,7 @@ public:
 	template<typename F>
 	void DoExtend(F&& lambda)
 	{
-		vector<PosValue> VP[2];	// 0 - direct, 1 - reversed
+		vector<PosValue> VP[2];	// 0 - forward, 1 - reversed
 
 		VP[0].reserve(4), VP[1].reserve(4);
 		for (auto it = begin(); it != end(); it++)
@@ -853,9 +855,10 @@ public:
 	void PrintWidthDistrib() const;
 
 	// Prints positions
+	//	@param save: if true then save to file
 	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 
-	void Print(chrid cID, bool selected, chrlen stopPos = 0) const;
+	void Print(chrid cID, bool save, bool selected, chrlen stopPos = 0) const;
 #endif
 };
 

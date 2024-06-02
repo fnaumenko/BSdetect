@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 05/31/2024
+Last modified: 06/02/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -92,7 +92,7 @@ public:
 
 	// Pre-covered data constructor
 	//	@param fCover_fName: fragment coverage file name
-	//	@param rCoverPos_fName: direct read coverage file name
+	//	@param rCoverPos_fName: forward read coverage file name
 	//	@param rCoverNeg_fName: reversed read coverage file name
 	//	@param outFName: common output file name
 	//	@param cSizes: chrom sizes

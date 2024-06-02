@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 05/31/2024
+Last modified: 06/02/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -44,7 +44,7 @@ Options::Option Options::List[] = {
 	{ 'c',Chrom::Abbr,tOpt::NONE,tNAME,	gOTHER,	NO_DEF, 0, 0, NULL, "treat specified chromosome only", NULL },
 	{ 'd',"dup-lvl",tOpt::OBLIG,	tINT,	gOTHER,	1, 0, 2, NULL,
 	"duplicate reads rejection level:\n-1 - keep all duplicates, 1 - keep one among duplicates, 2 - keep two among duplicates", NULL },
-	{ 'F',"fr-len",	tOpt::NONE,	tINT,	gOTHER, vUNDEF, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]", NULL },
+	{ 'f',"fr-len",	tOpt::NONE,	tINT,	gOTHER, vUNDEF, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]", NULL },
 	{ 's',"save-cover",tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save coverage", NULL },
 	{ 'i',"save-inter",tOpt::HIDDEN,tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save intermediate data", NULL },
 	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL,
@@ -57,7 +57,7 @@ Options::Option Options::List[] = {
 	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrVersion, NULL },
 	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrUsage, NULL },
 
-	{ 'D', "read-cover-dir",	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "direct read coverage file", NULL},
+	{ 'F', "read-cover-frw",	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "forward read coverage file", NULL},
 	{ 'R', "read-cover-rev",	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "reversed read coverage file", NULL},
 	{ 'm', "smode",	tOpt::NONE,	tENUM,	gOTHER, 0, 0, ArrCnt(smodes), (char*)smodes,
 	"sequencing mode: ? - single end, ? - paired end", NULL },
@@ -217,10 +217,10 @@ void Detector::CallBS(chrid cID)
 	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
 	bss.Refine();
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
+	bss.Print(cID, true, false);
 	bss.NormalizeBSwidth();
 #ifdef MY_DEBUG
-	//bss.Print(cID, false, 5005000);
-	//bss.Print(cID, false);
+	//bss.Print(cID, true, false);
 	//bss.CheckScoreHierarchy();
 	//bss.PrintWidthDistrib();
 #endif
