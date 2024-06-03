@@ -855,10 +855,10 @@ public:
 	void PrintWidthDistrib() const;
 
 	// Prints positions
-	//	@param save: if true then save to file
+	//	@param outFName: name of file to print, or NULL to print to console
 	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 
-	void Print(chrid cID, bool save, bool selected, chrlen stopPos = 0) const;
+	void Print(chrid cID, const char* outFName, bool selected, chrlen stopPos = 0) const;
 #endif
 };
 

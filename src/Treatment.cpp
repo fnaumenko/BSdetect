@@ -946,7 +946,7 @@ void BS_map::AddBounds(BYTE reverse, chrlen rgnNumb, vector<Incline>& inclines)
 	for (const auto& i : inclines)
 		limDeriv += i.Deriv;
 	limDeriv /= inclines.size();
-	limDeriv *= 0.15;
+	limDeriv *= 0.15F;
 
 	// *** Intersection Filter & Insignificant Incline Filter:
 	// insert only the best bounds (formed by the steepest inclines), and with a significant derivative
@@ -1033,6 +1033,7 @@ void BS_map::Refine()
 		}
 	};
 
+	// refine
 	for (auto it = begin(); it != end(); it++)
 	{
 		const bool newRgn = rgnNumb != it->second.RgnNumb;
@@ -1314,14 +1315,14 @@ void BS_map::PrintWidthDistrib() const
 	std::printf("average %s: %.2f\n", length, float(totalLen) / bsNumb);
 }
 
-void BS_map::Print(chrid cID, bool save, bool selected, chrlen stopPos) const
+void BS_map::Print(chrid cID, const char* outFName, bool selected, chrlen stopPos) const
 {
 	string format = "%d % 4d  %c %5.2f   %s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
-	if (save) {
-		TxtOutFile file("BSS.txt");
+	if (outFName) {
+		TxtOutFile file(outFName);
 		file.Write("pos\trgn  bnd score  IGV view\n");
 		for (const auto& x : *this) {
 			if (stopPos && x.first > stopPos)	break;
