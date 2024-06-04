@@ -921,13 +921,17 @@ void BS_map::AddPos(BYTE reverse, chrlen rgnNumb, const Incline& incl)
 
 		// find the iterator that will follow the inserted element
 		for (; lastIt != end() && lastIt->first < pos; lastIt++);
+
 		// the inserted position can duplicate an already inserted right one; reduce it by 1
 		if (lastIt != end() && lastIt->first == pos)
 			--pos;
 		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, rgnNumb));
+		_lastIt->second.RefPos = _lastIt->first;
 	}
-	else
-		emplace_hint(end(), pos, BS_PosVal(0, rgnNumb));
+	else {
+		auto it = emplace_hint(end(), pos, BS_PosVal(0, rgnNumb));
+		it->second.RefPos = it->first;
+	}
 }
 
 void BS_map::AddBounds(BYTE reverse, chrlen rgnNumb, vector<Incline>& inclines)
@@ -979,6 +983,34 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 	}
 }
 
+const short MIN_BS_WIDTH = 5;
+
+// Fits the BS width to a minimum by adjusting the BS reference positions
+//	@param start: BS iterator pointed to base left bound 
+//	@param end: BS iterator pointed to base right bound
+//	@param len: basic BS width
+void FitToMinWidth(BS_map::iter& start, BS_map::iter& end, short len)
+{
+	const auto diff = MIN_BS_WIDTH - len;
+	auto Expand = [](const BS_map::iter& it, chrlen newPos) {
+		if (it->first != newPos)	it->second.RefPos = newPos;
+	};
+
+	Expand(start, start->first - diff / 2);
+	Expand(end, end->first + diff / 2 + diff % 2);
+};
+
+void BS_map::ExtendNarrowWidths()
+{
+	DoBasic([&](iter& start, iter& end) {
+		if (start->second.RgnNumb != end->second.RgnNumb)	return;
+
+		const auto len = short(end->first - start->first);
+		if (len < MIN_BS_WIDTH)
+			FitToMinWidth(start, end, len);
+		});
+}
+
 void BS_map::Refine()
 {
 	/*
@@ -992,79 +1024,84 @@ void BS_map::Refine()
 	Method brings the instance to canonical form, resetting the score of all extra elements to zero,
 	and marking BSs with 'negative' width.
 	*/
-
-	auto lastExtraRight_it = end();	// iterator pointing to the last Right entry that starts the region 
-	uint16_t extraRightCnt = 0;		// count of Right entry that starts the region
-	uint16_t extraLeftCnt = 0;		// count of Left entry that ends the region
+	auto lastExtRight_it = end();	// iterator pointing to the last Right entry that starts the region 
+	uint16_t extRightCnt = 0;		// count of Right entries (that starts the region)
+	uint16_t extLeftCnt = 0;		// count of Left entries (that ends the region)
 	bool newBS = true;				// if true then new BS in the region is registered
-	bool raisedLeft = false;		// if true then at least one Left entry in the region is processed
 	bool someBS = false;			// if true then at least one BS in the region is registered
 	chrlen rgnNumb = 1;
 
-	// resets extra ('false') entries
-	//	@param it: iterator pointing to the first extra entry
-	//	@param entryCnt: count of extra entries which should be reset; becomes zero
-	//	@returns: iterator pointing to the first non-extra entry
-	auto ResetExtraEntries = [&](iter& it, uint16_t& entryCnt) {
-		for (; entryCnt && it != end(); entryCnt--, --it)
-			it->second.Score = 0;
-		return it;
-	};
+	// resets left and right extra entries
+	auto ResetAllExtEntries = [&](iter it) {
+		// resets left or right extra ('false') entries
+		//	@param it: iterator pointing to the first extra entry
+		//	@param entryCnt: count of extra entries which should be reset; becomes zero
+		//	@returns: iterator pointing to the first non-extra entry
+		auto ResetExtEntries = [&](iter& it, uint16_t& entryCnt) {
+			for (; entryCnt && it != end(); entryCnt--, --it)
+				it->second.Score = 0;
+			return it;
+		};
 
-	// reset right and left extra entries
-	auto ResetBothExtraEntries = [&](iter it) {
-		// reset extra right entries
-		if (lastExtraRight_it != end()) {
+		// *** reset extra right entries
+		if (lastExtRight_it != end()) {
 			if (someBS)
-				ResetExtraEntries(lastExtraRight_it, extraRightCnt);
-			else {		// 'negative' BS width
-				lastExtraRight_it->second.Reverse = true;					// change 'right' bound to 'left'
-				ResetExtraEntries(--lastExtraRight_it, --extraRightCnt);	// reset other extra entries
+				ResetExtEntries(lastExtRight_it, extRightCnt);
+			else {		// ** 'negative' BS width
+				lastExtRight_it->second.Reverse = true;				// change 'right' bound to 'left'
+				ResetExtEntries(--lastExtRight_it, --extRightCnt);	// reset other extra entries
 			}
-			lastExtraRight_it = end();
+			lastExtRight_it = end();
 		}
-		// reset extra left entries
+		// *** reset extra left entries
 		if (someBS)
-			ResetExtraEntries(--it, extraLeftCnt);
-		else {			// 'negative' BS width
-			auto bs1 = ResetExtraEntries(it, --extraLeftCnt);	// reset other extra entries
-			if (bs1 != end())
-				bs1->second.Reverse = false;					// change 'left' bound to 'right
+			ResetExtEntries(--it, extLeftCnt);
+		else {			// ** 'negative' BS width
+			auto itR = ResetExtEntries(--it, --extLeftCnt);	// reset other extra entries
+			if (itR != end()) {
+				itR->second.Reverse = false;				// change 'left' bound to 'right
+
+				// decrease the width of the updated BS if needed
+				auto itL = prev(itR);
+				auto len = short(itR->first - itL->first);
+				if (len > MIN_BS_WIDTH)
+					FitToMinWidth(itL, itR, len);
+			}
 		}
 	};
 
-	// refine
+	// *** refine
 	for (auto it = begin(); it != end(); it++)
 	{
 		const bool newRgn = rgnNumb != it->second.RgnNumb;
-
 		if (newRgn) {
 			// 'close' previous region
-			ResetBothExtraEntries(it);	// set extraRightCnt to zero
+			ResetAllExtEntries(it);
 			// reset current region
-			if (!newBS)		newBS = true;
-			rgnNumb = it->second.RgnNumb;
-			raisedLeft = someBS = false;
+			newBS = rgnNumb = it->second.RgnNumb;
+			someBS = extLeftCnt = extRightCnt = 0;
 		}
 
 		if (it->second.Reverse) {	// Left bound
-			extraLeftCnt++;
-			raisedLeft = true;
+			extLeftCnt++;
 			newBS = false;
 		}
 		else {						// Right bound
-			if (newBS && !extraLeftCnt)
-				if (!extraRightCnt || !newRgn)
-					lastExtraRight_it = it;
-			extraLeftCnt = 0;
-			if (raisedLeft)
+			if (newBS && !extLeftCnt)
+				if (!extRightCnt || !newRgn)
+					lastExtRight_it = it;
+			if (extLeftCnt)
 				someBS = true;
 			else
-				extraRightCnt++;
+				extRightCnt++;
+			extLeftCnt = 0;
 		}
 	}
 	// 'close' last region
-	ResetBothExtraEntries(end());
+	ResetAllExtEntries(end());
+
+	// *** extend narrows
+	ExtendNarrowWidths();
 }
 
 const BYTE L = 1;	// left bound: is formed by reversed reads
@@ -1084,15 +1121,15 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 		const auto& itEnd = VP[R].back().Iter;
 		if (itStart->second.RgnNumb != itEnd->second.RgnNumb)	return;
 
-		chrlen	startPos = itStart->first;
-		cover.SetLocalSpline(spliner, startPos, itEnd->first, vals);
+		chrlen	startPos = itStart->second.RefPos;
+		cover.SetLocalSpline(spliner, startPos, itEnd->second.RefPos, vals);
 
 		// *** set score
 
 		// set score for the BS extention
 		auto setExtScore = [&vals](BYTE reverse, const vector<PosValue>& vp, USHORT shift, BYTE ind) {
 			float score = 0;
-			auto len = vp[ind + reverse].Iter->first - vp[ind - !reverse].Iter->first;
+			auto len = vp[ind + reverse].Iter->second.RefPos - vp[ind - !reverse].Iter->second.RefPos;
 
 			for (chrlen i = 0; i < len; i++, shift++)
 				score += vals[shift];
@@ -1102,22 +1139,22 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 		USHORT shift;
 		{	// left BS extentions
 			const auto& vp = VP[L];
-			shift = USHORT(vp.front().Iter->first - startPos);
+			shift = USHORT(vp.front().Iter->second.RefPos - startPos);
 			const BYTE vpLen = BYTE(vp.size() - 1);
 			for (BYTE i = 0; i < vpLen; i++)			// left to right
 				setExtScore(L, vp, shift, i);
 		}
 		{	// right BS extentions
 			const auto& vp = VP[R];
-			shift = USHORT(vp.back().Iter->first - startPos);
+			shift = USHORT(vp.back().Iter->second.RefPos - startPos);
 			for (BYTE i = BYTE(vp.size() - 1); i; i--)	// right to left
 				setExtScore(R, vp, shift, i);
 		}
 		// base BS
 		const auto& itStartBS = VP[L].back().Iter;
 		const auto& itEndBS = VP[R].front().Iter;
-		shift = itStartBS->first - startPos;
-		const auto len = USHORT(itEndBS->first - itStartBS->first);
+		shift = itStartBS->second.RefPos - startPos;
+		const auto len = USHORT(itEndBS->second.RefPos - itStartBS->second.RefPos);
 		float score = 0;
 
 		for (USHORT i = 0; i < len; i++, shift++)
@@ -1135,37 +1172,6 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 			x.second.Score /= maxScore;
 }
 
-void BS_map::NormalizeBSwidth()
-{
-	const BYTE MIN_BS_WIDTH = 5;
-	vector<BS_map::iter> toErase;
-	toErase.reserve(10);
-
-	// accumulate and expand narrow BSs
-	DoBasic([&](iter& start, iter& end) {
-		if (start->second.RgnNumb != end->second.RgnNumb)	return;
-		// treat one region
-		const fraglen len = end->first - start->first;
-
-		if (len < MIN_BS_WIDTH) {
-			const auto diff = BYTE(MIN_BS_WIDTH - len);
-			auto Expand = [&](const iter& it, chrlen newPos, const iter&& itHint) {
-				if (it->first != newPos) {
-					emplace_hint(itHint, newPos, it->second);
-					toErase.push_back(it);
-				}
-			};
-
-			Expand(start, start->first - diff / 2, move(start));
-			Expand(end, end->first + diff / 2 + diff % 2, next(start));
-		}
-		});
-
-	// erase narrow BS bounds
-	for (auto i = toErase.size(); i; erase(toErase[--i]));	// reverse bypass
-	//for (auto i = toErase.size(); i; (toErase[--i])->second.Score = 0);	// reverse bypass
-}
-
 void BS_map::PrintStat() const
 {
 	if (Verb::StrictLevel(Verb::CRIT))	return;
@@ -1181,7 +1187,7 @@ void BS_map::PrintStat() const
 	DoBasic([&](citer& start, citer& end) {
 		++bsNumb;
 		if (stat) {
-			const fraglen len = end->first - start->first;
+			const fraglen len = end->second.RefPos - start->second.RefPos;
 
 			if (minLen > len)		minLen = len, minNumb = bsNumb;
 			else if (maxLen < len)	maxLen = len, maxNumb = bsNumb;
@@ -1198,8 +1204,7 @@ void BS_map::PrintStat() const
 				if (minPosRatio > val)		minPosRatio = val, minPosNumb = bsNumb;
 				else if (maxPosRatio < val)	maxPosRatio = val, maxPosNumb = bsNumb;
 		}
-		}
-	);
+		});
 	if (stat)	std::printf("\n");
 	std::printf("BS count: %d\n", bsNumb);
 	if (!bsNumb || !stat) return;
@@ -1208,7 +1213,7 @@ void BS_map::PrintStat() const
 	vector<chrlen> minLenNumbers, maxLenNumbers;
 	bsNumb = 0;
 	DoBasic([&](citer& start, citer& end) {
-		const fraglen len = end->first - start->first;
+		const fraglen len = end->second.RefPos - start->second.RefPos;
 		++bsNumb;
 		if (len == minLen)
 			minLenNumbers.push_back(bsNumb);
@@ -1276,7 +1281,7 @@ void BS_map::CheckScoreHierarchy()
 			else val = vp[i].Val;
 		// print of excess over basic score
 		if (prNeg || prPos) {
-			issues = printf("%4d  %d\t", bsNumb, VP[L].back().Iter->first);	// start position
+			issues = printf("%4d  %d\t", bsNumb, VP[L].back().Iter->second.RefPos);	// start position
 			if (prNeg)	prVals(false, '-', VP[L]);
 			if (prPos)	prVals(prNeg, '+', VP[R]);
 			printf("\n");
@@ -1294,7 +1299,7 @@ void BS_map::PrintWidthDistrib() const
 
 	// collect numbers
 	DoBasic([&](citer& start, citer& end) {
-		auto len = fraglen(end->first - start->first);
+		auto len = fraglen(end->second.RefPos - start->second.RefPos);
 		totalLen += len;
 		freq[len].push_back(++bsNumb);
 
@@ -1317,40 +1322,24 @@ void BS_map::PrintWidthDistrib() const
 
 void BS_map::Print(chrid cID, const char* outFName, bool selected, chrlen stopPos) const
 {
-	string format = "%d % 4d  %c %5.2f   %s\n";
+	string format = "%d % 4d  %c %7d %5.2f   %s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
-	if (outFName) {
-		TxtOutFile file(outFName);
-		file.Write("pos\trgn  bnd score  IGV view\n");
-		for (const auto& x : *this) {
-			if (stopPos && x.first > stopPos)	break;
-			if (selected && !x.second.Score)	continue;
-			format[4] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
-			file.Write(format.c_str(),
-				x.first,
-				x.second.RgnNumb,
-				bound[x.second.Reverse],
-				x.second.Score,
-				locus.Print(x.first)
-			);
-		}
-	}
-	else {
-		printf("\npos\trgn  bnd score  IGV view\n");
-		for (const auto& x : *this) {
-			if (stopPos && x.first > stopPos)	break;
-			if (selected && !x.second.Score)	continue;
-			format[4] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
-			printf(format.c_str(),
-				x.first,
-				x.second.RgnNumb,
-				bound[x.second.Reverse],
-				x.second.Score,
-				locus.Print(x.first)
-			);
-		}
+	TxtOutFile file(outFName);
+	file.Write("pos     trgn  bnd ref posscore  IGV view\n");
+	for (const auto& x : *this) {
+		if (stopPos && x.first > stopPos)	break;
+		if (selected && !x.second.Score)	continue;
+		format[4] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
+		file.Write(format.c_str(),
+			x.first,
+			x.second.RgnNumb,
+			bound[x.second.Reverse],
+			x.first != x.second.RefPos ? x.second.RefPos : 0,
+			x.second.Score,
+			locus.Print(x.first)
+		);
 	}
 }
 #endif // MY_DEBUG
@@ -1387,7 +1376,7 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 		const auto& itStart = VP[L].back().Iter;
 		const auto& itEnd = VP[R].front().Iter;
 
-		LineAddUInts(itStart->first, itEnd->first, ++bsNumb, true);	// 3 basic fields
+		LineAddUInts(itStart->second.RefPos, itEnd->second.RefPos, ++bsNumb, true);	// 3 basic fields
 		LineAddScore(itStart->second.Score, true);					// BS score
 
 		// *** additional regions info
@@ -1454,10 +1443,10 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 		auto addExtraLines = [=, &bsNumb](const vector<BS_map::PosValue>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
 			if (vp.size() == 1)	return;
 			for (auto it0 = vp.begin(), it = next(it0); it != vp.end(); it0++, it++) {
-				LineAddUInts(it0->Iter->first, it->Iter->first, bsNumb, true);
+				LineAddUInts(it0->Iter->second.RefPos, it->Iter->second.RefPos, bsNumb, true);
 				LineAddFloat(it0->Val, true);	// BS score
 				LineAddChar(DOT, true);
-				LineAddInts(it0->Iter->first, it->Iter->first, true);
+				LineAddInts(it0->Iter->second.RefPos, it->Iter->second.RefPos, true);
 				// colors
 				auto ind = BYTE(10 * it0->Val / score) / 2;
 				if (ind > COLORS_CNT - 1)	ind = COLORS_CNT - 1;
@@ -1473,7 +1462,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 
 		addExtraLines(VP[L]);
 		// *** add basic feature
-		LineAddUInts(start->first, end->first, bsNumb, true);
+		LineAddUInts(start->second.RefPos, end->second.RefPos, bsNumb, true);
 		LineAddFloat(start->second.Score, true);		// BS score
 		LineAddChars(delims, reclen(strlen(delims)), false);
 		LineAddFloat(end->second.Score, false);			// reverse/forward ratio
@@ -1490,8 +1479,8 @@ void BedWriter::WriteChromROI(chrid cID, const BS_map& bss)
 
 	bss.DoBasic([&](BS_map::citer& start, BS_map::citer& end) {
 		LineAddUInts(
-			start->first - Glob::ROI_ext,
-			end->first + Glob::ROI_ext,
+			start->second.RefPos - Glob::ROI_ext,
+			end->second.RefPos + Glob::ROI_ext,
 			++bsNumb,
 			false
 		);

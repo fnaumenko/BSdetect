@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/02/2024
+Last modified: 06/04/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -739,14 +739,14 @@ public:
 
 struct BS_PosVal
 {
-	BYTE	Reverse;
-	chrlen	RgnNumb;	// potential region number
-	float	Score = 1;
+	BYTE		 Reverse;
+	chrlen		 RefPos = 0;	// reference position; by default duplicates the map position, but can be adjusted
+	const chrlen RgnNumb;		// potential region number
+	float		 Score = 1;
 
 	// Constructor
 	//	@param reverse: 0 for firect, 1 for reverse
 	//	@param rgnNumb: potential region number
-	//	@param incln: inclined line
 	BS_PosVal(BYTE reverse, chrlen rgnNumb) : Reverse(reverse), RgnNumb(rgnNumb) {}
 };
 
@@ -777,6 +777,10 @@ private:
 	//	@param rCover[in]: read coverage
 	void SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover);
 
+	// Extends too narrow BSs to the minimum acceptable width;
+	// may adjust reference position
+	void ExtendNarrowWidths();
+
 public:
 	// positioned value
 	struct PosValue {
@@ -796,17 +800,13 @@ public:
 		SetBounds(1, derivs.StrandData(NEG), rCover.StrandData(NEG));
 	}
 
-	// Brings the instance to canonical order of placing BS borders
+	// Brings the instance to canonical order of placing BS bounds;
+	// may adjust reference position
 	void Refine();
 
 	// Sets score for each binding sites and normalizes it
 	//	@param fragCovers: fragment total coverage
 	void SetScore(const DataSet<TreatedCover>& fragCovers);
-
-	void NormalizeScore();
-
-	// Expands too narrow BSs to the minimum acceptable width
-	void NormalizeBSwidth();
 
 	void PrintStat() const;
 
@@ -855,7 +855,7 @@ public:
 	void PrintWidthDistrib() const;
 
 	// Prints positions
-	//	@param outFName: name of file to print, or NULL to print to console
+	//	@param outFName: name of file to print
 	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 
 	void Print(chrid cID, const char* outFName, bool selected, chrlen stopPos = 0) const;
