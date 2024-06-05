@@ -1322,16 +1322,17 @@ void BS_map::PrintWidthDistrib() const
 
 void BS_map::Print(chrid cID, const char* outFName, bool selected, chrlen stopPos) const
 {
-	string format = "%d % 4d  %c %7d %5.2f   %s\n";
+	string format = "%8d % 4d  %c %8d %5.2f   %s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
 	TxtOutFile file(outFName);
-	file.Write("pos     trgn  bnd ref posscore  IGV view\n");
+	file.Write(" pos     rgn bnd  ref pos score   IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
 		if (selected && !x.second.Score)	continue;
-		format[4] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
+		format[5] = x.second.RgnNumb % 2 ? '-' : SPACE;	// odd numbers are aligned to the left, even numbers to the right
+		format[20] = x.second.Score ? '2' : '0';		// zero score without fraction
 		file.Write(format.c_str(),
 			x.first,
 			x.second.RgnNumb,

@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/04/2024
+Last modified: 06/05/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -198,8 +198,8 @@ public:
 	//	@param write: if true then data sould be save to output file
 	//	@param fname: name of output file
 	//	@param descr: track decsription in declaration line 
-	OSpecialWriter(const ChromSizes& cSizes, BYTE dim, bool write, const string& name, const char* descr)
-		: OrderedData<int, SpecialWriter>(cSizes, dim, write, name, descr) {}
+	OSpecialWriter(const ChromSizes& cSizes, BYTE dim, bool write, const string& name, const char* descr, eShade shade = LIGHT)
+		: OrderedData<int, SpecialWriter>(cSizes, dim, write, name, descr, nullptr, shade) {}
 
 	void SetChromID(chrid cID) { _cID = cID; }
 

@@ -219,7 +219,7 @@ void Detector::CallBS(chrid cID)
 	bss.Refine();
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
-	bss.Print(cID, "BSS_0.txt", false);
+	bss.Print(cID, "BSS_1.txt", false);
 	//bss.CheckScoreHierarchy();
 	bss.PrintWidthDistrib();
 #endif
