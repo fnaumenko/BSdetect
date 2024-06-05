@@ -690,9 +690,8 @@ float DataValuesMap::GetPeakPosDiff() const
 	auto& nData = StrandData(NEG);
 	assert(pData.size() == nData.size());
 	USHORT missed = 0;
-	vector<int16_t> diffs;
+	vector<USHORT> diffs;
 	vector<chrlen> pPos, nPos;	// max positions in a positive, negative splines
-	//IGVlocus locus(18);
 
 	// get the difference of the splines maximums 
 	pPos.reserve(2);
@@ -702,16 +701,10 @@ float DataValuesMap::GetPeakPosDiff() const
 		itP->second.GetMaxValPos(itP->first, pPos);
 		itN->second.GetMaxValPos(itN->first, nPos);
 		if (pPos.size() == nPos.size())
-			for (auto itP = pPos.begin(), itN = nPos.begin(); itP != pPos.end(); itP++, itN++) {
-				auto diff = USHORT(*itP - *itN);
-				diffs.push_back(diff);
-				//if(abs(diff)>20)
-					//printf("%d\t%d\t%d\t%s\n", diff, *itN, *itP, locus.Print(*itP));
-			}
-		else {
+			for (auto itP = pPos.begin(), itN = nPos.begin(); itP != pPos.end(); itP++, itN++)
+				diffs.push_back(USHORT(*itP - *itN));
+		else
 			missed++;		// just ignore splines with different max positions
-			//printf("MISSED %d\n", pPos.front());
-		}
 		pPos.clear();
 		nPos.clear();
 	}
@@ -745,6 +738,9 @@ void DataValuesMap::Print(chrid cID, chrlen stopNumb) const
 OSpecialWriter* BoundsValues::LineWriter = nullptr;
 #endif
 
+const BYTE L = 1;	// left bound, synonym for 'reverse' (is formed by reverse reads)
+const BYTE R = 0;	// right bound, synonym for 'forward' (is formed by forward reads)
+
 void BoundsValues::PushIncline(
 	chrlen rgnNumb,
 	BYTE reverse,
@@ -756,12 +752,12 @@ void BoundsValues::PushIncline(
 {
 	const StrandOp& opDir = StrandOps[reverse];		// forward operations
 	const StrandOp& opInv = StrandOps[!reverse];	// inversed operations
-	auto itStart = opDir.GetPrev(cover.upper_bound(posVal.Pos(0)));	// min val: right for forward, left for reverse
+	auto itStart = opDir.GetPrev(cover.upper_bound(posVal.Pos(R)));	// min val: right for forward, left for reverse
 	auto itStop = itStart;									// max val: left for forward, right for reverse
 
 	// *** set itStop
-	if (reverse)	for (itStop++; itStop->first < posVal.Pos(1); itStop++);
-	else			for (itStop--; itStop->first > posVal.Pos(1); itStop--);
+	if (reverse)	for (itStop++; itStop->first < posVal.Pos(L); itStop++);
+	else			for (itStop--; itStop->first > posVal.Pos(L); itStop--);
 
 	// checking if there is an ordinary tag pool before the current start, masked by a spline
 	if (!opDir.GetPrev(itStart)->second)
@@ -772,18 +768,10 @@ void BoundsValues::PushIncline(
 	cover.LinearRegr(itStart, itStop, opDir, incline);
 	if (!incline.Valid())	return;
 
-	//if (rgnNumb == 21)	printf("> %d %d\n", int(reverse), itStop->first);
-	//if (lwriter.IsWriterSet()) {
-	//	auto it = itStop;
-	//	opInv.Next(it);
-	//	lwriter.WriteIncline(reverse, incline.Pos, it);
-	//}
-
 	coviter it0 = itStop;
 	Incline incline1{};
 	auto compare = [&](coviter& it) {
 		cover.LinearRegr(itStart, it, opDir, incline1);
-		//if (rgnNumb == 21)	printf("$ %d %d\n", int(reverse), it->first);
 		if (!incline1.Valid() || opDir.EqLess(incline.Pos, incline1.Pos))	return true;
 		std::swap(incline, incline1);
 		itStop = it;
@@ -824,9 +812,9 @@ void BoundsValues::PushIncline(
 void BoundsValues::CollectForwardInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
 {
 	TracedPosVal posVal;
-	for (auto it = rbegin(); it != rend(); it++) {		// loop through one region
-		posVal.Set(0, it);
-		PushIncline(_rgnNumb, 0, posVal, rCover, inclines);
+	for (auto it = rbegin(); it != rend(); it++) {		// loop through one derivative region
+		posVal.Set(R, it);
+		PushIncline(_rgnNumb, R, posVal, rCover, inclines);
 		posVal.Retain();
 	}
 }
@@ -834,10 +822,10 @@ void BoundsValues::CollectForwardInclines(const TreatedCover& rCover, vector<Inc
 void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
 {
 	TracedPosVal posVal;
-
-	for (auto it = begin(); it != end(); it++) {		// loop through derivatives
-		posVal.Set(1, it);
-		PushIncline(_rgnNumb, 1, posVal, rCover, inclines);
+	for (auto it = begin(); it != end(); it++) {		// loop through one derivative region
+		//printf(">> %d\t%d  %.4f\n", _rgnNumb, it->Start(), it->ValRatio());
+		posVal.Set(L, it);
+		PushIncline(_rgnNumb, L, posVal, rCover, inclines);
 		posVal.Retain();
 	}
 }
@@ -976,10 +964,10 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 	vector<Incline> inclines;
 	inclines.reserve(4);
 
-	for (auto it = derivs.begin(); it != derivs.end(); it++) {		// loop through the derivative regions
+	for (const auto& d : derivs) {		// loop through the derivative regions
 		inclines.clear();
-		(it->second.*fcollectInclines)(rCover, inclines);
-		AddBounds(reverse, it->second.RgnNumb(), inclines);
+		(d.second.*fcollectInclines)(rCover, inclines);
+		AddBounds(reverse, d.second.RgnNumb(), inclines);
 	}
 }
 
@@ -1130,9 +1118,6 @@ void BS_map::Refine()
 	// *** extend narrows
 	ExtendNarrowWidths();
 }
-
-const BYTE L = 1;	// left bound: is formed by reversed reads
-const BYTE R = 0;	// right bound: is formed by forward reads
 
 void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 {

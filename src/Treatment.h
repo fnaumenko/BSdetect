@@ -100,7 +100,7 @@ static struct Glob {
 
 	static void SetFragLen(int fragLen)
 	{
-		if (fragLen != vUNDEF) {
+		if (fragLen) {
 			FragLenUndef = false;
 			FragLen = fragLen;
 		}
@@ -599,6 +599,8 @@ public:
 
 	// Copies min, max values to the external pair
 	void	GetValues(float(&val)[2]) const { memcpy(val, _val, 2 * sizeof(float)); }
+
+	float	ValRatio() const { return _val[0] / _val[1]; }
 };
 
 // BoundValues collection representing 
@@ -647,8 +649,6 @@ class BoundsValues : public vector<BoundValues>
 		// Saves previous positions/values (by swapping)
 		void Retain()
 		{
-			//memcpy(_pos0, _pos, sizeof(_pos));
-			//memcpy(_val0, _val, sizeof(_val));
 			std::swap(_pos, _pos0);
 			std::swap(_val, _val0);
 		}
@@ -854,7 +854,7 @@ public:
 	// Prints "unsorted" scores
 	void CheckScoreHierarchy();
 
-	// Prints positions
+	// Prints BS positions
 	//	@param outFName: name of file to print
 	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 

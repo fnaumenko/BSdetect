@@ -42,14 +42,14 @@ const BYTE Options::Option::IndentInTabs = 3;
 Options::Option Options::List[] = {
 	{ 'g', sGen,	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "chromosome sizes file", NULL },
 	{ 'c',Chrom::Abbr,tOpt::NONE,tNAME,	gOTHER,	NO_DEF, 0, 0, NULL, "treat specified chromosome only", NULL },
-	{ 'd',"dup-lvl",tOpt::OBLIG,	tINT,	gOTHER,	1, 0, 2, NULL,
+	{ 'd',"dup-lvl",tOpt::OBLIG, tINT,	gOTHER,	1, 0, 2, NULL,
 	"duplicate reads rejection level:\n-1 - keep all duplicates, 1 - keep one among duplicates, 2 - keep two among duplicates", NULL },
-	{ 'f',"fr-len",	tOpt::NONE,	tINT,	gOTHER, vUNDEF, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]", NULL },
-	{ 's',"save-cover",tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save coverage", NULL },
+	{ 'f',"fr-len",	tOpt::NONE,	tINT,	gOTHER, 0, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]", NULL },
+	{ 's',"save-cover",tOpt::NONE,tENUM,gOTHER,	FALSE,	NO_VAL,	0, NULL, "save coverage", NULL },
 	{ 'i',"save-inter",tOpt::HIDDEN,tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save intermediate data", NULL },
 	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL,
 	"print each read ambiguity, if they exist" },
-	{ 'r',"rank-score",	tOpt::NONE,	tENUM,	gOTHER, TRUE, 0, 2, (char*)Booleans,
+	{ 'r',"rank-score",	tOpt::NONE,tENUM,gOTHER, TRUE, 0, 2, (char*)Booleans,
 	"turn on/off rendering the main result score in greyscale", NULL },
 	{ 'O', sOutput,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF,	0,	0, NULL, "output files common name", NULL },
 	{ 't',	sTime,	tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL, 0, NULL, sPrTime, NULL },
@@ -57,8 +57,8 @@ Options::Option Options::List[] = {
 	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrVersion, NULL },
 	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrUsage, NULL },
 
-	{ 'F', "read-cover-frw",	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "forward read coverage file", NULL},
-	{ 'R', "read-cover-rev",	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "reversed read coverage file", NULL},
+	{ 'F', "read-cover-frw",tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "forward read coverage file", NULL},
+	{ 'R', "read-cover-rev",tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "reversed read coverage file", NULL},
 	{ 'm', "smode",	tOpt::NONE,	tENUM,	gOTHER, 0, 0, ArrCnt(smodes), (char*)smodes,
 	"sequencing mode: ? - single end, ? - paired end", NULL },
 	{ 'L',"rd-len",	tOpt::NONE,	tINT,	gOTHER, 50, 20, 1000, NULL,
@@ -163,7 +163,10 @@ float Detector::GetPeakPosDiff(chrid cID)
 	Verb::PrintMsg(Verb::DBG);
 	for (BYTE splineBase = 15; splineBase <= 85; splineBase += 35) {
 		splines.BuildSpline(fragCovers, rgns, false, splineBase);
-		peakDiff += splines.GetPeakPosDiff();
+		auto diff = splines.GetPeakPosDiff();
+		peakDiff += diff;
+		Verb::PrintMsgVar(Verb::DBG, "spline base: %d  diff: %.2f\n", splineBase, diff);
+		//peakDiff += splines.GetPeakPosDiff();
 		splines.Clear();
 		cnt++;
 	}
