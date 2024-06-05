@@ -1308,9 +1308,9 @@ void BS_map::PrintWidthDistrib() const
 	// print numbers
 	const char* length = "width";
 	std::printf("\nBS NUMBERS FREQUENCY\n");
-	std::printf("%s  numbers\n", length);
+	std::printf("%s  cnt  numbers\n", length);
 	for (const auto& item : freq) {
-		std::printf("%5d  ", item.first);
+		std::printf("%5d %4u  ", item.first, item.second.size());
 		auto it = item.second.begin();
 		std::printf("%d", *it);
 		for(it++; it != item.second.end(); it++)
