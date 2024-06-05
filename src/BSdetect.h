@@ -75,7 +75,7 @@ public:
 		, _splines	(cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
 		, _derivs	(cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
 #ifdef MY_DEBUG
-		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression")
+		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression", DARK)
 		, _splineWriter(cSizes,	1,	saveInter,	outFName + ".FR_SPLINE", "fragment coverage spline")
 #endif
 		, _bss		(cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
@@ -90,7 +90,7 @@ public:
 		_timer.Start();
 	}
 
-	// Pre-covered data constructor
+	// Pre-covered data constructor. For PE only!
 	//	@param fCover_fName: fragment coverage file name
 	//	@param rCoverPos_fName: forward read coverage file name
 	//	@param rCoverNeg_fName: reversed read coverage file name

@@ -150,8 +150,8 @@ float Detector::GetPeakPosDiff(chrid cID)
 	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
 	_timer.Start();
 	coval maxVal = readCovers.StrandData(POS).GetMaxVal();
-	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 3);
-	if (rgns.SetPotentialRegions(fragCovers, _cSizes[cID], maxVal / 3, true))	return false;
+	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 4);
+	if (rgns.SetPotentialRegions(fragCovers, _cSizes[cID], maxVal / 4, true))	return false;
 
 	//auto flen = rgns.GetFragMean(fragCovers);		// by mass centre
 	//printf("\nMass Mean fragment length: %d\n", flen);
@@ -219,7 +219,7 @@ void Detector::CallBS(chrid cID)
 	bss.Refine();
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
-	bss.Print(cID, "BSS_1.txt", false);
+	bss.Print(cID, "BSS_0.txt", false);
 	//bss.CheckScoreHierarchy();
 #endif
 	bss.PrintStat();
