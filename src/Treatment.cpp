@@ -366,7 +366,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 			rawLen += len;
 			if (T::IsNotEmpty(it)) refineLen += len, realCnt++;
 		}
-		std::printf(format[isFeatures], sStrandTITLES[s + strands],
+		printf(format[isFeatures], sStrandTITLES[s + strands],
 			rgn.size(), Percent(rawLen, chrLen),
 			realCnt, Percent(refineLen, chrLen));
 	}
@@ -407,8 +407,8 @@ void CoverRegions::PrintScoreDistrib() const
 
 	for (const auto& rgn : *this)
 		freq[rgn.value]++;
-	std::printf("\nREGIONS LENGTH FREQUENCY\n");
-	std::printf("length freq\n");
+	printf("\nREGIONS LENGTH FREQUENCY\n");
+	printf("length freq\n");
 	for (const auto& item : freq)
 		printf("%5d %d\n", item.first, item.second);
 }
@@ -1011,6 +1011,33 @@ void BS_map::ExtendNarrowWidths()
 		});
 }
 
+void BS_map::PrintWidthDistrib() const
+{
+	map<fraglen, vector<chrlen>> freq;
+	chrlen	totalLen = 0, bsNumb = 0;
+
+	// collect numbers
+	DoBasic([&](citer& start, citer& end) {
+		auto len = fraglen(end->second.RefPos - start->second.RefPos);
+		totalLen += len;
+		freq[len].push_back(++bsNumb);
+		}
+	);
+	// print numbers
+	const char* length = "width";
+	printf("\nBS WIDTH FREQUENCY:\n");
+	printf("%s cnt  numbers\n", length);
+	for (const auto& item : freq) {
+		printf("%4d %4u  ", item.first, UINT(item.second.size()));
+		auto it = item.second.begin();
+		printf("%d", *it);
+		for (it++; it != item.second.end(); it++)
+			printf(",%d", *it);
+		printf("\n");
+	}
+	printf("average %s: %.2f\n", length, float(totalLen) / bsNumb);
+}
+
 void BS_map::Refine()
 {
 	/*
@@ -1178,7 +1205,6 @@ void BS_map::PrintStat() const
 
 	const bool stat = Verb::Level(Verb::DBG);	// collect and print statistics
 	chrlen	bsNumb = 0;
-	chrlen	minNumb, maxNumb, minLen = CHRLEN_MAX, maxLen = 0;
 	chrlen	minNegNumb, maxNegNumb, minPosNumb, maxPosNumb, minScoreNumb;
 	float	minNegRatio, minPosRatio, minScore, maxNegRatio = 0, maxPosRatio = 0;
 	minNegRatio = minPosRatio = minScore = 1000;
@@ -1188,9 +1214,6 @@ void BS_map::PrintStat() const
 		++bsNumb;
 		if (stat) {
 			const fraglen len = end->second.RefPos - start->second.RefPos;
-
-			if (minLen > len)		minLen = len, minNumb = bsNumb;
-			else if (maxLen < len)	maxLen = len, maxNumb = bsNumb;
 
 			float val = start->second.Score;
 			if (minScore > val)		minScore = val, minScoreNumb = bsNumb;
@@ -1205,47 +1228,25 @@ void BS_map::PrintStat() const
 				else if (maxPosRatio < val)	maxPosRatio = val, maxPosNumb = bsNumb;
 		}
 		});
-	if (stat)	std::printf("\n");
-	std::printf("BS count: %d\n", bsNumb);
-	if (!bsNumb || !stat) return;
+	if (stat) {
+		auto ptTableTitle = [](const char* title) {
+			auto len = USHORT(strlen(title) + 1);
+			PrintSolidLine(len);
+			printf("%s\n", title);
+			PrintSolidLine(len);
+		};
 
-	// collect items with min/max len
-	vector<chrlen> minLenNumbers, maxLenNumbers;
-	bsNumb = 0;
-	DoBasic([&](citer& start, citer& end) {
-		const fraglen len = end->second.RefPos - start->second.RefPos;
-		++bsNumb;
-		if (len == minLen)
-			minLenNumbers.push_back(bsNumb);
-		else if (len == maxLen)
-			maxLenNumbers.push_back(bsNumb);
-		}
-	);
+		PrintWidthDistrib();
+		// score
+		printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
+		ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
+		printf("reverse\t%2.2f (%3d)   %2.2f (%3d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
+		printf("forward\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
 
-	auto ptTableTitle = [](const char* title) {
-		auto len = USHORT(strlen(title) + 1);
-		PrintSolidLine(len);
-		std::printf("%s\n", title);
-		PrintSolidLine(len);
-	};
-	auto prLenNumbs = [](const char* title, chrlen len, vector<chrlen>& numbers) {
-		std::printf("%s %4d  %d", title, len, numbers[0]);
-		for (short i = 1; i < numbers.size(); i++)	std::printf(",%d", numbers[i]);
-		std::printf("\n");
-	};
+		printf("\n");
+	}
 
-	// lengths
-	ptTableTitle("   length numbers");
-	prLenNumbs("min", minLen, minLenNumbers);
-	prLenNumbs("max", maxLen, maxLenNumbers);
-
-	// score
-	std::printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
-	ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
-	std::printf("reverse\t%2.2f (%3d)   %2.2f (%3d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
-	std::printf("forward\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
-
-	std::printf("\n");
+	printf("BS count: %d\n\n", bsNumb);
 }
 
 #ifdef MY_DEBUG
@@ -1289,35 +1290,6 @@ void BS_map::CheckScoreHierarchy()
 		});
 
 	if (!issues)	printf("OK\n");
-}
-
-void BS_map::PrintWidthDistrib() const
-{
-	map<fraglen, vector<chrlen>> freq;
-	chrlen	totalLen = 0;
-	chrlen	bsNumb = 0;
-
-	// collect numbers
-	DoBasic([&](citer& start, citer& end) {
-		auto len = fraglen(end->second.RefPos - start->second.RefPos);
-		totalLen += len;
-		freq[len].push_back(++bsNumb);
-
-		}
-	);
-	// print numbers
-	const char* length = "width";
-	std::printf("\nBS NUMBERS FREQUENCY\n");
-	std::printf("%s  cnt  numbers\n", length);
-	for (const auto& item : freq) {
-		std::printf("%5d %4u  ", item.first, item.second.size());
-		auto it = item.second.begin();
-		std::printf("%d", *it);
-		for(it++; it != item.second.end(); it++)
-			std::printf(",%d", *it);
-		std::printf("\n");
-	}
-	std::printf("average %s: %.2f\n", length, float(totalLen) / bsNumb);
 }
 
 void BS_map::Print(chrid cID, const char* outFName, bool selected, chrlen stopPos) const

@@ -781,6 +781,9 @@ private:
 	// may adjust reference position
 	void ExtendNarrowWidths();
 
+	// Prints BS width distribution
+	void PrintWidthDistrib() const;
+
 public:
 	// positioned value
 	struct PosValue {
@@ -850,9 +853,6 @@ public:
 #ifdef MY_DEBUG
 	// Prints "unsorted" scores
 	void CheckScoreHierarchy();
-
-	// Prints BS width distribution
-	void PrintWidthDistrib() const;
 
 	// Prints positions
 	//	@param outFName: name of file to print
