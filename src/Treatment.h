@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/05/2024
+Last modified: 06/08/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -119,6 +119,9 @@ public:
 	Values() noexcept : _maxVal(0) { Reserve(); }
 	Values(Values&& rvals) noexcept : _maxVal(rvals._maxVal), RgnNumb(0), vector<float>(move(rvals)) { rvals._maxVal = 0; }
 	Values(const Values& rvals) = default;
+	// 'splitting' constructor: creates instance as part of @vals indicated by @rgn.End;
+	// resize @vals to the size indicated by @rgn.Start
+	Values(Values& vals, const Region& rgn);
 
 	// Returns values length
 	fraglen Length() const { return fraglen(size()); }
@@ -654,7 +657,9 @@ class BoundsValues : public vector<BoundValues>
 		}
 	};
 
+#ifdef MY_DEBUG
 	float _maxVal = 0;
+#endif
 	chrlen _rgnNumb;	// potential region number
 
 	void PushIncline(
@@ -665,11 +670,32 @@ class BoundsValues : public vector<BoundValues>
 		vector<Incline>& inclines
 	) const;
 
+	// Adds significant derivative values
+	//	@param spline: spline on the basis of which derivatives are calculated
+	//	@param relPos: spline relative position
+	//	@param derivs: derivative values (will be moved)
+	void AddSignifValues(const tValuesMap::value_type& spline, chrlen relPos, Values& derivs);
+
+	// Separates and adds significant derivative values
+	//	@param rgns: insignificant regions within derivs (relative positions)
+	//	@param rgnsInd: current index of insignificant regions
+	//	@param spline: spline on the basis of which derivatives are calculated
+	//	@param relPos: spline relative position
+	//	@param derivs: derivative values (will be moved)
+	void SepSignifValues(
+		const vector<Region>& rgns,
+		BYTE rgnsInd,
+		const tValuesMap::value_type& spline,
+		chrlen relPos,
+		Values& derivs
+	);
+
 public:
 #ifdef MY_DEBUG
 	static void SetSpecialWriter(OSpecialWriter& lineWriter) { LineWriter = &lineWriter; }
-#endif
+
 	float	MaxVal()	const { return _maxVal; }
+#endif
 	// Returns potential region number
 	chrlen	RgnNumb()	const { return _rgnNumb; }
 
@@ -687,11 +713,11 @@ public:
 	//	@param inclines[out]: filled collection of reversed inclined lines
 	void CollectReverseInclines(const TreatedCover& cover, vector<Incline>& inclines) const;
 
-	// Adds derivative values for given spline relative position
-	//	@param spline: given spline
+	// Adds derivative values
+	//	@param spline: spline on the basis of which derivatives are calculated
 	//	@param relPos: spline relative position
-	//	@param deriv: derivative values (will be moved)
-	void AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv);
+	//	@param derivs: derivative values (will be moved)
+	void AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& derivs);
 };
 
 class BoundsValuesMap : public map<chrlen, BoundsValues>

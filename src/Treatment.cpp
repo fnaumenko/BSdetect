@@ -477,6 +477,13 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 
 //===== Values
 
+Values::Values(Values& vals, const Region& rgn) 
+	: vector<float>(vals.begin() + rgn.End, vals.end())
+	, _maxVal(vals._maxVal)		// shared _maxVal doesn't matter
+{
+	vals.resize(rgn.Start);
+}
+
 void Values::AddValue(float val)
 {
 	if (_maxVal < val)	_maxVal = val;
@@ -823,16 +830,17 @@ void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Inc
 {
 	TracedPosVal posVal;
 	for (auto it = begin(); it != end(); it++) {		// loop through one derivative region
-		//printf(">> %d\t%d  %.4f\n", _rgnNumb, it->Start(), it->ValRatio());
 		posVal.Set(L, it);
 		PushIncline(_rgnNumb, L, posVal, rCover, inclines);
 		posVal.Retain();
 	}
 }
 
-void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
+void BoundsValues::AddSignifValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
 {
+#ifdef MY_DEBUG
 	if (_maxVal < deriv.MaxVal())	_maxVal = deriv.MaxVal();
+#endif
 	_rgnNumb = spline.second.RgnNumb;
 	emplace_back(
 		spline.first + relPos,
@@ -840,6 +848,60 @@ void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos
 		spline.second.Value(relPos + deriv.Length()),
 		deriv
 	);
+}
+
+void BoundsValues::SepSignifValues(
+	const vector<Region>& rgns,
+	BYTE rgnInd,
+	const tValuesMap::value_type& spline,
+	chrlen relPos,
+	Values& deriv
+)
+{
+	if (rgnInd == rgns.size())
+		AddSignifValues(spline, relPos, deriv);
+	else {
+		auto rgn = rgns[rgnInd];
+		USHORT rgnShift = rgnInd ? rgns[rgnInd - 1].End : 0;
+		rgn -= rgnShift;
+		Values sepDeriv(deriv, rgn);
+
+		AddSignifValues(spline, relPos, deriv);
+		SepSignifValues(rgns, ++rgnInd, spline, relPos + rgn.End, sepDeriv);
+	}
+}
+
+void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
+{
+	const float minDeriv = 0.052f;	// tangent 3 degrees
+	chrlen	pos = 0;
+	chrlen	start = 0;
+	bool	nextPit = false;
+	vector<Region> negligRgns;	// negligible derivator regions (inner only); typical capacity is 1
+
+	// search for negligible regions
+	for (auto& val : deriv) {
+		if (val < minDeriv) {
+			if (nextPit && !start)	// ignore starting negligible derivator region
+				start = pos;
+		}
+		else
+			if (nextPit) {
+				if (start) {
+					negligRgns.emplace_back(start, pos);
+					start = 0;
+				}
+			}
+			else
+				nextPit = true;
+		pos++;
+	}
+
+	// add derivators
+	if (negligRgns.size())
+		SepSignifValues(negligRgns, 0, spline, relPos, deriv);
+	else
+		AddSignifValues(spline, relPos, deriv);
 }
 
 
@@ -850,20 +912,20 @@ void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 	for (const auto& spline : splines) {
 		if (!spline.second.MaxVal())	continue;
 
-		Values deriv;
+		Values deriv;			deriv.Reserve();
 		BoundsValues derivSet;	derivSet.reserve(4);
 		fraglen pos = 0;	// relative position
 		const auto& itEnd = spline.second.end();
 
-		// loop through floats
+		// loop through spline
 		for (auto it0 = spline.second.begin(), it = next(it0); it != itEnd; it0++, it++) {
 			float tang = (*it - *it0) * factor;		// flip sign of pos strand delta
-			if (tang > 0)							// cut off negative tangent
+			if (tang > 0)							// cut off tangent of a falling spline
 				deriv.AddValue(tang);
 			else {
 				pos++;
 				if (deriv.MaxVal()) {
-					fraglen len = deriv.Length();	// because deriv will be cleared
+					fraglen len = deriv.Length();	// deriv will be cleared
 
 					derivSet.AddValues(spline, pos, deriv);
 					pos += len;
@@ -872,7 +934,7 @@ void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 			}
 		}
 
-		// last floats region
+		// last region
 		if (deriv.MaxVal())
 			if (derivSet.size() && derivSet.back().End() == spline.first + pos)
 				derivSet.back().AddValues(deriv);	// add adjacent region
