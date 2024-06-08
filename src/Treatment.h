@@ -884,7 +884,7 @@ public:
 	//	@param outFName: name of file to print
 	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 
-	void Print(chrid cID, const char* outFName, bool selected, chrlen stopPos = 0) const;
+	void Print(chrid cID, const string& outFName, bool selected, chrlen stopPos = 0) const;
 #endif
 };
 

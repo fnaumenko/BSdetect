@@ -1339,13 +1339,13 @@ void BS_map::CheckScoreHierarchy()
 	if (!issues)	printf("OK\n");
 }
 
-void BS_map::Print(chrid cID, const char* outFName, bool selected, chrlen stopPos) const
+void BS_map::Print(chrid cID, const string& outFName, bool selected, chrlen stopPos) const
 {
 	string format = "%8d % 4d  %c %8d %5.2f   %s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
-	TxtOutFile file(outFName);
+	TxtOutFile file(outFName.c_str());
 	file.Write(" pos     rgn bnd  ref pos score   IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;

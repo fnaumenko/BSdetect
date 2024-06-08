@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 06/05/2024
+Last modified: 06/08/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -44,6 +44,7 @@ class Detector
 #ifdef MY_DEBUG
 	OSpecialWriter	 _lineWriter;
 	OSpecialWriter	 _splineWriter;
+	string			 _outFName;
 #endif
 	OBS_Map			 _bss;
 
@@ -69,14 +70,15 @@ public:
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		, _frag—overs(cSizes, Glob::IsPE?1:3, saveCover, outFName + "_frag", "fragment coverage")
-		, _read—overs(cSizes,	2,	saveCover,	outFName + "_read"	, "read coverage")
-		, _rgns(cSizes,2-Glob::IsPE,saveInter,	outFName + ".RGNS"	, "potential regions")
-		, _splines	(cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
-		, _derivs	(cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
+		, _frag—overs(cSizes, Glob::IsPE ? 1 : 3, saveCover, outFName + "_frag", "fragment coverage")
+		, _read—overs(cSizes, 2, saveCover, outFName + "_read", "read coverage")
+		, _rgns(cSizes, 2 - Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
+		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
+		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
 #ifdef MY_DEBUG
-		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression", DARK)
-		, _splineWriter(cSizes,	1,	saveInter,	outFName + ".FR_SPLINE", "fragment coverage spline")
+		, _lineWriter(cSizes, 2, saveInter, outFName + ".LINE", "linear regression", DARK)
+		, _splineWriter(cSizes, 1, saveInter, outFName + ".FR_SPLINE", "fragment coverage spline")
+		, _outFName(outFName)
 #endif
 		, _bss		(cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
@@ -115,6 +117,7 @@ public:
 #ifdef MY_DEBUG
 		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression", DARK)
 		, _splineWriter(cSizes,	1,	saveInter,	outFName + ".FR_SPLINE", "fragment coverage spline")
+		, _outFName(outFName)
 #endif
 		, _bss		 (cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
