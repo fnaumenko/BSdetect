@@ -144,16 +144,16 @@ float Detector::GetPeakPosDiff(chrid cID)
 {
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
 	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
-	DataCoverRegions& rgns = static_cast<DataCoverRegions&>(_rgns.ChromData(cID));
-	DataValuesMap& splines = static_cast<DataValuesMap&>(_splines.ChromData(cID));
+	DataCoverRegions& regions = static_cast<DataCoverRegions&>(_regions.ChromData(cID));
+	DataValuesMap& splines	  = static_cast<DataValuesMap&>(_splines.ChromData(cID));
 
 	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
 	_timer.Start();
 	coval maxVal = readCovers.StrandData(POS).GetMaxVal();
 	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 4);
-	if (rgns.SetPotentialRegions(fragCovers, _cSizes[cID], maxVal / 4, true))	return false;
+	if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], maxVal / 4, true))	return false;
 
-	//auto flen = rgns.GetFragMean(fragCovers);		// by mass centre
+	//auto flen = regions.GetFragMean(fragCovers);		// by mass centre
 	//printf("\nMass Mean fragment length: %d\n", flen);
 
 	// calculate mean difference as the average of three attempts
@@ -162,7 +162,7 @@ float Detector::GetPeakPosDiff(chrid cID)
 
 	Verb::PrintMsg(Verb::DBG);
 	for (BYTE splineBase = 15; splineBase <= 85; splineBase += 35) {
-		splines.BuildSpline(fragCovers, rgns, false, splineBase);
+		splines.BuildSpline(fragCovers, regions, false, splineBase);
 		auto diff = splines.GetPeakPosDiff();
 		peakDiff += diff;
 		Verb::PrintMsgVar(Verb::DBG, "spline base: %d  diff: %.2f\n", splineBase, diff);
@@ -178,7 +178,7 @@ void Detector::CallBS(chrid cID)
 {
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
 	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
-	DataCoverRegions& rgns		= static_cast<DataCoverRegions&>(_rgns.ChromData(cID));
+	DataCoverRegions& regions		= static_cast<DataCoverRegions&>(_regions.ChromData(cID));
 	DataValuesMap& splines		= static_cast<DataValuesMap&>(_splines.ChromData(cID));
 	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
 	BS_map& bss = *_bss.ChromData(cID).Data();
@@ -200,7 +200,7 @@ void Detector::CallBS(chrid cID)
 			Glob::FragLen -= peakDiff;
 			_frag—overs.Clear();
 			_frag—overs.Fill(_reads);
-			rgns.Clear();
+			regions.Clear();
 		}
 		else
 			resetCover = false;
@@ -209,9 +209,9 @@ void Detector::CallBS(chrid cID)
 	}
 	Verb::PrintMsg(Verb::RT, "Locate binding sites");
 	_timer.Start();
-	if (resetCover && rgns.SetPotentialRegions(fragCovers, cLen, 3))	return;
+	if (resetCover && regions.SetPotentialRegions(fragCovers, cLen, 3))	return;
 
-	splines.BuildSpline(readCovers, rgns, true);	_rgns.WriteChrom(cID);
+	splines.BuildSpline(readCovers, regions, true);	_regions.WriteChrom(cID);
 	splines.EliminateNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
 	splines.Numerate();

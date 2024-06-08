@@ -38,7 +38,7 @@ class Detector
 	bool			 _saveCover;
 	CombCover		 _frag—overs;		// extended reads cover to find frag Mean
 	CombCover		 _read—overs;
-	OCoverRegions	 _rgns;
+	OCoverRegions	 _regions;
 	OValuesMap		 _splines;
 	OBoundsValuesMap _derivs;
 #ifdef MY_DEBUG
@@ -72,7 +72,7 @@ public:
 		, _saveCover(saveCover)
 		, _frag—overs(cSizes, Glob::IsPE ? 1 : 3, saveCover, outFName + "_frag", "fragment coverage")
 		, _read—overs(cSizes, 2, saveCover, outFName + "_read", "read coverage")
-		, _rgns(cSizes, 2 - Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
+		, _regions(cSizes, 2 - Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
 		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
 		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
 #ifdef MY_DEBUG
@@ -111,7 +111,7 @@ public:
 		, _saveCover(false)
 		, _frag—overs(cSizes,	1,	false,		outFName + "_frag"	, "fragment coverage")
 		, _read—overs(cSizes,	2,	false,		outFName + "_read"	, "read coverage")
-		, _rgns(cSizes,2-Glob::IsPE,saveInter,	outFName + ".RGNS"	, "potential regions")
+		, _regions(cSizes,2-Glob::IsPE,saveInter,outFName + ".RGNS"	, "potential regions")
 		, _splines	 (cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
 		, _derivs	 (cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
 #ifdef MY_DEBUG
