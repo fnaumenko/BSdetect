@@ -1281,43 +1281,43 @@ void BS_map::PrintStat() const
 
 	const bool stat = Verb::Level(Verb::DBG);	// collect and print statistics
 	chrlen	bsNumb = 0;
-	chrlen	minNegNumb, maxNegNumb, minPosNumb, maxPosNumb, minScoreNumb;
-	float	minNegRatio, minPosRatio, minScore, maxNegRatio = 0, maxPosRatio = 0;
-	minNegRatio = minPosRatio = minScore = 1000;
+	//chrlen	minNegNumb, maxNegNumb, minPosNumb, maxPosNumb = 0;
+	//float	minNegRatio, minPosRatio, maxNegRatio = 0, maxPosRatio = 0;
+	chrlen	minScoreNumb;
+	float	minScore = 1.f;
+	//minNegRatio = minPosRatio = 1000;
 
 	// define min/max length, minScore, min***Ratio/max***Ratio
 	DoBasic([&](citer& start, citer& end) {
 		++bsNumb;
 		if (stat) {
 			const fraglen len = end->second.RefPos - start->second.RefPos;
+			float score = start->second.Score;
+			if (minScore > score)		minScore = score, minScoreNumb = bsNumb;
 
-			float val = start->second.Score;
-			if (minScore > val)		minScore = val, minScoreNumb = bsNumb;
-
-			val = end->second.Score;
-			if (val < 1) {
-				if (minNegRatio > val)		minNegRatio = val, minNegNumb = bsNumb;
-				else if (maxNegRatio < val)	maxNegRatio = val, maxNegNumb = bsNumb;
-			}
-			else
-				if (minPosRatio > val)		minPosRatio = val, minPosNumb = bsNumb;
-				else if (maxPosRatio < val)	maxPosRatio = val, maxPosNumb = bsNumb;
+			//if (score < 1) {
+			//	if (minNegRatio > score)		minNegRatio = score, minNegNumb = bsNumb;
+			//	else if (maxNegRatio < score)	maxNegRatio = score, maxNegNumb = bsNumb;
+			//}
+			//else
+			//	if (minPosRatio > score)		minPosRatio = score, minPosNumb = bsNumb;
+			//	else if (maxPosRatio < score)	maxPosRatio = score, maxPosNumb = bsNumb;
 		}
 		});
 	if (stat) {
-		auto ptTableTitle = [](const char* title) {
-			auto len = USHORT(strlen(title) + 1);
-			PrintSolidLine(len);
-			printf("%s\n", title);
-			PrintSolidLine(len);
-		};
+		//auto ptTableTitle = [](const char* title) {
+		//	auto len = USHORT(strlen(title) + 1);
+		//	PrintSolidLine(len);
+		//	printf("%s\n", title);
+		//	PrintSolidLine(len);
+		//};
 
 		PrintWidthDistrib();
 		// score
 		printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
-		ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
-		printf("reverse\t%2.2f (%3d)   %2.2f (%3d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
-		printf("forward\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
+		//ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
+		//printf("reverse\t%2.2f (%3d)   %2.2f (%3d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
+		//printf("forward\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
 
 		printf("\n");
 	}
