@@ -323,7 +323,7 @@ public:
 	//	@param spliner[in]: spliner that does the work
 	//	@param startPos[in,out]: start position; returns modified (real) position
 	//	@param endPos[in]: end position
-	//	@param vals[out]: step (one bp) splineed values
+	//	@param vals[out]: resulting splined values
 	void SetLocalSpline(
 		SSpliner<coval>& spliner,
 		chrlen& startPos,
