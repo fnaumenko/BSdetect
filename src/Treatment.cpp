@@ -1221,8 +1221,8 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 
 		// *** set score
 
-		// set score for the BS extention (excluding base boundaries)
-		auto setExtScore = [&vals](BYTE reverse, const vector<PosValue>& vp, USHORT shift, BYTE ind) {
+		// set score for the BS extension (excluding base boundaries)
+		auto setExtScore = [&vals](BYTE reverse, const vector<PosValue>& vp, USHORT offset, BYTE ind) {
 			/*
 			fill the score from left to right (for reverse)
 			or from rigth to left (for direct) extended boundaries
@@ -1230,34 +1230,38 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 			float score = 0;
 			auto len = vp[ind + reverse].Iter->second.RefPos - vp[ind - !reverse].Iter->second.RefPos;
 
-			for (chrlen i = 0; i < len; i++, shift++)
-				score += vals[shift];
+			assert(len + offset < vals.size());
+			for (chrlen i = 0; i < len; i++, offset++)
+				score += vals[offset];
 			vp[ind].Iter->second.Score = score / len;
 		};
 
-		USHORT shift;
-		{	// left BS extentions
+		USHORT offset;
+		{	// left BS extensions
 			const auto& vp = VP[L];
-			shift = USHORT(vp.front().Iter->second.RefPos - startPos);
-			const BYTE extLen = BYTE(vp.size() - 1);
+			const auto extLen = BYTE(vp.size() - 1);
+			offset = USHORT(vp.front().Iter->second.RefPos - startPos);
 			for (BYTE i = 0; i < extLen; i++)			// left to right
-				setExtScore(L, vp, shift, i);
+				setExtScore(L, vp, offset, i);
 		}
-		{	// right BS extentions
+		{	// right BS extensions
 			const auto& vp = VP[R];
-			shift = USHORT(vp.back().Iter->second.RefPos - startPos);
-			for (BYTE i = BYTE(vp.size() - 1); i; i--)	// right to left
-				setExtScore(R, vp, shift, i);
+			const auto extLen = BYTE(vp.size() - 1);
+			if (extLen) {
+				offset = USHORT(vp[extLen - 1].Iter->second.RefPos - startPos);	// from the penultimate boundary
+				for (BYTE i = extLen; i; i--)	// right to left
+					setExtScore(R, vp, offset, i);
+			}
 		}
 		// base BS
 		const auto& itStartBS = VP[L].back().Iter;
 		const auto& itEndBS = VP[R].front().Iter;
-		shift = itStartBS->second.RefPos - startPos;
+		offset = itStartBS->second.RefPos - startPos;
 		const auto len = USHORT(itEndBS->second.RefPos - itStartBS->second.RefPos);
 		float score = 0;
 
-		for (USHORT i = 0; i < len; i++, shift++)
-			score += vals[shift];
+		for (USHORT i = 0; i < len; i++, offset++)
+			score += vals[offset];
 		score /= len;
 		if (maxScore < score)	maxScore = score;
 		itStartBS->second.Score = itEndBS->second.Score = score;

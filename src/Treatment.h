@@ -94,7 +94,7 @@ static struct Glob {
 	static bool		FragLenUndef;
 	static readlen	ReadLen;	// length of read
 	static fraglen	FragLen;	// average fragment length
-	static fraglen	ROI_ext;	// Regions of interest extention
+	static fraglen	ROI_ext;	// Regions of interest extension
 
 	static void SetPE(bool isPE) { if ((IsPE = isPE)) FragLenUndef = false; }
 
