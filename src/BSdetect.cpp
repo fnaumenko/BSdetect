@@ -218,7 +218,9 @@ void Detector::CallBS(chrid cID)
 	derivs.Set(splines);			_splines.WriteChrom(cID);
 	
 	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
+	//bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
+	//bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
 	bss.Print(cID, _outFName + ".BSS_dump.txt", false);

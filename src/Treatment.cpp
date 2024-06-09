@@ -1052,12 +1052,33 @@ void FitToMinWidth(BS_map::iter& start, BS_map::iter& end, short len)
 
 void BS_map::ExtendNarrowWidths()
 {
-	DoBasic([&](iter& start, iter& end) {
+	DoExtend([&](vector<PosValue>* VP) {
+		// basic start, end
+		auto& start = VP[L].back().Iter;
+		auto& end	= VP[R].front().Iter;
 		if (start->second.RgnNumb != end->second.RgnNumb)	return;
 
 		const auto len = short(end->first - start->first);
-		if (len < MIN_BS_WIDTH)
+		if (len < MIN_BS_WIDTH) {
 			FitToMinWidth(start, end, len);
+
+			// reset boundaries that are covered by extented base boundaries
+			auto resetCoveredItems = [](BS_PosVal& pval, BS_map::iter& itBase) {
+				if (pval.RefPos > itBase->second.RefPos)	return;
+				pval.Score = 0;
+			};
+
+			// left BS extentions
+			auto& vp = VP[L];
+			const auto extLen = BYTE(vp.size() - 1);
+			for (BYTE i = 0; i < extLen; i++)			// left to right
+				resetCoveredItems(vp[i].Iter->second, start);
+
+			// right BS extentions
+			vp = VP[R];
+			for (BYTE i = BYTE(vp.size() - 1); i; i--)	// right to left
+				resetCoveredItems(vp[i].Iter->second, end);
+		}
 		});
 }
 
@@ -1120,7 +1141,7 @@ void BS_map::Refine()
 			return it;
 		};
 
-		// *** reset extra right entries
+		// 1) reset extra right entries
 		if (lastExtRight_it != end()) {
 			if (someBS)
 				ResetExtEntries(lastExtRight_it, extRightCnt);
@@ -1130,7 +1151,7 @@ void BS_map::Refine()
 			}
 			lastExtRight_it = end();
 		}
-		// *** reset extra left entries
+		// 2) reset extra left entries
 		if (someBS)
 			ResetExtEntries(--it, extLeftCnt);
 		else {			// ** 'negative' BS width
@@ -1190,18 +1211,22 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 	vals.Reserve();
 
 	DoExtend([&](vector<PosValue>* VP) {
+		// extended start, end
+		auto& start = VP[L].front().Iter;
+		auto& end	= VP[R].back().Iter;
+		if (start->second.RgnNumb != end->second.RgnNumb)	return;
 
-		const auto& itStart = VP[L].front().Iter;
-		const auto& itEnd = VP[R].back().Iter;
-		if (itStart->second.RgnNumb != itEnd->second.RgnNumb)	return;
-
-		chrlen	startPos = itStart->second.RefPos;
-		cover.SetLocalSpline(spliner, startPos, itEnd->second.RefPos, vals);
+		chrlen	startPos = start->second.RefPos;
+		cover.SetLocalSpline(spliner, startPos, end->second.RefPos, vals);
 
 		// *** set score
 
-		// set score for the BS extention
+		// set score for the BS extention (excluding base boundaries)
 		auto setExtScore = [&vals](BYTE reverse, const vector<PosValue>& vp, USHORT shift, BYTE ind) {
+			/*
+			fill the score from left to right (for reverse)
+			or from rigth to left (for direct) extended boundaries
+			*/
 			float score = 0;
 			auto len = vp[ind + reverse].Iter->second.RefPos - vp[ind - !reverse].Iter->second.RefPos;
 
@@ -1214,8 +1239,8 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 		{	// left BS extentions
 			const auto& vp = VP[L];
 			shift = USHORT(vp.front().Iter->second.RefPos - startPos);
-			const BYTE vpLen = BYTE(vp.size() - 1);
-			for (BYTE i = 0; i < vpLen; i++)			// left to right
+			const BYTE extLen = BYTE(vp.size() - 1);
+			for (BYTE i = 0; i < extLen; i++)			// left to right
 				setExtScore(L, vp, shift, i);
 		}
 		{	// right BS extentions
@@ -1393,16 +1418,16 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 
 	bss.DoExtend([&](const vector<BS_map::PosValue>* VP) {
 		// *** save basic info
-		const auto& itStart = VP[L].back().Iter;
-		const auto& itEnd = VP[R].front().Iter;
+		auto& start = VP[L].back().Iter;
+		auto& end	= VP[R].front().Iter;
 
-		LineAddUInts(itStart->second.RefPos, itEnd->second.RefPos, ++bsNumb, true);	// 3 basic fields
-		LineAddScore(itStart->second.Score, true);					// BS score
+		LineAddUInts(start->second.RefPos, end->second.RefPos, ++bsNumb, true);	// 3 basic fields
+		LineAddScore(start->second.Score, true);					// BS score
 
-		// *** additional regions info
+		// *** extended boudaries info
 		LineAddChar(DOT, true);
 		lastSep[1] = VP[R].size() - 1;
-		LineAddFloat(itEnd->second.Score, VP[1].size() - 1 || lastSep[1]);	// ratio
+		LineAddFloat(end->second.Score, VP[1].size() - 1 || lastSep[1]);	// ratio
 
 		// *** extra deviations info
 		for (BYTE s : {L, R}) {
@@ -1436,9 +1461,9 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 {
 	chrlen bsNumb = 0;
 	const reclen offset = AddChromToLine(cID);
-	const BYTE COLORS_CNT = 4;
 
 	bss.DoExtend([&](const vector<BS_map::PosValue>* VP) {
+		const BYTE COLORS_CNT = 4;
 		static const string colors[]{
 			// color		 ind	feature_score/BS_score
 			"155,233,168",	// 1	>=0.2	light light green
