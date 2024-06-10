@@ -57,7 +57,7 @@ Options::Option Options::List[] = {
 	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrVersion, NULL },
 	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrUsage, NULL },
 
-	{ 'L',"rd-len",	tOpt::NONE,	tINT,	gOTHER, 50, 20, 1000, NULL,
+	{ 'R',"rd-len",	tOpt::NONE,	tINT,	gOTHER, 50, 20, 1000, NULL,
 	"fixed length of output read, or minimum length of variable reads", NULL },
 };
 const BYTE Options::OptCount = ArrCnt(Options::List);
@@ -86,19 +86,36 @@ int main(int argc, char* argv[])
 #ifdef MY_DEBUG
 		TreatedCover::WriteDelim = true;
 #endif
-		auto ftype = FT::GetType(iName);
-
-		if (!gName && ftype != FT::BAM)
-			Err(Options::OptionToStr(oGEN) + " is required while input file is not BAM", iName).Throw();
-
 		BedWriter::SetRankScore(Options::GetBVal(oRANK_SCORE));
 		Verb::Set(Options::GetUIVal(oVERB));
 		Glob::SetFragLen(Options::GetIVal(oFRAG_LEN));
 
+		auto ftype = FT::GetType(iName);
+		if (!gName && ftype != FT::BAM)
+			Err(Options::OptionToStr(oGEN) + " is required while input file is not BAM", iName).Throw();
+
 		ChromSizes cSizes(gName, true);
 
+		// pre-covered data mode
+		if (ftype == FT::BGRAPH)
+		{
+			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
+			{	// check iName for pattern match
+				const char* pattName = strchr(iName, '_');
+				if (!pattName)	Err("invalid fragment coverage file name", iName).Throw();
+				Glob::SetPE(*(pattName + 1) == 'P');
+			}
+
+			Detector bsd(
+				iName,
+				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
+				cSizes,
+				Options::GetBVal(oSAVE_INTER)
+			);
+		}
 		// main mode
-		if (ftype == FT::BED) {
+		else
+		{
 			// pre-read first item to check for PE sequence
 			RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, Verb::Level(Verb::DBG), false, true, true);
 			Verb::PrintMsg(Verb::DBG);
@@ -111,23 +128,6 @@ int main(int argc, char* argv[])
 				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
 				cSizes,
 				Options::GetBVal(oSAVE_COVER),
-				Options::GetBVal(oSAVE_INTER)
-			);
-		}
-		// pre-covered data mode
-		else {
-			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
-			{	// check iName for pattern match
-				const char* pattName = strchr(iName, '_');
-				if (!pattName)
-					Err("invalid fragment coverage file name", iName).Throw();
-				Glob::SetPE(*(pattName + 1) == 'P');
-			}
-
-			Detector bsd(
-				iName,
-				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
-				cSizes,
 				Options::GetBVal(oSAVE_INTER)
 			);
 		}
