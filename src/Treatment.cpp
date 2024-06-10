@@ -972,18 +972,12 @@ void BS_map::AddPos(BYTE reverse, chrlen rgnNumb, const Incline& incl)
 		// find the iterator that will follow the inserted element
 		for (; lastIt != end() && lastIt->first < pos; lastIt++);
 
-		// the inserted position can duplicate an already inserted right one; reduce it by 1
+		// the left inserted position can duplicate an already inserted right one; reduce it by 1
 		if ((lastIt != end() && lastIt->first == pos) || prev(lastIt)->first == pos)
 			--pos;
 
-		//if (lastIt != end() && lastIt->first == pos) {
-		//	printf(">> pos %d, numb %d, dupl next\n", pos, rgnNumb);
-		//	--pos;
-		//}
-		//else if(prev(lastIt)->first == pos) {
-		//	printf(">> pos %d, numb %d, dupl prev\n", pos, rgnNumb);
-		//	--pos;
-		//}
+		//if (lastIt != end() && lastIt->first == pos)	printf(">> pos %d, numb %d, dupl next\n", pos--, rgnNumb);
+		//else if(prev(lastIt)->first == pos)			printf(">> pos %d, numb %d, dupl prev\n", pos--, rgnNumb);
 
 		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, rgnNumb));
 		_lastIt->second.RefPos = _lastIt->first;
