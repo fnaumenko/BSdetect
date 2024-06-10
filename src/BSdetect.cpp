@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 06/08/2024
+Last modified: 06/10/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -57,10 +57,6 @@ Options::Option Options::List[] = {
 	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrVersion, NULL },
 	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrUsage, NULL },
 
-	{ 'F', "read-cover-frw",tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "forward read coverage file", NULL},
-	{ 'R', "read-cover-rev",tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "reversed read coverage file", NULL},
-	{ 'm', "smode",	tOpt::NONE,	tENUM,	gOTHER, 0, 0, ArrCnt(smodes), (char*)smodes,
-	"sequencing mode: ? - single end, ? - paired end", NULL },
 	{ 'L',"rd-len",	tOpt::NONE,	tINT,	gOTHER, 50, 20, 1000, NULL,
 	"fixed length of output read, or minimum length of variable reads", NULL },
 };
@@ -92,7 +88,6 @@ int main(int argc, char* argv[])
 #endif
 		auto ftype = FT::GetType(iName);
 
-		//if (!gName && !FS::HasExt(iName, FT::Ext(FT::BAM)))
 		if (!gName && ftype != FT::BAM)
 			Err(Options::OptionToStr(oGEN) + " is required while input file is not BAM", iName).Throw();
 
@@ -102,6 +97,7 @@ int main(int argc, char* argv[])
 
 		ChromSizes cSizes(gName, true);
 
+		// main mode
 		if (ftype == FT::BED) {
 			// pre-read first item to check for PE sequence
 			RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, Verb::Level(Verb::DBG), false, true, true);
@@ -118,14 +114,18 @@ int main(int argc, char* argv[])
 				Options::GetBVal(oSAVE_INTER)
 			);
 		}
+		// pre-covered data mode
 		else {
-			Glob::SetPE(Options::GetBVal(oSMODE));
 			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
+			{	// check iName for pattern match
+				const char* pattName = strchr(iName, '_');
+				if (!pattName)
+					Err("invalid fragment coverage file name", iName).Throw();
+				Glob::SetPE(*(pattName + 1) == 'P');
+			}
 
 			Detector bsd(
 				iName,
-				FS::CheckedFileName(Options::GetSVal(oPOS_READ_COVER)),
-				FS::CheckedFileName(Options::GetSVal(oNEG_READ_COVER)),
 				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
 				cSizes,
 				Options::GetBVal(oSAVE_INTER)
@@ -218,9 +218,9 @@ void Detector::CallBS(chrid cID)
 	derivs.Set(splines);			_splines.WriteChrom(cID);
 	
 	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
-	bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
+	//bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
-	bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
+	//bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
 	bss.Print(cID, _outFName + ".BSS_dump.txt", false);

@@ -368,6 +368,7 @@ public:
 	void Fill(const Reads& reads);
 };
 
+// chromosome freaquence counter
 using tChromsFreq = map<chrid, BYTE>;
 
 // Wrapper for initializing a coverage from a file
@@ -383,7 +384,7 @@ public:
 	//	@param fName[in]: file name
 	//	@param cSizes[in]: chrom sizes
 	//	@param cover[out]: coverage to initialize
-	//	@param chrFreq[out]: chrom reading frequency
+	//	@param chrFreq[out]: chromosome reading frequency
 	//	@param strand[in]: strand
 	CombCoverReader(
 		const char* fName,

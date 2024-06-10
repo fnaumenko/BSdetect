@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 06/08/2024
+Last modified: 06/10/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -25,15 +25,15 @@ enum optValue {		// options id
 	oVERSION,
 	oHELP,
 
-	oPOS_READ_COVER,
-	oNEG_READ_COVER,
-	oSMODE,
 	oREAD_LEN
 };
 
 // BS detector
 class Detector
 {
+	const string FNameFragExt = "_frag";
+	const string FNameReadExt = "_read";
+
 	ChromSizes&		 _cSizes;
 	bool			 _saveCover;
 	CombCover		 _frag—overs;		// extended reads cover to find frag Mean
@@ -70,9 +70,9 @@ public:
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		, _frag—overs(cSizes, Glob::IsPE ? 1 : 3, saveCover, outFName + "_frag", "fragment coverage")
-		, _read—overs(cSizes, 2, saveCover, outFName + "_read", "read coverage")
-		, _regions(cSizes, 2 - Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
+		, _frag—overs(cSizes, 3-2*Glob::IsPE, saveCover, outFName + FNameFragExt, "fragment coverage")
+		, _read—overs(cSizes, 2, saveCover, outFName + FNameReadExt, "read coverage")
+		, _regions(cSizes, 2-Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
 		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
 		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
 #ifdef MY_DEBUG
@@ -93,25 +93,21 @@ public:
 	}
 
 	// Pre-covered data constructor. For PE only!
-	//	@param fCover_fName: fragment coverage file name
-	//	@param rCoverPos_fName: forward read coverage file name
-	//	@param rCoverNeg_fName: reversed read coverage file name
+	//	@param inFName: fragment coverage file name
 	//	@param outFName: common output file name
 	//	@param cSizes: chrom sizes
 	//	@param saveInter: if true then save intermediate data to files
 	Detector(
-		const char* fCover_fName,
-		const char* rCoverPos_fName,
-		const char* rCoverNeg_fName,
+		const char* inFName,
 		const string& outFName,
 		ChromSizes& cSizes, 
 		bool saveInter
 	)
 		: _cSizes(cSizes)
 		, _saveCover(false)
-		, _frag—overs(cSizes,	1,	false,		outFName + "_frag"	, "fragment coverage")
-		, _read—overs(cSizes,	2,	false,		outFName + "_read"	, "read coverage")
-		, _regions(cSizes,2-Glob::IsPE,saveInter,outFName + ".RGNS"	, "potential regions")
+		, _frag—overs(cSizes,3-2*Glob::IsPE, false, outFName + FNameFragExt, "fragment coverage")
+		, _read—overs(cSizes,	2,			 false,	outFName + FNameReadExt, "read coverage")
+		, _regions	 (cSizes,2-Glob::IsPE,saveInter,outFName + ".RGNS"	, "potential regions")
 		, _splines	 (cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
 		, _derivs	 (cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
 #ifdef MY_DEBUG
@@ -122,17 +118,41 @@ public:
 		, _bss		 (cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
 	{
-		{	// preparing covered data
+		// preparing coverage data
+		{
+			const char* pattName = strrchr(inFName, '_');
+			{
+				// check inFName
+				string fragExt(pattName, strrchr(inFName, DOT) - pattName);
+				if (fragExt != FNameFragExt)
+					Err("only fragment coverage file is permissible", inFName).Throw();
+			}
+			string baseName(inFName,  pattName - inFName);
+
 			tChromsFreq	chrFreq;
 			_timer.Start();
 			// initialize covered data
-			CombCoverReader a(fCover_fName,		cSizes, _frag—overs, chrFreq, TOTAL);
-			CombCoverReader b(rCoverPos_fName,	cSizes, _read—overs, chrFreq, POS);
-			CombCoverReader c(rCoverNeg_fName,	cSizes, _read—overs, chrFreq, NEG);
+			CombCoverReader a(inFName, cSizes, _frag—overs, chrFreq, TOTAL);
+			if (!Glob::IsPE) {
+				string fCoverPos = baseName + FNameFragExt + sStrandEXT[POS] + FT::Ext(FT::BGRAPH);
+				string fCoverNeg = baseName + FNameFragExt + sStrandEXT[NEG] + FT::Ext(FT::BGRAPH);
+
+				CombCoverReader b(FS::CheckedFileName(fCoverPos.c_str()), cSizes, _frag—overs, chrFreq, POS);
+				CombCoverReader c(FS::CheckedFileName(fCoverNeg.c_str()), cSizes, _frag—overs, chrFreq, NEG);
+			}
+			baseName += FNameReadExt;
+			CombCoverReader b(
+				FS::CheckedFileName((baseName + sStrandEXT[POS] + FT::Ext(FT::BGRAPH)).c_str()),
+				cSizes, _read—overs, chrFreq, POS);
+			CombCoverReader c(
+				FS::CheckedFileName((baseName + sStrandEXT[NEG] + FT::Ext(FT::BGRAPH)).c_str()),
+				cSizes, _read—overs, chrFreq, NEG);
 
 			cSizes.TreateAll(false);
+			BYTE dataCnt = Glob::IsPE ? 3 : 5;
 			for (const auto& c : chrFreq)
-				_cSizes.TreateChrom(c.first, c.second == 3);	// all 3 readers have read the chromosome
+				_cSizes.TreateChrom(c.first, c.second == dataCnt);	// all readers worked
+
 			_timer.Stop("Reading coverage: "); cout << LF;
 		}
 		// treatment
