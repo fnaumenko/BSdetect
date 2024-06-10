@@ -101,9 +101,16 @@ int main(int argc, char* argv[])
 		{
 			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
 			{	// check iName for pattern match
+				const char* msg = "invalid fragment coverage file name";
 				const char* pattName = strchr(iName, '_');
-				if (!pattName)	Err("invalid fragment coverage file name", iName).Throw();
-				Glob::SetPE(*(pattName + 1) == 'P');
+				if (pattName) {
+					pattName++;
+					if(*pattName != 'P' && *pattName != 'S')
+						Err(msg, iName).Throw();
+					Glob::SetPE(*(pattName + 1) == 'P');
+				}
+				else
+					Err(msg, iName).Throw();
 			}
 
 			Detector bsd(
