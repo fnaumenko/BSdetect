@@ -1307,48 +1307,6 @@ void BS_map::PrintStat() const
 }
 
 #ifdef MY_DEBUG
-void BS_map::CheckScoreHierarchy()
-{
-	if (!Verb::Level(Verb::DBG))	return;
-
-	chrlen bsNumb = 0;
-	bool issues = false;
-
-	printf("\nCHECK SCORES HIERARCHY\n");
-	DoExtend([&](const vector<PosValue>* VP) {
-		bool prNeg = false, prPos = false;
-		float val = 0;
-		auto prVals = [](bool sep, char sign, const vector<PosValue>& VP) {
-			if (sep) 	printf(" ");
-			printf("%c", sign);
-			for (const PosValue& vp : VP)
-				printf("%2.3f ", vp.Val);
-		};
-
-		bsNumb++;
-		// set prNeg; check all
-		for (const PosValue& vp : VP[L])
-			if (prNeg = (val > vp.Val))		break;
-			else val = vp.Val;
-		// set prPos; check all except first element
-		const BYTE vpLen = BYTE(VP[R].size() - 1);
-		const auto& vp = VP[R];
-		val = 1000;
-		for (BYTE i = 1; i < vpLen; i++)
-			if (prPos = (val < vp[i].Val))	break;
-			else val = vp[i].Val;
-		// print of excess over basic score
-		if (prNeg || prPos) {
-			issues = printf("%4d  %d\t", bsNumb, VP[L].back().Iter->second.RefPos);	// start position
-			if (prNeg)	prVals(false, '-', VP[L]);
-			if (prPos)	prVals(prNeg, '+', VP[R]);
-			printf("\n");
-		}
-		});
-
-	if (!issues)	printf("OK\n");
-}
-
 void BS_map::PrintWidthDistrib(const string& fName) const
 {
 	map<fraglen, vector<chrlen>> freq;

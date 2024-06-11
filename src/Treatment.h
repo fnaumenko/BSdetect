@@ -875,9 +875,6 @@ public:
 	}
 
 #ifdef MY_DEBUG
-	// Prints "unsorted" scores
-	void CheckScoreHierarchy();
-
 	// Prints BS width distribution
 	//	@param fName: name of file to print
 	void PrintWidthDistrib(const string& fName) const;
