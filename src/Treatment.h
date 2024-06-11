@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/08/2024
+Last modified: 06/11/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -808,9 +808,6 @@ private:
 	// may adjust reference position
 	void ExtendNarrowWidths();
 
-	// Prints BS width distribution
-	void PrintWidthDistrib() const;
-
 public:
 	// positioned value
 	struct PosValue {
@@ -881,11 +878,15 @@ public:
 	// Prints "unsorted" scores
 	void CheckScoreHierarchy();
 
+	// Prints BS width distribution
+	//	@param fName: name of file to print
+	void PrintWidthDistrib(const string& fName) const;
+
 	// Prints BS positions
-	//	@param outFName: name of file to print
+	//	@param fName: name of file to print
 	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 
-	void Print(chrid cID, const string& outFName, bool selected, chrlen stopPos = 0) const;
+	void Print(chrid cID, const string& fName, bool selected, chrlen stopPos = 0) const;
 #endif
 };
 

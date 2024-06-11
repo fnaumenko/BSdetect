@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 06/10/2024
+Last modified: 06/11/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -84,7 +84,7 @@ public:
 		, _fIdent(true)
 	{
 		if (Verb::Level(Verb::RT))
-			printf("%s-end sequencing\n", Glob::IsPE ? "paired" : "single");
+			printf("%s-end sequence\n", Glob::IsPE ? "paired" : "single");
 		_file = &file;
 		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
 		file.Pass(*this);

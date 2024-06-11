@@ -1090,33 +1090,6 @@ void BS_map::ExtendNarrowWidths()
 		});
 }
 
-void BS_map::PrintWidthDistrib() const
-{
-	map<fraglen, vector<chrlen>> freq;
-	chrlen	totalLen = 0, bsNumb = 0;
-
-	// collect numbers
-	DoBasic([&](citer& start, citer& end) {
-		auto len = fraglen(end->second.RefPos - start->second.RefPos);
-		totalLen += len;
-		freq[len].push_back(++bsNumb);
-		}
-	);
-	// print numbers
-	const char* length = "width";
-	printf("\nBS WIDTH FREQUENCY:\n");
-	printf("%s cnt  numbers\n", length);
-	for (const auto& item : freq) {
-		printf("%4d %4u  ", item.first, UINT(item.second.size()));
-		auto it = item.second.begin();
-		printf("%d", *it);
-		for (it++; it != item.second.end(); it++)
-			printf(",%d", *it);
-		printf("\n");
-	}
-	printf("average %s: %.2f\n", length, float(totalLen) / bsNumb);
-}
-
 void BS_map::Refine()
 {
 	/*
@@ -1321,7 +1294,6 @@ void BS_map::PrintStat() const
 		//	PrintSolidLine(len);
 		//};
 
-		PrintWidthDistrib();
 		// score
 		printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
 		//ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
@@ -1377,13 +1349,43 @@ void BS_map::CheckScoreHierarchy()
 	if (!issues)	printf("OK\n");
 }
 
-void BS_map::Print(chrid cID, const string& outFName, bool selected, chrlen stopPos) const
+void BS_map::PrintWidthDistrib(const string& fName) const
+{
+	map<fraglen, vector<chrlen>> freq;
+	chrlen	totalLen = 0, bsNumb = 0;
+	TxtOutFile file(fName.c_str());
+
+	// collect numbers
+	DoBasic([&](citer& start, citer& end) {
+		auto len = fraglen(end->second.RefPos - start->second.RefPos);
+		totalLen += len;
+		freq[len].push_back(++bsNumb);
+		}
+	);
+	// print numbers
+	const char* length = "width";
+	file.Write("BS WIDTH FREQUENCY:\n");
+	file.Write("%s cnt  numbers\n", length);
+	for (const auto& item : freq) {
+		file.Write("%4d %4u  ", item.first, UINT(item.second.size()));
+		auto it = item.second.begin();
+		file.Write("%d", *it);
+		for (it++; it != item.second.end(); it++)
+			file.Write(",%d", *it);
+		file.Write("\n");
+	}
+	auto avrWidth = float(totalLen) / bsNumb;
+	file.Write("average %s: %.2f\n", length, avrWidth);
+	printf("\naverage %s: %.2f\n", length, avrWidth);
+}
+
+void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos) const
 {
 	string format = "%8d % 4d  %c %8d %5.2f   %s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
-	TxtOutFile file(outFName.c_str());
+	TxtOutFile file(fName.c_str());
 	file.Write(" pos     rgn bnd  ref pos score   IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
