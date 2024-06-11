@@ -199,6 +199,7 @@ void Detector::CallBS(chrid cID)
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
 		Verb::PrintMsgVar(Verb::RT, "Mean fragment length: %d\n", FragDefLEN - peakDiff);
 		if (peakDiff > 10) {			// significant difference
+			Verb::PrintMsgVar(Verb::RT, "Rebuild coverages\n");
 			Glob::FragLen -= peakDiff;
 			_frag—overs.Clear();
 			_frag—overs.Fill(_reads);

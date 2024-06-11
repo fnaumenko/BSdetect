@@ -977,7 +977,7 @@ void BS_map::AddPos(BYTE reverse, chrlen rgnNumb, const Incline& incl)
 			printf(">> pos %d, numb %d, dupl last\n", pos, rgnNumb);
 			pos--;
 		}
-		else if (prev(lastIt)->first == pos) {
+		else if (lastIt != begin() && prev(lastIt)->first == pos) {
 			printf(">> pos %d, numb %d, dupl prev\n", pos, rgnNumb);
 			pos--;
 			lastIt--;
@@ -1153,16 +1153,17 @@ void BS_map::Refine()
 		if (lastExtRight_it != end()) {
 			if (someBS)
 				ResetExtEntries(lastExtRight_it, extRightCnt);
-			else {		// ** 'negative' BS width
-				lastExtRight_it->second.Reverse = true;				// change 'right' bound to 'left'
-				ResetExtEntries(--lastExtRight_it, --extRightCnt);	// reset other extra entries
+			else {						// ** 'negative' BS width
+				lastExtRight_it->second.Reverse = true;		// change 'right' bound to 'left'
+				if (extRightCnt > 0)
+					ResetExtEntries(--lastExtRight_it, --extRightCnt);	// reset other extra entries
 			}
 			lastExtRight_it = end();
 		}
 		// 2) reset extra left entries
 		if (someBS)
 			ResetExtEntries(--it, extLeftCnt);
-		else {			// ** 'negative' BS width
+		else if(extLeftCnt > 0) {		// ** 'negative' BS width
 			auto itR = ResetExtEntries(--it, --extLeftCnt);	// reset other extra entries
 			if (itR != end()) {
 				itR->second.Reverse = false;				// change 'left' bound to 'right
