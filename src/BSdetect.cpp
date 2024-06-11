@@ -157,8 +157,10 @@ float Detector::GetPeakPosDiff(chrid cID)
 	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
 	_timer.Start();
 	coval maxVal = readCovers.StrandData(POS).GetMaxVal();
-	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 4);
-	if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], maxVal / 4, true))	return false;
+	coval cutoff = maxVal / 3;
+	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, cutoff);
+	if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], cutoff, true))
+		return false;
 	// calculate mean difference as the average of three attempts
 	float peakDiff = 0;
 	BYTE cnt = 0;
@@ -180,20 +182,20 @@ void Detector::CallBS(chrid cID)
 {
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
 	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
-	DataCoverRegions& regions		= static_cast<DataCoverRegions&>(_regions.ChromData(cID));
+	DataCoverRegions& regions	= static_cast<DataCoverRegions&>(_regions.ChromData(cID));
 	DataValuesMap& splines		= static_cast<DataValuesMap&>(_splines.ChromData(cID));
 	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
 	BS_map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];
-	bool	resetCover = true;
-
-	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
+	//bool	resetCover = true;
 
 #ifdef MY_DEBUG
 	_lineWriter.SetChromID(cID);	BoundsValues::SetSpecialWriter(_lineWriter);
 	_splineWriter.SetChromID(cID);	TreatedCover::SetSpecialWriter(_splineWriter);
 	//Incline::SetOutFile(cID, "incline.txt");
 #endif
+
+	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 
 	if (Glob::FragLenUndef) {		// can be true for SE sequence only
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
@@ -203,16 +205,17 @@ void Detector::CallBS(chrid cID)
 			Glob::FragLen -= peakDiff;
 			_frag—overs.Clear();
 			_frag—overs.Fill(_reads);
-			regions.Clear();
 		}
-		else
-			resetCover = false;
+		//else
+		//	resetCover = false;
 		_reads.Clear();
+		regions.Clear();
 		Glob::FragLenUndef = false;
 	}
 	Verb::PrintMsg(Verb::RT, "Locate binding sites");
 	_timer.Start();
-	if (resetCover && regions.SetPotentialRegions(fragCovers, cLen, 3))	return;
+	if (/*resetCover && */regions.SetPotentialRegions(fragCovers, cLen, 3))
+		return;
 
 	splines.BuildSpline(readCovers, regions, true);	_regions.WriteChrom(cID);
 	splines.EliminateNonOverlaps();

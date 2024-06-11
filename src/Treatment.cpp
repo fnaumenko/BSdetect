@@ -376,6 +376,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff)
 {
 	const fraglen minLen = 3 * (Glob::FragLen / 2);		//1.5 fragment lengths
+	//const auto minLen = fraglen(1.6f * Glob::FragLen);
 	chrlen	start = 0, end = 0;
 	coviter itStart, itEnd;
 
@@ -419,7 +420,7 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 {
 	chrlen capacity = cLen / (Glob::FragLen * 100);
 	if(Glob::IsPE)
-		TotalData().SetPotentialRegions(cover.TotalData(), capacity, cutoff);
+		TotalData().SetPotentialRegions(cover.TotalData(), capacity, cutoff * 2);
 	else {
 		StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
 		StrandData(NEG).SetPotentialRegions(cover.StrandData(NEG), capacity, cutoff);
