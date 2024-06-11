@@ -107,7 +107,7 @@ int main(int argc, char* argv[])
 					pattName++;
 					if(*pattName != 'P' && *pattName != 'S')
 						Err(msg, iName).Throw();
-					Glob::SetPE(*(pattName + 1) == 'P');
+					Glob::SetPE(*pattName == 'P');
 				}
 				else
 					Err(msg, iName).Throw();
@@ -159,10 +159,6 @@ float Detector::GetPeakPosDiff(chrid cID)
 	coval maxVal = readCovers.StrandData(POS).GetMaxVal();
 	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, maxVal / 4);
 	if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], maxVal / 4, true))	return false;
-
-	//auto flen = regions.GetFragMean(fragCovers);		// by mass centre
-	//printf("\nMass Mean fragment length: %d\n", flen);
-
 	// calculate mean difference as the average of three attempts
 	float peakDiff = 0;
 	BYTE cnt = 0;
@@ -173,7 +169,6 @@ float Detector::GetPeakPosDiff(chrid cID)
 		auto diff = splines.GetPeakPosDiff();
 		peakDiff += diff;
 		Verb::PrintMsgVar(Verb::DBG, "spline base: %d  diff: %.2f\n", splineBase, diff);
-		//peakDiff += splines.GetPeakPosDiff();
 		splines.Clear();
 		cnt++;
 	}
@@ -203,7 +198,7 @@ void Detector::CallBS(chrid cID)
 	if (Glob::FragLenUndef) {		// can be true for SE sequence only
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
 		Verb::PrintMsgVar(Verb::RT, "Mean fragment length: %d\n", FragDefLEN - peakDiff);
-		if (peakDiff > 5) {			// significant difference
+		if (peakDiff > 10) {			// significant difference
 			Glob::FragLen -= peakDiff;
 			_frag—overs.Clear();
 			_frag—overs.Fill(_reads);

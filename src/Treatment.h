@@ -145,7 +145,7 @@ public:
 
 	// Adds positions with local maximum value
 	//	@param startPos[in]: start position to search
-	//	@oaram pos[out]: vector of maximum value positions to which the value is added
+	//	@param pos[out]: vector of maximum value positions to which the value is added
 	void GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const;
 
 #ifdef MY_DEBUG

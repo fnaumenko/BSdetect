@@ -300,8 +300,7 @@ void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
 template<typename T>
 void EliminateMultiOverlapsRegions(T rgns[2])
 {
-	const typename T::iterator itEnd0 = rgns[0].end();
-	const typename T::iterator itEnd1 = rgns[1].end();
+	const typename T::iterator End[]{ rgns[0].end(), rgns[1].end() };
 	typename T::iterator it0[2]{ rgns[0].begin(), rgns[1].begin() };
 	typename T::iterator it[2] { next(it0[0]), next(it0[1]) };
 
@@ -317,13 +316,13 @@ void EliminateMultiOverlapsRegions(T rgns[2])
 		if (isWeak(s)) {
 			it0[s]++;
 			if (isWeak(s))	it0[s]++;
-			it[s] = next(it0[s]);
+			it[s] = it0[s] != End[s] ? next(it0[s]) : it0[s];
 			return true;
 		}
 		return false;
 	};
 
-	while (it[0] != itEnd0 && it[1] != itEnd1) {
+	while (it[0] != End[0] && it[1] != End[1]) {
 		if (jumpOverWeaks(0))	continue;
 		if (jumpOverWeaks(1))	continue;
 
@@ -500,13 +499,13 @@ void Values::GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const
 {
 	float val0 = front();
 	bool increase = false;
-	USHORT equalCnt = 0;
+	USHORT equalCnt = 0;	// equal value counter
 
 	for (auto it = next(begin()); it != end(); val0 = *it, it++, startPos++)
 		if (*it == val0)
 			equalCnt++;
 		else {
-			if (*it > val0)	// increase value
+			if (*it > val0)			// increase value
 				increase = true;
 			else if (increase) {	// decrease value
 				pos.push_back(startPos - equalCnt / 2);	// correct startPos for the 'flat' summit
@@ -697,10 +696,11 @@ float DataValuesMap::GetPeakPosDiff() const
 	auto& nData = StrandData(NEG);
 	assert(pData.size() == nData.size());
 	USHORT missed = 0;
-	vector<USHORT> diffs;
+	vector<SHORT> diffs;
 	vector<chrlen> pPos, nPos;	// max positions in a positive, negative splines
 
-	// get the difference of the splines maximums 
+	// get the difference of the splines maximums
+	diffs.reserve(pData.size());	// suppose one summit for the region's spline
 	pPos.reserve(2);
 	nPos.reserve(2);
 	for (auto itP = pData.begin(), itN = nData.begin(); itP != pData.end() && itN != nData.end(); itP++, itN++) {
@@ -709,7 +709,7 @@ float DataValuesMap::GetPeakPosDiff() const
 		itN->second.GetMaxValPos(itN->first, nPos);
 		if (pPos.size() == nPos.size())
 			for (auto itP = pPos.begin(), itN = nPos.begin(); itP != pPos.end(); itP++, itN++)
-				diffs.push_back(USHORT(*itP - *itN));
+				diffs.push_back(SHORT(*itP - *itN));
 		else
 			missed++;		// just ignore splines with different max positions
 		pPos.clear();
