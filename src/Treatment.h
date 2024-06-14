@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/11/2024
+Last modified: 06/14/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -456,7 +456,7 @@ class CoverRegions : public vector<CoverRegion>
 
 #ifdef MY_DEBUG
 	// Prints frequency distribution of potentail regions value ('score')
-	void PrintScoreDistrib() const;
+	void PrintScoreDistrib(const char* fname) const;
 #endif
 
 public:
@@ -547,7 +547,7 @@ public:
 	// Resets non overlapping spline value
 	void EliminateNonOverlaps();
 
-	// Sets a single consecutive potential region number to each overlapped not empty spline
+	// Sets a single consecutive potential region number to each overlapped non-empty spline
 	void Numerate();
 
 	// Prints potential regions before and after selection

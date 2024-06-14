@@ -401,16 +401,18 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacit
 }
 
 #ifdef MY_DEBUG
-void CoverRegions::PrintScoreDistrib() const
+void CoverRegions::PrintScoreDistrib(const char* fname) const
 {
 	map<coval, chrlen> freq;
 
 	for (const auto& rgn : *this)
 		freq[rgn.value]++;
-	printf("\nREGIONS LENGTH FREQUENCY\n");
-	printf("length freq\n");
+	TxtOutFile file(fname);
+
+	//printf("\nREGIONS LENGTH FREQUENCY\n");
+	file.Write("score\tfreq\n");
 	for (const auto& item : freq)
-		printf("%5d %d\n", item.first, item.second);
+		file.Write("%d\t%d\n", item.first, item.second);
 }
 #endif
 
@@ -419,11 +421,16 @@ void CoverRegions::PrintScoreDistrib() const
 bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
 {
 	chrlen capacity = cLen / (Glob::FragLen * 100);
-	if(Glob::IsPE)
+	if (Glob::IsPE) {
 		TotalData().SetPotentialRegions(cover.TotalData(), capacity, cutoff * 2);
+		//TotalData().PrintScoreDistrib("RGNS.dist");
+	}
 	else {
 		StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
 		StrandData(NEG).SetPotentialRegions(cover.StrandData(NEG), capacity, cutoff);
+
+		//StrandData(POS).PrintScoreDistrib("RGNS.pos.dist");
+		//StrandData(NEG).PrintScoreDistrib("RGNS.neg.dist");
 
 		EliminateNonOverlapsRegions<CoverRegions>(Data(), Glob::FragLen);
 		if (noMultiOverl)
@@ -431,8 +438,9 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 		if (Verb::Level(Verb::DBG))
 			PrintRegionStats<CoverRegions>(Data(), cLen);
 	}
-	if (Empty()) { Verb::PrintMsg(Verb::CRIT, "No enriched regions found"); return true; }
-	return false;
+	if (!Empty())	return false;
+	Verb::PrintMsg(Verb::CRIT, "No enriched regions found");
+	return true;
 }
 
 //fraglen DataCoverRegions::GetFragMean(const DataSet<TreatedCover>& cover) const
@@ -539,12 +547,12 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 	IGVlocus locus(cID);
 
 	printf("SPLINES %s\n", sStrandTITLES[reverse + 1]);
-	printf(" N start\tend\tval\tIGV view\n");
+	printf(" N  start\tend\tval\tIGV view\n");
 	for (const auto& x : *this) {
 		if (stopNumb && x.second.RgnNumb > stopNumb)	break;
 		if (x.second.MaxVal()) {
 			chrlen end = x.first + x.second.Length();
-			printf("%2d %d\t%d\t%2.2f\t%s\n",
+			printf("%3d %d\t%d\t%2.2f\t%s\n",
 				x.second.RgnNumb, x.first, end, x.second.MaxVal(), locus.Print(x.first, end));
 		}
 	}
@@ -647,14 +655,21 @@ void ValuesMap::EliminateNonOverlaps()
 
 void ValuesMap::Numerate()
 {
-	const fraglen overLen = SSpliner<coval>::SilentLength(CurveTYPE, ReadSplineBASE) + 10;	// minimum overlap length; 10 - min BS length !!! - constanta?
+	// minimum overlap length: 10 - empirical addition
+	const fraglen minOverlap = SSpliner<coval>::SilentLength(CurveTYPE, ReadSplineBASE) + 10;
 	ValuesMap::Iter it[2]	{ this[0].begin(),	this[1].begin() };
 	ValuesMap::Iter itEnd[2]{ this[0].end(),	this[1].end()	};
 	chrlen numb = 1;
 
-	auto NextStart = [this, &it, &itEnd](BYTE s) { 
+	auto isOverlap = [&](BYTE s) {
 		auto it1 = next(it[s]);
-		return it1 != itEnd[s] ? ValuesMap::Start(it1) : CHRLEN_MAX;
+		auto nextStart = it1 != itEnd[s] ? ValuesMap::Start(it1) : CHRLEN_MAX;
+		if (nextStart >= End(it[!s])) 
+			return false;		// non-overlapping
+		(++it[s])->second.RgnNumb = numb;
+		if (nextStart + minOverlap >= End(it[!s]))
+			it[s]->second.MarkAsEmpty();	// overlapping is insufficient
+		return true;			// overlapping
 	};
 
 	while (it[0] != itEnd[0] && it[1] != itEnd[1]) {
@@ -662,15 +677,9 @@ void ValuesMap::Numerate()
 		if (!it[1]->second.MaxVal()) { it[1]++; continue; }
 
 		it[0]->second.RgnNumb = it[1]->second.RgnNumb = numb;
-
-		for(bool overlap = true; overlap; )
-			if (NextStart(0) + overLen < End(it[1]))
-				overlap = (++it[0])->second.RgnNumb = numb;
-			else if (NextStart(1) + overLen < End(it[0]))
-				overlap = (++it[1])->second.RgnNumb = numb;
-			else 
-				overlap = false;
-
+		for (bool overlap = true; overlap; )
+			if (!(overlap = isOverlap(0)))
+				overlap = isOverlap(1);
 		numb++;
 		it[0]++, it[1]++;
 	}
@@ -717,7 +726,7 @@ float DataValuesMap::GetPeakPosDiff() const
 		nPos.clear();
 	}
 	if (missed)
-		Verb::PrintMsgVar(Verb::DBG, "%4.1f%% regions were rejected while determining the fragment length\n", Percent(missed, pData.size()));
+		Verb::PrintMsgVar(Verb::DBG, "%4.1f%% rejected regions;\t", Percent(missed, pData.size()));
 
 	int sum0 = 0;
 	for (auto diff : diffs)
@@ -975,11 +984,11 @@ void BS_map::AddPos(BYTE reverse, chrlen rgnNumb, const Incline& incl)
 
 		// the left inserted position can duplicate an already inserted right one; reduce it by 1
 		if (lastIt != end() && lastIt->first == pos) {
-			printf(">> pos %d, numb %d, dupl last\n", pos, rgnNumb);
+			//printf(">> pos %d, numb %d, dupl last\n", pos, rgnNumb);
 			pos--;
 		}
 		else if (lastIt != begin() && prev(lastIt)->first == pos) {
-			printf(">> pos %d, numb %d, dupl prev\n", pos, rgnNumb);
+			//printf(">> pos %d, numb %d, dupl prev\n", pos, rgnNumb);
 			pos--;
 			lastIt--;
 		}
@@ -1105,8 +1114,8 @@ void BS_map::Refine()
 	and marking BSs with 'negative' width.
 	*/
 	auto lastExtRight_it = end();	// iterator pointing to the last Right entry that starts the region 
-	uint16_t extRightCnt = 0;		// count of Right entries (that starts the region)
-	uint16_t extLeftCnt = 0;		// count of Left entries (that ends the region)
+	uint16_t extRightCnt = 0;		// count of extra Right entries only (that starts the region)
+	uint16_t extLeftCnt = 0;		// count of extra Left entries only (that ends the region)
 	bool newBS = true;				// if true then new BS in the region is registered
 	bool someBS = false;			// if true then at least one BS in the region is registered
 	chrlen rgnNumb = 1;
@@ -1173,7 +1182,7 @@ void BS_map::Refine()
 					lastExtRight_it = it;
 			if (extLeftCnt)
 				someBS = true;
-			else
+			else if (!someBS)
 				extRightCnt++;
 			extLeftCnt = 0;
 		}
