@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/14/2024
+Last modified: 06/15/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -107,6 +107,10 @@ static struct Glob {
 	}
 } glob;
 
+/*
+Group is a set of splines/derivatives/inclines within one potential region.
+Groups are numbered sequentially starting from 1, their numbering may not coincide with the numbering of potential regions (which can be "empty")
+*/
 
 // Sequential float values
 class Values : public vector<float>
@@ -114,10 +118,10 @@ class Values : public vector<float>
 	float _maxVal;
 
 public:
-	chrlen RgnNumb = 0;
+	chrlen GrpNumb = 0;
 
 	Values() noexcept : _maxVal(0) { Reserve(); }
-	Values(Values&& rvals) noexcept : _maxVal(rvals._maxVal), RgnNumb(0), vector<float>(move(rvals)) { rvals._maxVal = 0; }
+	Values(Values&& rvals) noexcept : _maxVal(rvals._maxVal), GrpNumb(0), vector<float>(move(rvals)) { rvals._maxVal = 0; }
 	Values(const Values& rvals) = default;
 	// 'splitting' constructor: creates instance as part of @vals indicated by @rgn.End;
 	// resize @vals to the size indicated by @rgn.Start
@@ -456,7 +460,7 @@ class CoverRegions : public vector<CoverRegion>
 
 #ifdef MY_DEBUG
 	// Prints frequency distribution of potentail regions value ('score')
-	void PrintScoreDistrib(const char* fname) const;
+	void PrintScoreDistrib(const string& fname) const;
 #endif
 
 public:
@@ -489,6 +493,10 @@ public:
 		StrandData(POS).clear();
 		StrandData(NEG).clear();
 	}
+
+#ifdef MY_DEBUG
+	void PrintScoreDistrib(const string& fname) const;
+#endif
 };
 
 
@@ -547,14 +555,14 @@ public:
 	// Resets non overlapping spline value
 	void EliminateNonOverlaps();
 
-	// Sets a single consecutive potential region number to each overlapped non-empty spline
-	void Numerate();
+	// Sets a single consecutive group number to each overlapped non-empty spline
+	void NumberGroups();
 
 	// Prints potential regions before and after selection
 	void PrintStat(chrlen clen) const;
 };
 
-// Datset of maped collections of float values
+// Datset of maped collections of float values, represents Splines
 class DataValuesMap : public DataSet<ValuesMap>
 {
 public:
@@ -571,8 +579,8 @@ public:
 	// Resets non overlapping spline value
 	void EliminateNonOverlaps() { Data()->EliminateNonOverlaps(); }
 
-	// Sets a single consecutive potential region number to each overlapped not empty spline
-	void Numerate() { Data()->Numerate(); }
+	// Sets a single consecutive group number to each overlapped not empty spline
+	void NumberGroups() { Data()->NumberGroups(); }
 
 	// Prints potential regions before and after selection
 	void PrintStat(chrlen clen) const { Data()->PrintStat(clen); }
@@ -661,10 +669,10 @@ class BoundsValues : public vector<BoundValues>
 #ifdef MY_DEBUG
 	float _maxVal = 0;
 #endif
-	chrlen _rgnNumb;	// potential region number
+	chrlen _grpNumb;	// group number
 
 	void PushIncline(
-		chrlen rgnNumb,
+		chrlen grpNumb,
 		BYTE reverse,
 		const TracedPosVal& posVal,
 		const TreatedCover& cover,
@@ -697,8 +705,8 @@ public:
 
 	float	MaxVal()	const { return _maxVal; }
 #endif
-	// Returns potential region number
-	chrlen	RgnNumb()	const { return _rgnNumb; }
+	// Returns group number
+	chrlen	GrpNumb()	const { return _grpNumb; }
 
 	//using cIter = vector<ValuesMap>::const_iterator;
 	//using rIter = vector<ValuesMap>::reverse_iterator;
@@ -768,13 +776,13 @@ struct BS_PosVal
 {
 	BYTE		 Reverse;
 	chrlen		 RefPos = 0;	// reference position; by default duplicates the map position, but can be adjusted
-	const chrlen RgnNumb;		// potential region number
+	const chrlen GrpNumb;		// group number
 	float		 Score = 1;
 
 	// Constructor
 	//	@param reverse: 0 for firect, 1 for reverse
-	//	@param rgnNumb: potential region number
-	BS_PosVal(BYTE reverse, chrlen rgnNumb) : Reverse(reverse), RgnNumb(rgnNumb) {}
+	//	@param grpNumb: group number
+	BS_PosVal(BYTE reverse, chrlen grpNumb) : Reverse(reverse), GrpNumb(grpNumb) {}
 };
 
 class BS_map : public map<chrlen, BS_PosVal>
@@ -788,15 +796,15 @@ private:
 
 	// Inserts BS position (bound)
 	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
-	//	@param rgnNumb: potential region number
+	//	@param grpNumb: group number
 	//	@param incl: inclined line
-	void AddPos(BYTE reverse, chrlen rgnNumb, const Incline& incl);
+	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl);
 
 	// Inserts BS positions (left/right bounds)
 	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
-	//	@param rgnNumb: potential region number
+	//	@param grpNumb: group number
 	//	@param inclines: forward/reversed (right/left) inclined lines
-	void AddBounds(BYTE reverse, chrlen rgnNumb, vector<Incline>& inclines);
+	void AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines);
 
 	// Fills the instance with recognized left/right BS positions (bounds)
 	//	@param reverse[in]: 0 for firect (right bounds), 1 for reverse (left bounds)
@@ -837,7 +845,7 @@ public:
 
 	void PrintStat() const;
 
-	// Applies lambda to each potential region of binding sites, passing borders collection
+	// Applies lambda to each group of binding sites, passing borders collection
 	template<typename F>
 	void DoExtend(F&& lambda)
 	{
@@ -858,7 +866,7 @@ public:
 			lambda(VP);
 	}
 
-	// Applies lambda to each potential region denotes the binding site, passing start-end iterators
+	// Applies lambda to each group denotes the binding site, passing start-end iterators
 	template<typename F>
 	void DoBasic(F&& lambda) const
 	{
