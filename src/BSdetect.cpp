@@ -215,12 +215,13 @@ void Detector::CallBS(chrid cID)
 		regions.Clear();
 		Glob::FragLenUndef = false;
 	}
-	//return;
+	//_frag—overs.WriteChrom(cID); return;
+
 	Verb::PrintMsg(Verb::RT, "Locate binding sites");
 	_timer.Start();
 	if (/*resetCover && */regions.SetPotentialRegions(fragCovers, cLen, 3))
 		return;
-	regions.PrintScoreDistrib(_outFName + ".RGNS_2");
+	//regions.PrintScoreDistrib(_outFName + ".RGNS_2");
 
 	splines.BuildSpline(readCovers, regions, true);	_regions.WriteChrom(cID);
 	splines.EliminateNonOverlaps();
@@ -230,12 +231,13 @@ void Detector::CallBS(chrid cID)
 	derivs.Set(splines);			_splines.WriteChrom(cID);
 	
 	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
+	//bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
-	//bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
+	bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
-	//bss.Print(cID, _outFName + ".BSS_dump.txt", false);
-	bss.PrintWidthDistrib(_outFName + ".BSS_width.txt");
+	bss.Print(cID, _outFName + ".BSS_dump.txt", false);
+	//bss.PrintWidthDistrib(_outFName + ".BSS_width.txt");
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);

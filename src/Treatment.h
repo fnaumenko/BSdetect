@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/15/2024
+Last modified: 06/17/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -138,7 +138,7 @@ public:
 
 	void MarkAsEmpty() { _maxVal = 0; }
 
-	void Reserve() { reserve(40); }
+	void Reserve(USHORT capacity = 40) { reserve(capacity); }
 
 	void Clear() { _maxVal = 0; clear(); }
 
@@ -816,6 +816,13 @@ private:
 	// may adjust reference position
 	void ExtendNarrowWidths();
 
+	// Sets BSs scores within the group according to fragment coverage spline
+	//	@param itStart: first valid iter in the group
+	//	@param itEnd: next of the last valid iter in the group
+	//	@param spline: local fragment coverage spline
+	//	@maxScore[out]: cumulative maximum score 
+	void SetGroupScores(iter& itStart, iter& itEnd, const Values& vals, float& maxScore);
+
 public:
 	// positioned value
 	struct PosValue {
@@ -845,7 +852,7 @@ public:
 
 	void PrintStat() const;
 
-	// Applies lambda to each group of binding sites, passing borders collection
+	// Applies lambda to each binding site within the group
 	template<typename F>
 	void DoExtend(F&& lambda)
 	{
@@ -866,7 +873,7 @@ public:
 			lambda(VP);
 	}
 
-	// Applies lambda to each group denotes the binding site, passing start-end iterators
+	// Applies lambda to each group denotes the binding sites
 	template<typename F>
 	void DoBasic(F&& lambda) const
 	{

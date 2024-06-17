@@ -189,8 +189,8 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 
 void TreatedCover::SetLocalSpline(SSpliner<coval>& spliner, chrlen& startPos, chrlen endPos, Values& vals) const
 {
-	startPos -= spliner.SilentLength();
-	endPos += spliner.SilentLength();
+	startPos -= /*Glob::ReadLen + */spliner.SilentLength();
+	endPos += Glob::ReadLen + spliner.SilentLength();
 
 	coviter itCov = prev(upper_bound(startPos));	// no check for end() since cover is well-defined in this region
 	coviter itCovEnd = itCov;
@@ -1206,74 +1206,122 @@ void BS_map::Refine()
 	ExtendNarrowWidths();
 }
 
-void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
+
+// Sets score for the BS extension (excluding base boundaries)
+void SetExtScore(BYTE reverse, const vector<BS_map::iter>& vp, const Values& spline, int offset, BYTE ind)
 {
-	float maxScore = 0;
-	auto& cover = fragCovers.TotalData();
-	SSpliner<coval> spliner(eCurveType::ROUGH, 5);
-	Values	vals;			// spline values
-	vals.Reserve();
+	/*
+	fill the score from left to right (for reverse)
+	or from rigth to left (for direct) extended boundaries
+	*/
+	float score = 0;
+	const auto len = vp[ind + reverse]->second.RefPos - vp[ind - !reverse]->second.RefPos;
 
-	DoExtend([&](vector<PosValue>* VP) {
-		// extended start, end
-		auto& start = VP[L].front().Iter;
-		auto& end	= VP[R].back().Iter;
-		if (start->second.GrpNumb != end->second.GrpNumb)	return;
+	//assert(len + offset < spline.size());
+	if (len + offset < spline.size()) {
+		for (chrlen i = 0; i < len; i++, offset++)
+			score += spline[offset];
+		vp[ind]->second.Score = score / len;
+	}
+	else
+		printf(">> %d %d %d  size: %u  exc: %d\n", int(ind), vp[ind]->second.RefPos, vp[ind]->second.GrpNumb, spline.size(), len + offset - spline.size());
+}
 
-		chrlen	startPos = start->second.RefPos;
-		cover.SetLocalSpline(spliner, startPos, end->second.RefPos, vals);
+// Sets scores for each BS within the group according to fragment coverage spline
+//	@param VP: iterators for the left/right BS boundaries
+//	@param spline: local fragment coverage spline
+//	@maxScore[out]: cumulative maximum score 
+void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& maxScore)
+{
+	// extended start, end
+	auto& start = VP[L].front();
+	auto& end = VP[R].back();
+	chrlen	startPos = start->second.RefPos;
 
-		// *** set score
-
-		// set score for the BS extension (excluding base boundaries)
-		auto setExtScore = [&vals](BYTE reverse, const vector<PosValue>& vp, USHORT offset, BYTE ind) {
-			/*
-			fill the score from left to right (for reverse)
-			or from rigth to left (for direct) extended boundaries
-			*/
-			float score = 0;
-			auto len = vp[ind + reverse].Iter->second.RefPos - vp[ind - !reverse].Iter->second.RefPos;
-
-			assert(len + offset < vals.size());
-			for (chrlen i = 0; i < len; i++, offset++)
-				score += vals[offset];
-			vp[ind].Iter->second.Score = score / len;
-		};
-
-		USHORT offset;
-		{	// left BS extensions
-			const auto& vp = VP[L];
-			const auto extLen = BYTE(vp.size() - 1);
-			offset = USHORT(vp.front().Iter->second.RefPos - startPos);
-			for (BYTE i = 0; i < extLen; i++)			// left to right
-				setExtScore(L, vp, offset, i);
+	int offset;
+	{	// left BS extensions
+		const auto& vp = VP[L];
+		const auto extLen = BYTE(vp.size() - 1);
+		offset = int(vp.front()->second.RefPos - startPos);
+		for (BYTE i = 0; i < extLen; i++)			// left to right
+			SetExtScore(L, vp, spline, offset, i);
+	}
+	{	// right BS extensions
+		const auto& vp = VP[R];
+		const auto extLen = BYTE(vp.size() - 1);
+		if (extLen) {
+			offset = int(vp[extLen - 1]->second.RefPos - startPos);	// from the penultimate boundary
+			for (BYTE i = extLen; i; i--)	// right to left
+				SetExtScore(R, vp, spline, offset, i);
 		}
-		{	// right BS extensions
-			const auto& vp = VP[R];
-			const auto extLen = BYTE(vp.size() - 1);
-			if (extLen) {
-				offset = USHORT(vp[extLen - 1].Iter->second.RefPos - startPos);	// from the penultimate boundary
-				for (BYTE i = extLen; i; i--)	// right to left
-					setExtScore(R, vp, offset, i);
-			}
-		}
-		// base BS
-		const auto& itStartBS = VP[L].back().Iter;
-		const auto& itEndBS = VP[R].front().Iter;
-		offset = itStartBS->second.RefPos - startPos;
-		const auto len = USHORT(itEndBS->second.RefPos - itStartBS->second.RefPos);
-		float score = 0;
+	}
+	// base BS
+	const auto& itStartBS = VP[L].back();
+	const auto& itEndBS = VP[R].front();
+	offset = itStartBS->second.RefPos - startPos;
+	const auto len = int(itEndBS->second.RefPos - itStartBS->second.RefPos);
+	float score = 0;
 
-		for (USHORT i = 0; i < len; i++, offset++)
-			score += vals[offset];
+	if (len + offset < spline.size()) {
+		for (int i = 0; i < len; i++, offset++)
+			score += spline[offset];
 		score /= len;
 		if (maxScore < score)	maxScore = score;
 		itStartBS->second.Score = itEndBS->second.Score = score;
+	}
+	else
+		printf(">>> %d %d  size: %zu  exc: %d\n", itStartBS->second.RefPos, itStartBS->second.GrpNumb, spline.size(), len + offset - int(spline.size()));
+}
 
-		vals.Clear();
-		});
+void BS_map::SetGroupScores(iter& itStart, iter& itEnd, const Values& spline, float& maxScore)
+{
+	vector<iter> VP[2];	// 0 - forward, 1 - reversed
 
-	// *** normalize score
+	VP[0].reserve(4), VP[1].reserve(4);
+	for (auto& it = itStart; it != itEnd; it++) {
+		if (it->second.Reverse && VP[0].size() && VP[1].size()) {
+			SetBSscores(VP, spline, maxScore);
+			VP[0].clear(), VP[1].clear();
+		}
+		VP[it->second.Reverse].push_back(it);
+	}
+	// last BS
+	if (VP[0].size() && VP[1].size())
+		SetBSscores(VP, spline, maxScore);
+}
+
+void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
+{
+	SSpliner<coval> spliner(eCurveType::ROUGH, 5);
+	auto& cover = fragCovers.TotalData();
+	Values	spline;			// fragment coverage spline
+	iter	itStart = end();
+	iter	itEnd = end();
+	float	maxScore = 0;
+	chrlen	grpNumb = 1;
+
+	spline.Reserve(Glob::FragLen * 3);
+	// *** set scores
+	for (auto it = begin(); it != end(); it++) {
+		if (!it->second.Score)
+			continue;
+		if (grpNumb != it->second.GrpNumb) {
+			// build single fragment coverage spline for the whole group
+			cover.SetLocalSpline(spliner, itStart->second.RefPos, itEnd->second.RefPos, spline);
+			SetGroupScores(itStart, ++itEnd, spline, maxScore);
+			spline.clear();
+			itStart = end();
+			grpNumb = it->second.GrpNumb;
+		}
+		if (itStart == end())
+			itStart = it;
+		itEnd = it;
+	}
+	// last group
+	cover.SetLocalSpline(spliner, itStart->second.RefPos, itEnd->second.RefPos, spline);
+	SetGroupScores(itStart, ++itEnd, spline, maxScore);
+
+	// *** normalize scores
 	for (auto& x : *this)
 		if (x.second.Score)
 			x.second.Score /= maxScore;
