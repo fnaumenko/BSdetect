@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 06/11/2024
+Last modified: 06/18/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -189,10 +189,10 @@ public:
 	//	@param cnt: current chrom items count
 	//	@param nextcID: next chrom ID
 	void operator()(chrid cID, chrlen cLen, size_t cnt, chrid nextcID) {
-		Verb::PrintMsg(Verb::RT, Chrom::ShortName(nextcID).c_str());
-		if (cnt) {		// not the first readed chrom
+		//Verb::PrintMsg(Verb::RT, Chrom::ShortName(nextcID).c_str());
+		Verb::PrintMsgVar(Verb::RT, "%s", Chrom::ShortName(nextcID).c_str(), cnt);
+		if (cnt)		// not the first readed chrom
 			CallBS(cID);
-		}
 		_frag—overs.SetChrom(nextcID);
 		_read—overs.SetChrom(nextcID);
 	}
@@ -204,9 +204,9 @@ public:
 	//	@param tCnt: total items count
 	void operator()(chrid cID, chrlen cLen, size_t cnt, size_t)
 	{ 
-		if (cnt) {
-			_timer.Stop("Reading alignment: ");	cout << LF;
+		Verb::PrintMsgVar(Verb::RT, ": %zu reads\n", cnt);
+		_timer.Stop("Reading alignment: ");	cout << LF;
+		if (cnt)
 			CallBS(cID);
-		}
 	}
 };
