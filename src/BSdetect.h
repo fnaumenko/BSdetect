@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 06/18/2024
+Last modified: 06/19/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -134,19 +134,19 @@ public:
 			// initialize covered data
 			CombCoverReader a(inFName, cSizes, _frag—overs, chrFreq, TOTAL);
 			if (!Glob::IsPE) {
-				string fCoverPos = baseName + FNameFragExt + sStrandEXT[POS] + FT::Ext(FT::BGRAPH);
-				string fCoverNeg = baseName + FNameFragExt + sStrandEXT[NEG] + FT::Ext(FT::BGRAPH);
+				string fCoverPos = baseName + FNameFragExt + sStrandEXT[FWD] + FT::Ext(FT::BGRAPH);
+				string fCoverNeg = baseName + FNameFragExt + sStrandEXT[RVS] + FT::Ext(FT::BGRAPH);
 
-				CombCoverReader b(FS::CheckedFileName(fCoverPos.c_str()), cSizes, _frag—overs, chrFreq, POS);
-				CombCoverReader c(FS::CheckedFileName(fCoverNeg.c_str()), cSizes, _frag—overs, chrFreq, NEG);
+				CombCoverReader b(FS::CheckedFileName(fCoverPos.c_str()), cSizes, _frag—overs, chrFreq, FWD);
+				CombCoverReader c(FS::CheckedFileName(fCoverNeg.c_str()), cSizes, _frag—overs, chrFreq, RVS);
 			}
 			baseName += FNameReadExt;
 			CombCoverReader b(
-				FS::CheckedFileName((baseName + sStrandEXT[POS] + FT::Ext(FT::BGRAPH)).c_str()),
-				cSizes, _read—overs, chrFreq, POS);
+				FS::CheckedFileName((baseName + sStrandEXT[FWD] + FT::Ext(FT::BGRAPH)).c_str()),
+				cSizes, _read—overs, chrFreq, FWD);
 			CombCoverReader c(
-				FS::CheckedFileName((baseName + sStrandEXT[NEG] + FT::Ext(FT::BGRAPH)).c_str()),
-				cSizes, _read—overs, chrFreq, NEG);
+				FS::CheckedFileName((baseName + sStrandEXT[RVS] + FT::Ext(FT::BGRAPH)).c_str()),
+				cSizes, _read—overs, chrFreq, RVS);
 
 			cSizes.TreateAll(false);
 			BYTE dataCnt = Glob::IsPE ? 3 : 5;

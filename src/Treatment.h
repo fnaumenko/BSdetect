@@ -361,7 +361,7 @@ public:
 		, OrderedData<TreatedCover, BedGrWriter>(cSizes, dim, write, fname, descr)
 	{}
 
-	//coval GetMaxVal() const { return _data->StrandData(POS).GetMaxVal(); }
+	//coval GetMaxVal() const { return _data->StrandData(FWD).GetMaxVal(); }
 
 	// For current chrom adds extended SE tag to total coverage, and pure tag to strand coverage
 	//	@param[in] read: added tag
@@ -497,8 +497,8 @@ public:
 
 	void Clear()
 	{
-		StrandData(POS).clear();
-		StrandData(NEG).clear();
+		StrandData(FWD).clear();
+		StrandData(RVS).clear();
 	}
 
 #ifdef MY_DEBUG
@@ -764,20 +764,22 @@ public:
 	//	@param splines: Read coverage splines
 	void Set(const DataValuesMap& splines)
 	{
-		StrandData(POS).BuildDerivs(StrandOps[0].Factor, splines.StrandData(POS));
-		StrandData(NEG).BuildDerivs(StrandOps[1].Factor, splines.StrandData(NEG));
+		StrandData(FWD).BuildDerivs(StrandOps[0].Factor, splines.StrandData(FWD));
+		StrandData(RVS).BuildDerivs(StrandOps[1].Factor, splines.StrandData(RVS));
 	}
 
 #ifdef MY_DEBUG
 	void Print(chrlen stopPos = 0) const
 	{
-		StrandData(POS).Print(POS, stopPos);
-		StrandData(NEG).Print(NEG, stopPos);
+		StrandData(FWD).Print(FWD, stopPos);
+		StrandData(RVS).Print(RVS, stopPos);
 	}
 #endif
 };
 
 //=== BINDING SITES DATA 
+
+//#define	FWD(it)	(it)->second.RefPos
 
 struct BS_PosVal
 {
@@ -844,9 +846,9 @@ public:
 	//	@param rCover: read coverage
 	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover)
 	{
-		SetBounds(0, derivs.StrandData(POS), rCover.StrandData(POS));
+		SetBounds(0, derivs.StrandData(FWD), rCover.StrandData(FWD));
 		_lastIt = begin();
-		SetBounds(1, derivs.StrandData(NEG), rCover.StrandData(NEG));
+		SetBounds(1, derivs.StrandData(RVS), rCover.StrandData(RVS));
 	}
 
 	// Brings the instance to canonical order of placing BS bounds;

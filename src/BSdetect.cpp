@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 06/15/2024
+Last modified: 06/19/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -156,7 +156,7 @@ float Detector::GetPeakPosDiff(chrid cID)
 
 	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
 	_timer.Start();
-	coval maxVal = readCovers.StrandData(POS).GetMaxVal();
+	coval maxVal = readCovers.StrandData(FWD).GetMaxVal();
 	coval cutoff = maxVal / 3;
 	//auto cutoff = coval(0.1f * maxVal);
 	//auto cutoff = maxVal / 9;

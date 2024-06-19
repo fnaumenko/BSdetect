@@ -426,11 +426,11 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 		//TotalData().PrintScoreDistrib("RGNS.dist");
 	}
 	else {
-		StrandData(POS).SetPotentialRegions(cover.StrandData(POS), capacity, cutoff);
-		StrandData(NEG).SetPotentialRegions(cover.StrandData(NEG), capacity, cutoff);
+		StrandData(FWD).SetPotentialRegions(cover.StrandData(FWD), capacity, cutoff);
+		StrandData(RVS).SetPotentialRegions(cover.StrandData(RVS), capacity, cutoff);
 
-		//StrandData(POS).PrintScoreDistrib("RGNS.pos.dist");
-		//StrandData(NEG).PrintScoreDistrib("RGNS.neg.dist");
+		//StrandData(FWD).PrintScoreDistrib("RGNS.pos.dist");
+		//StrandData(RVS).PrintScoreDistrib("RGNS.neg.dist");
 
 		EliminateNonOverlapsRegions<CoverRegions>(Data(), Glob::FragLen);
 		if (noMultiOverl)
@@ -449,18 +449,18 @@ void DataCoverRegions::PrintScoreDistrib(const string& fname) const
 	if (Glob::IsPE)
 		TotalData().PrintScoreDistrib(fname + ".dist");
 	else {
-		StrandData(POS).PrintScoreDistrib(fname + ".pos.dist");
-		StrandData(NEG).PrintScoreDistrib(fname + ".neg.dist");
+		StrandData(FWD).PrintScoreDistrib(fname + ".pos.dist");
+		StrandData(RVS).PrintScoreDistrib(fname + ".neg.dist");
 	}
 }
 #endif
 
 //fraglen DataCoverRegions::GetFragMean(const DataSet<TreatedCover>& cover) const
 //{
-//	auto& pData = StrandData(POS);
-//	auto& nData = StrandData(NEG);
-//	auto& pCover = cover.StrandData(POS);
-//	auto& nCover = cover.StrandData(NEG);
+//	auto& pData = StrandData(FWD);
+//	auto& nData = StrandData(RVS);
+//	auto& pCover = cover.StrandData(FWD);
+//	auto& nCover = cover.StrandData(RVS);
 //	uint32_t negCnt = 0;
 //	vector<int16_t> diffs;
 //	IGVlocus locus(0);
@@ -545,7 +545,7 @@ float Values::AvrScoreInRange(int32_t& offset, int32_t len, int8_t factor) const
 	}
 #endif
 	float score = 0;
-	for (chrlen i = 0; i < len; i++, offset += factor)
+	for (int32_t i = 0; i < len; i++, offset += factor)
 		score += (*this)[offset];
 	return score / len;
 }
@@ -721,15 +721,15 @@ void ValuesMap::PrintStat(chrlen clen) const
 void DataValuesMap::BuildSpline(
 	const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase)
 {
-	BYTE strand = !Glob::IsPE;	// TOTAL for PE or POS for SE
-	StrandData(POS).BuildSpline(cover.StrandData(POS), rgns.StrandData(eStrand(  strand)), redifineRgns, splineBase);
-	StrandData(NEG).BuildSpline(cover.StrandData(NEG), rgns.StrandData(eStrand(2*strand)), redifineRgns, splineBase);
+	BYTE strand = !Glob::IsPE;	// TOTAL for PE or FWD for SE
+	StrandData(FWD).BuildSpline(cover.StrandData(FWD), rgns.StrandData(eStrand(  strand)), redifineRgns, splineBase);
+	StrandData(RVS).BuildSpline(cover.StrandData(RVS), rgns.StrandData(eStrand(2*strand)), redifineRgns, splineBase);
 }
 
 float DataValuesMap::GetPeakPosDiff() const
 {
-	auto& pData = StrandData(POS);
-	auto& nData = StrandData(NEG);
+	auto& pData = StrandData(FWD);
+	auto& nData = StrandData(RVS);
 	assert(pData.size() == nData.size());
 	USHORT missed = 0;
 	vector<SHORT> diffs;
@@ -763,16 +763,16 @@ float DataValuesMap::GetPeakPosDiff() const
 
 void DataValuesMap::Clear()
 {
-	StrandData(POS).clear();
-	StrandData(NEG).clear();
+	StrandData(FWD).clear();
+	StrandData(RVS).clear();
 }
 
 #ifdef MY_DEBUG
 void DataValuesMap::Print(chrid cID, chrlen stopNumb) const
 {
 	printf("\n");
-	StrandData(POS).Print(cID, 0, stopNumb);
-	StrandData(NEG).Print(cID, 1, stopNumb);
+	StrandData(FWD).Print(cID, 0, stopNumb);
+	StrandData(RVS).Print(cID, 1, stopNumb);
 }
 #endif
 
