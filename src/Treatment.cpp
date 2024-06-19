@@ -998,6 +998,8 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 
 //===== BS_map
 
+#define	POS(it)	(it)->second.RefPos
+
 void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 {
 	// all positions are added in ascending order
@@ -1020,11 +1022,11 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 		}
 
 		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb));
-		_lastIt->second.RefPos = _lastIt->first;
+		POS(_lastIt) = _lastIt->first;
 	}
 	else {
 		auto it = emplace_hint(end(), pos, BS_PosVal(0, grpNumb));
-		it->second.RefPos = it->first;
+		POS(it) = it->first;
 	}
 }
 
@@ -1087,7 +1089,7 @@ void FitToMinWidth(BS_map::iter& start, BS_map::iter& end, short len)
 {
 	const auto diff = MIN_BS_WIDTH - len;
 	auto Expand = [](const BS_map::iter& it, chrlen newPos) {
-		if (it->first != newPos)	it->second.RefPos = newPos;
+		if (it->first != newPos)	POS(it) = newPos;
 	};
 
 	Expand(start, start->first - diff / 2);
@@ -1108,7 +1110,7 @@ void BS_map::ExtendNarrowWidths()
 
 			// reset boundaries that are covered by extented base boundaries
 			auto resetCoveredItems = [](BS_PosVal& pval, BS_map::iter& itBase) {
-				if (pval.RefPos > itBase->second.RefPos)	return;
+				if (pval.RefPos > POS(itBase))	return;
 				pval.Score = 0;
 			};
 
@@ -1231,26 +1233,26 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 	fill the score from left to right (for reverse)
 	or from rigth to left (for direct) extended boundaries
 	*/
-	chrlen	startPos = VP[L].front()->second.RefPos;
+	chrlen	startPos = POS(VP[L].front());
 	int32_t offset;
 	BYTE	extLen;
 
 	{	// left BS extensions
 		const auto& vp = VP[L];
 		extLen = BYTE(vp.size() - 1);
-		offset = int32_t(vp.front()->second.RefPos - startPos);
+		offset = int32_t(POS(vp.front()) - startPos);
 		for (BYTE i = 0; i < extLen; i++) {		// left to right, increasing offset
 			auto& pval = vp[i]->second;
-			pval.Score = spline.AvrScoreInRange(offset, vp[i + 1]->second.RefPos - pval.RefPos);
+			pval.Score = spline.AvrScoreInRange(offset, POS(vp[i + 1]) - pval.RefPos);
 		}
 	}
 	{	// right BS extensions
 		const auto& vp = VP[R];
 		extLen = BYTE(vp.size() - 1);
-		offset = int32_t(vp.back()->second.RefPos - startPos);
+		offset = int32_t(POS(vp.back()) - startPos);
 		for (BYTE i = extLen; i; i--) {			// right to left, decreasing offset
 			auto& pval = vp[i]->second;
-			pval.Score = spline.AvrScoreInRange(offset, pval.RefPos - vp[i - 1]->second.RefPos, -1);
+			pval.Score = spline.AvrScoreInRange(offset, pval.RefPos - POS(vp[i - 1]), -1);
 		}
 	}
 	// BS
@@ -1297,7 +1299,7 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 			continue;
 		if (grpNumb != it->second.GrpNumb) {
 			// build single fragment coverage spline for the whole group
-			cover.SetLocalSpline(spliner, itStart->second.RefPos, itEnd->second.RefPos, spline);
+			cover.SetLocalSpline(spliner, POS(itStart), POS(itEnd), spline);
 			SetGroupScores(itStart, ++itEnd, spline, maxScore);
 			spline.clear();
 			itStart = end();
@@ -1308,7 +1310,7 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 		itEnd = it;
 	}
 	// last group
-	cover.SetLocalSpline(spliner, itStart->second.RefPos, itEnd->second.RefPos, spline);
+	cover.SetLocalSpline(spliner, POS(itStart), POS(itEnd), spline);
 	SetGroupScores(itStart, ++itEnd, spline, maxScore);
 
 	// *** normalize scores
@@ -1333,7 +1335,7 @@ void BS_map::PrintStat() const
 	DoBasic([&](citer& start, citer& end) {
 		++bsNumb;
 		if (stat) {
-			const fraglen len = end->second.RefPos - start->second.RefPos;
+			const fraglen len = POS(end) - POS(start);
 			float score = start->second.Score;
 			if (minScore > score)		minScore = score, minScoreNumb = bsNumb;
 
@@ -1375,7 +1377,7 @@ void BS_map::PrintWidthDistrib(const string& fName) const
 
 	// collect numbers
 	DoBasic([&](citer& start, citer& end) {
-		auto len = fraglen(end->second.RefPos - start->second.RefPos);
+		auto len = fraglen(POS(end) - POS(start));
 		totalLen += len;
 		freq[len].push_back(++bsNumb);
 		}
@@ -1454,7 +1456,7 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 		auto& start = VP[L].back().Iter;
 		auto& end	= VP[R].front().Iter;
 
-		LineAddUInts(start->second.RefPos, end->second.RefPos, ++bsNumb, true);	// 3 basic fields
+		LineAddUInts(POS(start), POS(end), ++bsNumb, true);	// 3 basic fields
 		LineAddScore(start->second.Score, true);					// BS score
 
 		// *** extended boudaries info
@@ -1521,10 +1523,10 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 		auto addExtraLines = [=, &bsNumb](const vector<BS_map::PosValue>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
 			if (vp.size() == 1)	return;
 			for (auto it0 = vp.begin(), it = next(it0); it != vp.end(); it0++, it++) {
-				LineAddUInts(it0->Iter->second.RefPos, it->Iter->second.RefPos, bsNumb, true);
+				LineAddUInts(POS(it0->Iter), POS(it->Iter), bsNumb, true);
 				LineAddFloat(it0->Val, true);	// BS score
 				LineAddChar(DOT, true);
-				LineAddInts(it0->Iter->second.RefPos, it->Iter->second.RefPos, true);
+				LineAddInts(POS(it0->Iter), POS(it->Iter), true);
 				// colors
 				auto ind = BYTE(10 * it0->Val / score) / 2;
 				if (ind > COLORS_CNT - 1)	ind = COLORS_CNT - 1;
@@ -1540,7 +1542,7 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 
 		addExtraLines(VP[L]);
 		// *** add basic feature
-		LineAddUInts(start->second.RefPos, end->second.RefPos, bsNumb, true);
+		LineAddUInts(POS(start), POS(end), bsNumb, true);
 		LineAddFloat(start->second.Score, true);		// BS score
 		LineAddChars(delims, reclen(strlen(delims)), false);
 		LineAddFloat(end->second.Score, false);			// reverse/forward ratio
@@ -1557,8 +1559,8 @@ void BedWriter::WriteChromROI(chrid cID, const BS_map& bss)
 
 	bss.DoBasic([&](BS_map::citer& start, BS_map::citer& end) {
 		LineAddUInts(
-			start->second.RefPos - Glob::ROI_ext,
-			end->second.RefPos + Glob::ROI_ext,
+			POS(start) - Glob::ROI_ext,
+			POS(end) + Glob::ROI_ext,
 			++bsNumb,
 			false
 		);

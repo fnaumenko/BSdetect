@@ -779,8 +779,6 @@ public:
 
 //=== BINDING SITES DATA 
 
-//#define	FWD(it)	(it)->second.RefPos
-
 struct BS_PosVal
 {
 	BYTE		 Reverse;
