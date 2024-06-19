@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/17/2024
+Last modified: 06/19/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -63,7 +63,7 @@ private:
 } verb;
 
 struct StrandOp {
-	int Factor;							// 1 for forward reads, -1 for reversed ones
+	int8_t Factor;						// 1 for forward reads, -1 for reversed ones
 	void (*Next)(coviter&);				// decrement/increment iterator (for forward/reversed)
 	coviter (*RetNext)(coviter&);		// decrement/increment iterator (for forward/reversed)
 	coviter (*GetPrev)(const coviter&);	// returns prev/this iterator (for forward/reversed)
@@ -151,6 +151,13 @@ public:
 	//	@param startPos[in]: start position to search
 	//	@param pos[out]: vector of maximum value positions to which the value is added
 	void GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const;
+
+	// Returns average score within a range
+	//	@param offset[in,out]: start of range; 
+	//	@param len: range length 
+	//	@param factor: -1 for direct, 1 for reverse bypass
+	//	@return: average score
+	float AvrScoreInRange(int32_t& offset, int32_t len, int8_t factor = 1) const;
 
 #ifdef MY_DEBUG
 	void Print(bool prValues = false) const;
@@ -325,12 +332,12 @@ public:
 
 	// Sets spline of the instance between start-end positions
 	//	@param spliner[in]: spliner that does the work
-	//	@param startPos[in,out]: start position; returns modified (real) position
+	//	@param startPos[in]: start position
 	//	@param endPos[in]: end position
 	//	@param vals[out]: resulting splined values
 	void SetLocalSpline(
 		SSpliner<coval>& spliner,
-		chrlen& startPos,
+		chrlen startPos,
 		chrlen endPos,
 		Values& vals
 	) const;

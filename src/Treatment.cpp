@@ -187,10 +187,10 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 #endif
 }
 
-void TreatedCover::SetLocalSpline(SSpliner<coval>& spliner, chrlen& startPos, chrlen endPos, Values& vals) const
+void TreatedCover::SetLocalSpline(SSpliner<coval>& spliner, chrlen startPos, chrlen endPos, Values& vals) const
 {
-	startPos -= /*Glob::ReadLen + */spliner.SilentLength();
-	endPos += Glob::ReadLen + spliner.SilentLength();
+	startPos -= spliner.SilentLength();
+	endPos += spliner.SilentLength();
 
 	coviter itCov = prev(upper_bound(startPos));	// no check for end() since cover is well-defined in this region
 	coviter itCovEnd = itCov;
@@ -534,6 +534,20 @@ void Values::GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const
 			}
 			equalCnt = 0;
 		}
+}
+
+float Values::AvrScoreInRange(int32_t& offset, int32_t len, int8_t factor) const
+{
+#ifdef MY_DEBUG
+	if (len <= 0) {
+		printf(">> %d offset: %d len: %d\n", factor, offset, len);
+		return -1;
+	}
+#endif
+	float score = 0;
+	for (chrlen i = 0; i < len; i++, offset += factor)
+		score += (*this)[offset];
+	return score / len;
 }
 
 #ifdef MY_DEBUG
@@ -1207,70 +1221,46 @@ void BS_map::Refine()
 }
 
 
-// Sets score for the BS extension (excluding base boundaries)
-void SetExtScore(BYTE reverse, const vector<BS_map::iter>& vp, const Values& spline, int offset, BYTE ind)
+// Sets scores for each BS within the group according to fragment coverage spline
+//	@param VP: iterators for the left/right BS boundaries
+//	@param spline: local fragment coverage spline
+//	@maxScore[in,out]: cumulative maximum score 
+void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& maxScore)
 {
 	/*
 	fill the score from left to right (for reverse)
 	or from rigth to left (for direct) extended boundaries
 	*/
-	float score = 0;
-	const auto len = vp[ind + reverse]->second.RefPos - vp[ind - !reverse]->second.RefPos;
+	chrlen	startPos = VP[L].front()->second.RefPos;
+	int32_t offset;
+	BYTE	extLen;
 
-	//assert(len + offset < spline.size());
-	if (len + offset < spline.size()) {
-		for (chrlen i = 0; i < len; i++, offset++)
-			score += spline[offset];
-		vp[ind]->second.Score = score / len;
-	}
-	else
-		printf(">> %d %d %d  size: %u  exc: %d\n", int(ind), vp[ind]->second.RefPos, vp[ind]->second.GrpNumb, spline.size(), len + offset - spline.size());
-}
-
-// Sets scores for each BS within the group according to fragment coverage spline
-//	@param VP: iterators for the left/right BS boundaries
-//	@param spline: local fragment coverage spline
-//	@maxScore[out]: cumulative maximum score 
-void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& maxScore)
-{
-	// extended start, end
-	auto& start = VP[L].front();
-	auto& end = VP[R].back();
-	chrlen	startPos = start->second.RefPos;
-
-	int offset;
 	{	// left BS extensions
 		const auto& vp = VP[L];
-		const auto extLen = BYTE(vp.size() - 1);
-		offset = int(vp.front()->second.RefPos - startPos);
-		for (BYTE i = 0; i < extLen; i++)			// left to right
-			SetExtScore(L, vp, spline, offset, i);
+		extLen = BYTE(vp.size() - 1);
+		offset = int32_t(vp.front()->second.RefPos - startPos);
+		for (BYTE i = 0; i < extLen; i++) {		// left to right, increasing offset
+			auto& pval = vp[i]->second;
+			pval.Score = spline.AvrScoreInRange(offset, vp[i + 1]->second.RefPos - pval.RefPos);
+		}
 	}
 	{	// right BS extensions
 		const auto& vp = VP[R];
-		const auto extLen = BYTE(vp.size() - 1);
-		if (extLen) {
-			offset = int(vp[extLen - 1]->second.RefPos - startPos);	// from the penultimate boundary
-			for (BYTE i = extLen; i; i--)	// right to left
-				SetExtScore(R, vp, spline, offset, i);
+		extLen = BYTE(vp.size() - 1);
+		offset = int32_t(vp.back()->second.RefPos - startPos);
+		for (BYTE i = extLen; i; i--) {			// right to left, decreasing offset
+			auto& pval = vp[i]->second;
+			pval.Score = spline.AvrScoreInRange(offset, pval.RefPos - vp[i - 1]->second.RefPos, -1);
 		}
 	}
-	// base BS
-	const auto& itStartBS = VP[L].back();
-	const auto& itEndBS = VP[R].front();
-	offset = itStartBS->second.RefPos - startPos;
-	const auto len = int(itEndBS->second.RefPos - itStartBS->second.RefPos);
-	float score = 0;
+	// BS
+	auto& start = VP[L].back()->second;
+	auto& end = VP[R].front()->second;
+	offset = int32_t(start.RefPos - startPos);
+	float score = spline.AvrScoreInRange(offset, end.RefPos - start.RefPos);
 
-	if (len + offset < spline.size()) {
-		for (int i = 0; i < len; i++, offset++)
-			score += spline[offset];
-		score /= len;
-		if (maxScore < score)	maxScore = score;
-		itStartBS->second.Score = itEndBS->second.Score = score;
-	}
-	else
-		printf(">>> %d %d  size: %zu  exc: %d\n", itStartBS->second.RefPos, itStartBS->second.GrpNumb, spline.size(), len + offset - int(spline.size()));
+	if (maxScore < score)	maxScore = score;
+	start.Score = end.Score = score;
 }
 
 void BS_map::SetGroupScores(iter& itStart, iter& itEnd, const Values& spline, float& maxScore)
