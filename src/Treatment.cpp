@@ -999,6 +999,7 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 //===== BS_map
 
 #define	POS(it)	(it)->second.RefPos
+#define LEN(it1,it2)	POS(it1) - POS(it2)
 
 void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 {
@@ -1242,8 +1243,9 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 		extLen = BYTE(vp.size() - 1);
 		offset = int32_t(POS(vp.front()) - startPos);
 		for (BYTE i = 0; i < extLen; i++) {		// left to right, increasing offset
-			auto& pval = vp[i]->second;
-			pval.Score = spline.AvrScoreInRange(offset, POS(vp[i + 1]) - pval.RefPos);
+			//auto& pval = vp[i]->second;
+			//pval.Score = spline.AvrScoreInRange(offset, POS(vp[i + 1]) - pval.RefPos);
+			vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i + 1], vp[i]));
 		}
 	}
 	{	// right BS extensions
@@ -1251,8 +1253,9 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 		extLen = BYTE(vp.size() - 1);
 		offset = int32_t(POS(vp.back()) - startPos);
 		for (BYTE i = extLen; i; i--) {			// right to left, decreasing offset
-			auto& pval = vp[i]->second;
-			pval.Score = spline.AvrScoreInRange(offset, pval.RefPos - POS(vp[i - 1]), -1);
+			//auto& pval = vp[i]->second;
+			//pval.Score = spline.AvrScoreInRange(offset, pval.RefPos - POS(vp[i - 1]), -1);
+			vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i], vp[i - 1]), -1);
 		}
 	}
 	// BS
@@ -1335,7 +1338,7 @@ void BS_map::PrintStat() const
 	DoBasic([&](citer& start, citer& end) {
 		++bsNumb;
 		if (stat) {
-			const fraglen len = POS(end) - POS(start);
+			//const fraglen len = LEN(end, start);
 			float score = start->second.Score;
 			if (minScore > score)		minScore = score, minScoreNumb = bsNumb;
 
@@ -1377,7 +1380,7 @@ void BS_map::PrintWidthDistrib(const string& fName) const
 
 	// collect numbers
 	DoBasic([&](citer& start, citer& end) {
-		auto len = fraglen(POS(end) - POS(start));
+		auto len = fraglen(LEN(end, start));
 		totalLen += len;
 		freq[len].push_back(++bsNumb);
 		}
