@@ -446,11 +446,13 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 #ifdef MY_DEBUG
 void DataCoverRegions::PrintScoreDistrib(const string& fname) const
 {
+	const string ext = ".dist";
+
 	if (Glob::IsPE)
-		TotalData().PrintScoreDistrib(fname + ".dist");
+		TotalData().PrintScoreDistrib(fname + ext);
 	else {
-		StrandData(FWD).PrintScoreDistrib(fname + ".pos.dist");
-		StrandData(RVS).PrintScoreDistrib(fname + ".neg.dist");
+		StrandData(FWD).PrintScoreDistrib(fname + sStrandEXT[FWD] + ext);
+		StrandData(RVS).PrintScoreDistrib(fname + sStrandEXT[RVS] + ext);
 	}
 }
 #endif
@@ -780,9 +782,6 @@ void DataValuesMap::Print(chrid cID, chrlen stopNumb) const
 #ifdef MY_DEBUG
 OSpecialWriter* BoundsValues::LineWriter = nullptr;
 #endif
-
-const BYTE L = 1;	// left bound, synonym for 'reverse' (is formed by reverse reads)
-const BYTE R = 0;	// right bound, synonym for 'forward' (is formed by forward reads)
 
 void BoundsValues::PushIncline(
 	chrlen grpNumb,
@@ -1242,21 +1241,15 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 		const auto& vp = VP[L];
 		extLen = BYTE(vp.size() - 1);
 		offset = int32_t(POS(vp.front()) - startPos);
-		for (BYTE i = 0; i < extLen; i++) {		// left to right, increasing offset
-			//auto& pval = vp[i]->second;
-			//pval.Score = spline.AvrScoreInRange(offset, POS(vp[i + 1]) - pval.RefPos);
+		for (BYTE i = 0; i < extLen; i++)		// left to right, increasing offset
 			vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i + 1], vp[i]));
-		}
 	}
 	{	// right BS extensions
 		const auto& vp = VP[R];
 		extLen = BYTE(vp.size() - 1);
 		offset = int32_t(POS(vp.back()) - startPos);
-		for (BYTE i = extLen; i; i--) {			// right to left, decreasing offset
-			//auto& pval = vp[i]->second;
-			//pval.Score = spline.AvrScoreInRange(offset, pval.RefPos - POS(vp[i - 1]), -1);
+		for (BYTE i = extLen; i; i--)			// right to left, decreasing offset
 			vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i], vp[i - 1]), -1);
-		}
 	}
 	// BS
 	auto& start = VP[L].back()->second;
@@ -1272,16 +1265,16 @@ void BS_map::SetGroupScores(iter& itStart, iter& itEnd, const Values& spline, fl
 {
 	vector<iter> VP[2];	// 0 - forward, 1 - reversed
 
-	VP[0].reserve(4), VP[1].reserve(4);
+	VP[R].reserve(4), VP[L].reserve(4);
 	for (auto& it = itStart; it != itEnd; it++) {
-		if (it->second.Reverse && VP[0].size() && VP[1].size()) {
+		if (it->second.Reverse && VP[R].size() && VP[L].size()) {
 			SetBSscores(VP, spline, maxScore);
-			VP[0].clear(), VP[1].clear();
+			VP[R].clear(), VP[L].clear();
 		}
 		VP[it->second.Reverse].push_back(it);
 	}
 	// last BS
-	if (VP[0].size() && VP[1].size())
+	if (VP[R].size() && VP[L].size())
 		SetBSscores(VP, spline, maxScore);
 }
 
@@ -1404,7 +1397,7 @@ void BS_map::PrintWidthDistrib(const string& fName) const
 
 void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos) const
 {
-	string format = "%8d % 4d  %c %8d %5.2f   %s\n";
+	string format = "%8d % 4d  %c %8d %5.3f  %s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 

@@ -155,7 +155,7 @@ public:
 	// Returns average score within a range
 	//	@param offset[in,out]: start of range; 
 	//	@param len: range length 
-	//	@param factor: -1 for direct, 1 for reverse bypass
+	//	@param factor: -1 for forward, 1 for reverse bypass
 	//	@return: average score
 	float AvrScoreInRange(int32_t& offset, int32_t len, int8_t factor = 1) const;
 
@@ -651,7 +651,7 @@ class BoundsValues : public vector<BoundValues>
 		float	Val(BYTE lim) const { return _val[lim]; }
 
 		// Set start/end positions and values by cover iterator, and merge successive raises
-		//	@param reverse: 0 for firect, 1 for reverse
+		//	@param reverse: 0 for forward, 1 for reverse
 		//	@param it: forward/reverse cover iterator
 		template<typename T>
 		void Set(BYTE reverse, T it)
@@ -779,6 +779,9 @@ public:
 
 //=== BINDING SITES DATA 
 
+const BYTE R = 0;	// right bound, synonym for 'forward'
+const BYTE L = 1;	// left bound, synonym for 'reverse' 
+
 struct BS_PosVal
 {
 	BYTE		 Reverse;
@@ -787,7 +790,7 @@ struct BS_PosVal
 	float		 Score = 1;
 
 	// Constructor
-	//	@param reverse: 0 for firect, 1 for reverse
+	//	@param reverse: 0 for forward, 1 for reverse
 	//	@param grpNumb: group number
 	BS_PosVal(BYTE reverse, chrlen grpNumb) : Reverse(reverse), GrpNumb(grpNumb) {}
 };
@@ -802,19 +805,19 @@ private:
 	iter _lastIt;	// last inserted iterator (for the left bounds only)
 
 	// Inserts BS position (bound)
-	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
+	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
 	//	@param incl: inclined line
 	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl);
 
 	// Inserts BS positions (left/right bounds)
-	//	@param reverse: 0 for firect (right bounds), 1 for reverse (left bounds)
+	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
 	//	@param inclines: forward/reversed (right/left) inclined lines
 	void AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines);
 
 	// Fills the instance with recognized left/right BS positions (bounds)
-	//	@param reverse[in]: 0 for firect (right bounds), 1 for reverse (left bounds)
+	//	@param reverse[in]: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param derivs[in]: derivatives
 	//	@param rCover[in]: read coverage
 	void SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover);
@@ -863,20 +866,20 @@ public:
 	template<typename F>
 	void DoExtend(F&& lambda)
 	{
-		vector<PosValue> VP[2];	// 0 - forward, 1 - reversed
+		vector<PosValue> VP[2];
 
-		VP[0].reserve(4), VP[1].reserve(4);
+		VP[R].reserve(4), VP[L].reserve(4);
 		for (auto it = begin(); it != end(); it++)
 			if (it->second.Score) {
-				if (it->second.Reverse && VP[0].size() && VP[1].size()) {
+				if (it->second.Reverse && VP[R].size() && VP[L].size()) {
 					lambda(VP);
-					VP[0].clear(), VP[1].clear();
+					VP[R].clear(), VP[L].clear();
 				}
 				VP[it->second.Reverse].emplace_back(it, it->second.Score);
 			}
 
 		// last element
-		if (VP[0].size() && VP[1].size())
+		if (VP[R].size() && VP[L].size())
 			lambda(VP);
 	}
 
