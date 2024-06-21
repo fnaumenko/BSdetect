@@ -1082,8 +1082,8 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 const short MIN_BS_WIDTH = 5;
 
 // Fits the BS width to a minimum by adjusting the BS reference positions
-//	@param start: BS iterator pointed to base left boundary
-//	@param end: BS iterator pointed to base right boundary
+//	@param start: BS iterator pointed to base left bound
+//	@param end: BS iterator pointed to base right bound
 //	@param isLess: if true then the width should be less than the minimum
 //	@returns: true if the condition is met and the width is adjusted
 bool FitToMinWidth(BS_map::iter& start, BS_map::iter& end, bool isLess = true)
@@ -1113,13 +1113,13 @@ void BS_map::ExtendNarrowBS(iter& start, iter& end)
 		else {
 			auto itL = prev(it);	// if itL==begin() then leftCnt is 1
 			FitToMinWidth(itL, it);
-			// check left boundaries
+			// check left bounds
 			for (auto it = --itL; leftCnt > 1; leftCnt--, it--) {
 				if (POS(it) < POS(itL))
 					break;
 				SetInvalid(it);
 			}
-			// check right boundaries
+			// check right bounds
 			for (auto itR = next(it); itR != itEnd; itR++) {
 				if (POS(it) < POS(itR))
 					break;
@@ -1149,7 +1149,7 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 
 	// 'merge' close proximities
 	if (closeProx) {
-		iter	lastR = end();		// last BS right boundary
+		iter	lastR = end();		// last BS right bound
 		vector<pair<iter, iter>> newBss;
 		//printf("C %d %d\n", start->second.GrpNumb, start->first);
 		newBss.reserve(bss.size() - 1);
@@ -1174,12 +1174,12 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 	if (narrowBS)
 		for (auto& bs : bss)
 			if (FitToMinWidth(bs.first, bs.second)) {
-				//check left boundaries
+				//check left bounds
 				for (auto it = prev(bs.first); it != end(); it--)
 					if (IsValid(it))
 						if (POS(it) < POS(bs.first))	break;
 						else							SetInvalid(it);
-				// check right boundaries
+				// check right bounds
 				for (auto it = next(bs.second); it != end(); it++)
 					if (IsValid(it))
 						if (POS(it) > POS(bs.second))	break;
@@ -1334,14 +1334,14 @@ void BS_map::Refine()
 
 
 // Sets scores for each BS within the group according to fragment coverage spline
-//	@param VP: iterators for the left/right BS boundaries
+//	@param VP: iterators for the left/right BS bounds
 //	@param spline: local fragment coverage spline
 //	@maxScore[in,out]: cumulative maximum score 
 void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& maxScore)
 {
 	/*
 	fill the score from left to right (for reverse)
-	or from rigth to left (for direct) extended boundaries
+	or from rigth to left (for direct) extended bounds
 	*/
 	chrlen	startPos = POS(VP[L].front());
 	int32_t offset;
@@ -1391,13 +1391,14 @@ void BS_map::SetGroupScores(iter& itStart, iter& itEnd, const Values& spline, fl
 	vector<iter> VP[2];	// 0 - forward, 1 - reversed
 
 	VP[R].reserve(4), VP[L].reserve(4);
-	for (auto& it = itStart; it != itEnd; it++) {
-		if (it->second.Reverse && VP[R].size() && VP[L].size()) {
-			SetBSscores(VP, spline, maxScore);
-			VP[R].clear(), VP[L].clear();
+	for (auto& it = itStart; it != itEnd; it++)
+		if (IsValid(it)) {
+			if (it->second.Reverse && VP[R].size() && VP[L].size()) {
+				SetBSscores(VP, spline, maxScore);
+				VP[R].clear(), VP[L].clear();
+			}
+			VP[it->second.Reverse].push_back(it);
 		}
-		VP[it->second.Reverse].push_back(it);
-	}
 	// last BS
 	if (VP[R].size() && VP[L].size())
 		SetBSscores(VP, spline, maxScore);
@@ -1416,8 +1417,8 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 	spline.Reserve(Glob::FragLen * 3);
 	// *** set scores
 	for (auto it = begin(); it != end(); it++) {
-		if (!IsValid(it))
-			continue;
+		if (!IsValid(it))	continue;
+
 		if (grpNumb != it->second.GrpNumb) {
 			// build single fragment coverage spline for the whole group
 			cover.SetLocalSpline(spliner, POS(itStart), POS(itEnd), spline);

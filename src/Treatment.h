@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/21/2024
+Last modified: 06/22/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
