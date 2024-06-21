@@ -1106,7 +1106,7 @@ void BS_map::ExtendNarrowBS(iter& start, iter& end)
 	iter itEnd = next(end) == this->end() ? this->end() : next(end);
 
 	for (auto it = start; it != itEnd; it++) {
-		if (!it->second.Score)	continue;
+		if (!IsValid(it))	continue;
 
 		if (it->second.Reverse)
 			leftCnt++;
@@ -1117,13 +1117,13 @@ void BS_map::ExtendNarrowBS(iter& start, iter& end)
 			for (auto it = --itL; leftCnt > 1; leftCnt--, it--) {
 				if (POS(it) < POS(itL))
 					break;
-				it->second.Score = 0;
+				SetInvalid(it);
 			}
 			// check right boundaries
 			for (auto itR = next(it); itR != itEnd; itR++) {
 				if (POS(it) < POS(itR))
 					break;
-				itR->second.Score = 0;
+				SetInvalid(itR);
 			}
 			break;
 		}
@@ -1139,7 +1139,7 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 	bss.reserve(4);
 	// collect BS
 	for (auto it = start; it != itEnd; it++)
-		if (it->second.Score)
+		if (IsValid(it))
 			if (it->second.Reverse)
 				lastLeft = true;
 			else if (lastLeft) {
@@ -1158,7 +1158,7 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 				if (LEN(lastR, bs.first) <= MIN_BS_WIDTH) {
 					//printf("C\t%d %d\n", lastR->second.GrpNumb, lastR->first);
 					for (auto it = lastR; it != bs.second; it++)
-						it->second.Score = 0;
+						SetInvalid(it);
 					newBss.emplace_back(prev(lastR), bs.second);	// save previous & current
 				}
 				else
@@ -1176,14 +1176,14 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 			if (FitToMinWidth(bs.first, bs.second)) {
 				//check left boundaries
 				for (auto it = prev(bs.first); it != end(); it--)
-					if (it->second.Score)
+					if (IsValid(it))
 						if (POS(it) < POS(bs.first))	break;
-						else							it->second.Score = 0;
+						else							SetInvalid(it);
 				// check right boundaries
 				for (auto it = next(bs.second); it != end(); it++)
-					if (it->second.Score)
+					if (IsValid(it))
 						if (POS(it) > POS(bs.second))	break;
-						else							it->second.Score = 0;
+						else							SetInvalid(it);
 			}
 }
 
@@ -1205,7 +1205,7 @@ void BS_map::ExtendNarrowBSs()
 
 	// draft common bypass
 	for (auto it = begin(); it != end(); it++) {
-		if (!it->second.Score)	continue;
+		if (!IsValid(it))	continue;
 
 		if (grpNumb != it->second.GrpNumb) {
 			if (narrowBS || closeProx) {
@@ -1268,7 +1268,7 @@ void BS_map::Refine()
 		//	@returns: iterator pointing to the first non-extra entry
 		auto ResetExtEntries = [&](iter& it, uint16_t& entryCnt) {
 			for (; entryCnt && it != end(); entryCnt--, --it)
-				it->second.Score = 0;
+				SetInvalid(it);
 			return it;
 		};
 		bool someRights = lastExtRight_it != end();	// there are some right entries
@@ -1352,7 +1352,7 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 		extLen = BYTE(vp.size() - 1);
 		offset = int32_t(POS(vp.front()) - startPos);
 		for (BYTE i = 0; i < extLen; i++) {		// left to right, increasing offset
-			if (vp[i]->second.Score) {
+			if (BS_map::IsValid(vp[i])) {
 				auto len = int(LEN(vp[i], vp[i + 1]));
 				if (len <= 0)
 					printf("+> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, vp[i]->second.Score);
@@ -1365,7 +1365,7 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 		extLen = BYTE(vp.size() - 1);
 		offset = int32_t(POS(vp.back()) - startPos);
 		for (BYTE i = extLen; i; i--) {			// right to left, decreasing offset
-			if (vp[i]->second.Score) {
+			if (BS_map::IsValid(vp[i])) {
 				auto len = int(LEN(vp[i - 1], vp[i]));
 				if (len <= 0)
 					printf("-> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, vp[i]->second.Score);
@@ -1416,7 +1416,7 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 	spline.Reserve(Glob::FragLen * 3);
 	// *** set scores
 	for (auto it = begin(); it != end(); it++) {
-		if (!it->second.Score)
+		if (!IsValid(it))
 			continue;
 		if (grpNumb != it->second.GrpNumb) {
 			// build single fragment coverage spline for the whole group

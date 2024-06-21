@@ -804,6 +804,8 @@ public:
 private:
 	iter _lastIt;	// last inserted iterator (for the left bounds only)
 
+	static void SetInvalid(iter it) { it->second.Score = 0; }
+
 	// Inserts BS position (bound)
 	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
@@ -853,6 +855,10 @@ public:
 		PosValue(iter it, float val) : Iter(it), Val(val) {}
 	};
 
+	// Returns true if boundary is valid
+	static bool IsValid(iter it)	{ return it->second.Score; }
+	static bool IsValid(citer it)	{ return it->second.Score; }
+
 	// Fills the instance with recognized binding sites
 	//	@param derivs: derivatives
 	//	@param rCover: read coverage
@@ -881,7 +887,7 @@ public:
 
 		VP[R].reserve(4), VP[L].reserve(4);
 		for (auto it = begin(); it != end(); it++)
-			if (it->second.Score) {
+			if (IsValid(it)) {
 				if (it->second.Reverse && VP[R].size() && VP[L].size()) {
 					lambda(VP);
 					VP[R].clear(), VP[L].clear();
@@ -899,14 +905,14 @@ public:
 	void DoBasic(F&& lambda) const
 	{
 		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
-			if (it->second.Score && !it->second.Reverse && it0->second.Reverse)
+			if (IsValid(it) && !it->second.Reverse && it0->second.Reverse)
 				lambda(it0, it);
 	}
 	template<typename F>
 	void DoBasic(F&& lambda)
 	{
 		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
-			if (it->second.Score && !it->second.Reverse && it0->second.Reverse)
+			if (IsValid(it) && !it->second.Reverse && it0->second.Reverse)
 				lambda(it0, it);
 	}
 
