@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/19/2024
+Last modified: 06/21/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -822,9 +822,20 @@ private:
 	//	@param rCover[in]: read coverage
 	void SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover);
 
-	// Extends too narrow BSs to the minimum acceptable width;
-	// may adjust reference position
-	void ExtendNarrowWidths();
+	// Extends single in the group too narrow BS to the minimum acceptable width
+	//	@param start: start iterator of the group
+	//	@param end: end iterator of the group
+	void ExtendNarrowBS(iter& start, iter& end);
+
+	// Extends too narrow BSs in the group to the minimum acceptable width
+	//	@param start: start iterator of the group
+	//	@param end: end iterator of the group
+	//	@param narrowBS: if true then there are narrow BS in the group
+	//	@param closeProx: if true then there are close proximities in the group
+	void ExtendNarrowBSsInGroup(iter& start, iter& end, bool narrowBS, bool closeProx);
+
+	// Extends too narrow BSs to the minimum acceptable width by adjusting reference position
+	void ExtendNarrowBSs();
 
 	// Sets BSs scores within the group according to fragment coverage spline
 	//	@param itStart: first valid iter in the group

@@ -998,7 +998,7 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 //===== BS_map
 
 #define	POS(it)	(it)->second.RefPos
-#define LEN(it1,it2)	POS(it1) - POS(it2)
+#define LEN(itStart,itEnd)	short(POS(itEnd) - POS(itStart))
 
 void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 {
@@ -1082,64 +1082,176 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 const short MIN_BS_WIDTH = 5;
 
 // Fits the BS width to a minimum by adjusting the BS reference positions
-//	@param start: BS iterator pointed to base left bound 
-//	@param end: BS iterator pointed to base right bound
-//	@param len: basic BS width
-void FitToMinWidth(BS_map::iter& start, BS_map::iter& end, short len)
+//	@param start: BS iterator pointed to base left boundary
+//	@param end: BS iterator pointed to base right boundary
+//	@param isLess: if true then the width should be less than the minimum
+//	@returns: true if the condition is met and the width is adjusted
+bool FitToMinWidth(BS_map::iter& start, BS_map::iter& end, bool isLess = true)
 {
-	const auto diff = MIN_BS_WIDTH - len;
+	const auto diff = MIN_BS_WIDTH - LEN(start,end);
+	if ((diff <= 0) == isLess)	return false;
+
 	auto Expand = [](const BS_map::iter& it, chrlen newPos) {
 		if (it->first != newPos)	POS(it) = newPos;
 	};
 
 	Expand(start, start->first - diff / 2);
 	Expand(end, end->first + diff / 2 + diff % 2);
+	return true;
 };
 
-void BS_map::ExtendNarrowWidths()
+void BS_map::ExtendNarrowBS(iter& start, iter& end)
 {
-	DoExtend([&](vector<PosValue>* VP) {
-		// basic start, end
-		auto& start = VP[L].back().Iter;
-		auto& end	= VP[R].front().Iter;
-		if (start->second.GrpNumb != end->second.GrpNumb)	return;
+	USHORT leftCnt = 0;
+	iter itEnd = next(end) == this->end() ? this->end() : next(end);
 
-		const auto len = short(end->first - start->first);
-		if (len < MIN_BS_WIDTH) {
-			FitToMinWidth(start, end, len);
+	for (auto it = start; it != itEnd; it++) {
+		if (!it->second.Score)	continue;
 
-			// reset boundaries that are covered by extented base boundaries
-			auto resetCoveredItems = [](BS_PosVal& pval, BS_map::iter& itBase) {
-				if (pval.RefPos > POS(itBase))	return;
-				pval.Score = 0;
-			};
-
-			// left BS extentions
-			auto& vp = VP[L];
-			const auto extLen = BYTE(vp.size() - 1);
-			for (BYTE i = 0; i < extLen; i++)			// left to right
-				resetCoveredItems(vp[i].Iter->second, start);
-
-			// right BS extentions
-			vp = VP[R];
-			for (BYTE i = BYTE(vp.size() - 1); i; i--)	// right to left
-				resetCoveredItems(vp[i].Iter->second, end);
+		if (it->second.Reverse)
+			leftCnt++;
+		else {
+			auto itL = prev(it);	// if itL==begin() then leftCnt is 1
+			FitToMinWidth(itL, it);
+			// check left boundaries
+			for (auto it = --itL; leftCnt > 1; leftCnt--, it--) {
+				if (POS(it) < POS(itL))
+					break;
+				it->second.Score = 0;
+			}
+			// check right boundaries
+			for (auto itR = next(it); itR != itEnd; itR++) {
+				if (POS(it) < POS(itR))
+					break;
+				itR->second.Score = 0;
+			}
+			break;
 		}
-		});
+	}
+}
+
+void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool closeProx)
+{
+	bool lastLeft = true;
+	iter itEnd = next(stop) == end() ? end() : next(stop);
+	vector<pair<iter, iter>> bss;	// BS start-end collection
+
+	bss.reserve(4);
+	// collect BS
+	for (auto it = start; it != itEnd; it++)
+		if (it->second.Score)
+			if (it->second.Reverse)
+				lastLeft = true;
+			else if (lastLeft) {
+				bss.emplace_back(prev(it), it);
+				lastLeft = false;
+			}
+
+	// 'merge' close proximities
+	if (closeProx) {
+		iter	lastR = end();		// last BS right boundary
+		vector<pair<iter, iter>> newBss;
+		//printf("C %d %d\n", start->second.GrpNumb, start->first);
+		newBss.reserve(bss.size() - 1);
+		for (const auto& bs : bss) {
+			if (lastR != end())
+				if (LEN(lastR, bs.first) <= MIN_BS_WIDTH) {
+					//printf("C\t%d %d\n", lastR->second.GrpNumb, lastR->first);
+					for (auto it = lastR; it != bs.second; it++)
+						it->second.Score = 0;
+					newBss.emplace_back(prev(lastR), bs.second);	// save previous & current
+				}
+				else
+					newBss.emplace_back(prev(lastR), lastR);		// save previous
+			lastR = bs.second;
+		}
+		if (POS(newBss.back().first) == POS(bss.back().first))		// the same lasts
+			newBss.push_back(newBss.back());						// save last
+
+		bss.swap(newBss);
+	}
+	// extend narrow BS if there are any left
+	if (narrowBS)
+		for (auto& bs : bss)
+			if (FitToMinWidth(bs.first, bs.second)) {
+				//check left boundaries
+				for (auto it = prev(bs.first); it != end(); it--)
+					if (it->second.Score)
+						if (POS(it) < POS(bs.first))	break;
+						else							it->second.Score = 0;
+				// check right boundaries
+				for (auto it = next(bs.second); it != end(); it++)
+					if (it->second.Score)
+						if (POS(it) > POS(bs.second))	break;
+						else							it->second.Score = 0;
+			}
+}
+
+void BS_map::ExtendNarrowBSs()
+{
+	/*
+	* here the groups are 'canonical', e.g. 
+	* L L L R R L L R L R R
+	*     |_|     |_| |_|
+	*/
+	bool	lastLeft = true;
+	bool	narrowBS = false;
+	bool	closeProx = false;		// close proximity
+	iter	itStart = end();
+	iter	itEnd = end();
+	chrlen	grpNumb = 1;
+	chrlen	lastRpos = 0;		// last BS right boundary position
+	BYTE	bsCnt = 0;
+
+	// draft common bypass
+	for (auto it = begin(); it != end(); it++) {
+		if (!it->second.Score)	continue;
+
+		if (grpNumb != it->second.GrpNumb) {
+			if (narrowBS || closeProx) {
+				// rigorous group bypass
+				if (bsCnt == 1)
+					ExtendNarrowBS(itStart, itEnd);
+				else
+					ExtendNarrowBSsInGroup(itStart, itEnd, narrowBS, closeProx);
+				narrowBS = closeProx = false;
+			}
+			lastRpos = bsCnt = 0;
+			itStart = end();
+			grpNumb = it->second.GrpNumb;
+		}
+
+		if (it->second.Reverse)
+			lastLeft = true;
+		else
+			if (lastLeft) {		// BS right boudary
+				if (LEN(prev(it), it) < MIN_BS_WIDTH)
+					narrowBS = true;
+				if (POS(prev(it)) - lastRpos < MIN_BS_WIDTH)
+					closeProx = true;
+				bsCnt++;
+				lastLeft = false;
+				lastRpos = POS(it);
+			}
+
+		if (itStart == end())
+			itStart = it;
+		itEnd = it;
+	}
 }
 
 void BS_map::Refine()
 {
 	/*
-	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by forward reads
-
-	Options for placing bounds in a region:
-	canonical:					[[L] [R]]
-	extra right/left bounds:	[R] [[L] [R]] [L]
-	'negative' BS width:		[R] [L]
-
-	Method brings the instance to canonical form, resetting the score of all extra elements to zero,
-	and marking BSs with 'negative' width.
+	* BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by forward reads
+	*
+	* Options for placing bounds in a region:
+	* canonical:					[[L] [R]]
+	* extra right/left bounds:	[R] [[L] [R]] [L]
+	* 'negative' BS width:		[R] [L]
+	*
+	* Method brings the instance to canonical form, resetting the score of all extra elements to zero,
+	* and marking BSs with 'negative' width.
 	*/
 	auto lastExtRight_it = end();	// iterator pointing to the last Right entry that starts the region 
 	uint16_t extRightCnt = 0;		// count of extra Right entries only (that starts the region)
@@ -1159,10 +1271,11 @@ void BS_map::Refine()
 				it->second.Score = 0;
 			return it;
 		};
+		bool someRights = lastExtRight_it != end();	// there are some right entries
 
 		// 1) reset extra right entries
-		if (lastExtRight_it != end()) {
-			if (someBS)
+		if (someRights) {
+			if (someBS || newBS)	// newBS is true when there are only right entries
 				ResetExtEntries(lastExtRight_it, extRightCnt);
 			else {						// ** 'negative' BS width
 				lastExtRight_it->second.Reverse = true;		// change 'right' bound to 'left'
@@ -1172,18 +1285,15 @@ void BS_map::Refine()
 			lastExtRight_it = end();
 		}
 		// 2) reset extra left entries
-		if (someBS)
+		if (someBS || !someRights)	// someRights is false when there are only left entries
 			ResetExtEntries(--it, extLeftCnt);
 		else if(extLeftCnt > 0) {		// ** 'negative' BS width
 			auto itR = ResetExtEntries(--it, --extLeftCnt);	// reset other extra entries
 			if (itR != end()) {
 				itR->second.Reverse = false;				// change 'left' bound to 'right
-
 				// decrease the width of the updated BS if needed
 				auto itL = prev(itR);
-				auto len = short(itR->first - itL->first);
-				if (len > MIN_BS_WIDTH)
-					FitToMinWidth(itL, itR, len);
+				FitToMinWidth(itL, itR, false);
 			}
 		}
 	};
@@ -1210,8 +1320,8 @@ void BS_map::Refine()
 					lastExtRight_it = it;
 			if (extLeftCnt)
 				someBS = true;
-			else if (!someBS)
-				extRightCnt++;
+			else
+				extRightCnt += !someBS;
 			extLeftCnt = 0;
 		}
 	}
@@ -1219,7 +1329,7 @@ void BS_map::Refine()
 	ResetAllExtEntries(end());
 
 	// *** extend narrows
-	ExtendNarrowWidths();
+	ExtendNarrowBSs();
 }
 
 
@@ -1241,20 +1351,35 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 		const auto& vp = VP[L];
 		extLen = BYTE(vp.size() - 1);
 		offset = int32_t(POS(vp.front()) - startPos);
-		for (BYTE i = 0; i < extLen; i++)		// left to right, increasing offset
-			vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i + 1], vp[i]));
+		for (BYTE i = 0; i < extLen; i++) {		// left to right, increasing offset
+			if (vp[i]->second.Score) {
+				auto len = int(LEN(vp[i], vp[i + 1]));
+				if (len <= 0)
+					printf("+> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, vp[i]->second.Score);
+				vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i], vp[i + 1]));
+			}
+		}
 	}
 	{	// right BS extensions
 		const auto& vp = VP[R];
 		extLen = BYTE(vp.size() - 1);
 		offset = int32_t(POS(vp.back()) - startPos);
-		for (BYTE i = extLen; i; i--)			// right to left, decreasing offset
-			vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i], vp[i - 1]), -1);
+		for (BYTE i = extLen; i; i--) {			// right to left, decreasing offset
+			if (vp[i]->second.Score) {
+				auto len = int(LEN(vp[i - 1], vp[i]));
+				if (len <= 0)
+					printf("-> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, vp[i]->second.Score);
+				vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i - 1], vp[i]), -1);
+			}
+		}
 	}
 	// BS
 	auto& start = VP[L].back()->second;
 	auto& end = VP[R].front()->second;
 	offset = int32_t(start.RefPos - startPos);
+	auto len = int(end.RefPos - start.RefPos);
+	if (len <= 0)
+		printf("!> %d  len: %d  numb: %d  score: %.3f %.3f\n", VP[L].back()->first, len, start.GrpNumb, start.Score, end.Score);
 	float score = spline.AvrScoreInRange(offset, end.RefPos - start.RefPos);
 
 	if (maxScore < score)	maxScore = score;
@@ -1283,9 +1408,9 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 	SSpliner<coval> spliner(eCurveType::ROUGH, 5);
 	auto& cover = fragCovers.TotalData();
 	Values	spline;			// fragment coverage spline
+	float	maxScore = 0;
 	iter	itStart = end();
 	iter	itEnd = end();
-	float	maxScore = 0;
 	chrlen	grpNumb = 1;
 
 	spline.Reserve(Glob::FragLen * 3);
@@ -1297,6 +1422,7 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 			// build single fragment coverage spline for the whole group
 			cover.SetLocalSpline(spliner, POS(itStart), POS(itEnd), spline);
 			SetGroupScores(itStart, ++itEnd, spline, maxScore);
+
 			spline.clear();
 			itStart = end();
 			grpNumb = it->second.GrpNumb;
@@ -1373,7 +1499,7 @@ void BS_map::PrintWidthDistrib(const string& fName) const
 
 	// collect numbers
 	DoBasic([&](citer& start, citer& end) {
-		auto len = fraglen(LEN(end, start));
+		auto len = fraglen(LEN(start, end));
 		totalLen += len;
 		freq[len].push_back(++bsNumb);
 		}
@@ -1397,12 +1523,12 @@ void BS_map::PrintWidthDistrib(const string& fName) const
 
 void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos) const
 {
-	string format = "%8d % 4d  %c %8d %5.3f  %s\n";
+	string format = "%9d % 5d  %c %8d %5.2f   %s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
 	TxtOutFile file(fName.c_str());
-	file.Write(" pos    numb bnd  ref pos score   IGV view\n");
+	file.Write("  pos    numb bnd  ref pos score   IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
 		if (selected && !x.second.Score)	continue;
