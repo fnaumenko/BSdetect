@@ -780,7 +780,7 @@ public:
 //=== BINDING SITES DATA 
 
 const BYTE R = 0;	// right bound, synonym for 'forward'
-const BYTE L = 1;	// left bound, synonym for 'reverse' 
+const BYTE L = 1;	// left  bound, synonym for 'reverse' 
 
 struct BS_PosVal
 {
@@ -812,7 +812,7 @@ private:
 	//	@param incl: inclined line
 	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl);
 
-	// Inserts BS positions (left/right bounds)
+	// Inserts group of BS positions (left/right bounds)
 	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
 	//	@param inclines: forward/reversed (right/left) inclined lines
@@ -825,8 +825,8 @@ private:
 	void SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover);
 
 	// Extends narrow BS to the minimum acceptable with correction of adjacent bounds
-	//	@param itL: left bound iterator of the BS
-	//	@param itR: right bound iterator of the BS
+	//	@param itL: BS left bound iterator
+	//	@param itR: BS right bound iterator
 	void ExtendNarrowBS(iter& itL, iter& itR);
 
 	// Extends single in the group too narrow BS to the minimum acceptable width
@@ -837,8 +837,8 @@ private:
 	// Extends too narrow BSs in the group to the minimum acceptable width
 	//	@param start: start iterator of the group
 	//	@param end: end iterator of the group
-	//	@param narrowBS: if true then there are narrow BS in the group
-	//	@param closeProx: if true then there are close proximities in the group
+	//	@param narrowBS: if true then there is at least one narrow BS in the group
+	//	@param closeProx: if true then there is at least one close proximities in the group
 	void ExtendNarrowBSsInGroup(iter& start, iter& end, bool narrowBS, bool closeProx);
 
 	// Extends too narrow BSs to the minimum acceptable width by adjusting reference position
@@ -869,9 +869,9 @@ public:
 	//	@param rCover: read coverage
 	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover)
 	{
-		SetBounds(0, derivs.StrandData(FWD), rCover.StrandData(FWD));
+		SetBounds(R, derivs.StrandData(FWD), rCover.StrandData(FWD));
 		_lastIt = begin();
-		SetBounds(1, derivs.StrandData(RVS), rCover.StrandData(RVS));
+		SetBounds(L, derivs.StrandData(RVS), rCover.StrandData(RVS));
 	}
 
 	// Brings the instance to canonical order of placing BS bounds;

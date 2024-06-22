@@ -999,6 +999,7 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 
 #define	POS(it)	(it)->second.RefPos
 #define LEN(itStart,itEnd)	short(POS(itEnd) - POS(itStart))
+#define	SCORE(it)	(it)->second.Score
 
 void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 {
@@ -1103,12 +1104,12 @@ bool FitToMinWidth(BS_map::iter& start, BS_map::iter& end, bool isLess)
 void BS_map::ExtendNarrowBS(iter& itL, iter& itR)
 {
 	if (FitToMinWidth(itL, itR, true)) {
-		//check left bounds
+		//check left adjacent bounds
 		for (auto it = prev(itL); it != end(); it--)
 			if (IsValid(it))
 				if (POS(it) < POS(itL))	break;
 				else					SetInvalid(it);
-		// check right bounds
+		// check right adjacent bounds
 		for (auto it = next(itR); it != end(); it++)
 			if (IsValid(it))
 				if (POS(it) > POS(itR))	break;
@@ -1149,6 +1150,7 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 	if (closeProx) {
 		iter	lastR = end();		// last BS right bound
 		vector<pair<iter, iter>> newBss;
+
 		newBss.reserve(bss.size() - 1);
 		for (const auto& bs : bss) {
 			if (lastR != end())
@@ -1179,14 +1181,14 @@ void BS_map::ExtendNarrowBSs()
 	* L L L R R L L R L R R
 	*     |_|     |_| |_|
 	*/
-	bool	lastLeft = true;
-	bool	narrowBS = false;
-	bool	closeProx = false;		// close proximity
-	iter	itStart = end();
-	iter	itEnd = end();
+	bool	lastLeft = true;	// true if there was BS left bound
+	bool	narrowBS = false;	// true if there's at least one narrow BS
+	bool	closeProx = false;	// true if there's at least one close proximity, i.e. too close BSs
+	iter	itStart = end();	// group start iterator
+	iter	itEnd = end();		// group end iterator
 	chrlen	grpNumb = 1;
-	chrlen	lastRpos = 0;		// last BS right boundary position
-	BYTE	bsCnt = 0;
+	chrlen	lastRpos = 0;		// last BS right bound position
+	BYTE	bsCnt = 0;			// count of BSs
 
 	// draft common bypass
 	for (auto it = begin(); it != end(); it++) {
@@ -1209,7 +1211,7 @@ void BS_map::ExtendNarrowBSs()
 		if (it->second.Reverse)
 			lastLeft = true;
 		else
-			if (lastLeft) {		// BS right boudary
+			if (lastLeft) {		// BS right boud
 				if (LEN(prev(it), it) < MIN_BS_WIDTH)
 					narrowBS = true;
 				if (POS(prev(it)) - lastRpos < MIN_BS_WIDTH)
@@ -1232,48 +1234,48 @@ void BS_map::Refine()
 	*
 	* Options for placing bounds in a region:
 	* canonical:					[[L] [R]]
-	* extra right/left bounds:	[R] [[L] [R]] [L]
-	* 'negative' BS width:		[R] [L]
+	* adjacent right/left bounds:	[R] [[L] [R]] [L]
+	* 'negative' BS width:			[R] [L]
 	*
-	* Method brings the instance to canonical form, resetting the score of all extra elements to zero,
+	* Method brings the instance to canonical form, resetting the score of all adjacent elements to zero,
 	* and marking BSs with 'negative' width.
 	*/
 	auto lastExtRight_it = end();	// iterator pointing to the last Right entry that starts the region 
-	uint16_t extRightCnt = 0;		// count of extra Right entries only (that starts the region)
-	uint16_t extLeftCnt = 0;		// count of extra Left entries only (that ends the region)
+	uint16_t extRightCnt = 0;		// count of adjacent Right entries only (that starts the region)
+	uint16_t extLeftCnt = 0;		// count of adjacent Left entries only (that ends the region)
 	bool newBS = true;				// if true then new BS in the region is registered
 	bool someBS = false;			// if true then at least one BS in the region is registered
 	chrlen grpNumb = 1;
 
-	// resets left and right extra entries
+	// resets left and right adjacent entries
 	auto ResetAllExtEntries = [&](iter it) {
-		// resets left or right extra ('false') entries
-		//	@param it: iterator pointing to the first extra entry
-		//	@param entryCnt: count of extra entries which should be reset; becomes zero
-		//	@returns: iterator pointing to the first non-extra entry
+		// resets left or right adjacent ('false') entries
+		//	@param it: iterator pointing to the first adjacent entry
+		//	@param entryCnt: count of adjacent entries which should be reset; becomes zero
+		//	@returns: iterator pointing to the first non-adjacent entry
 		auto ResetExtEntries = [&](iter& it, uint16_t& entryCnt) {
 			for (; entryCnt && it != end(); entryCnt--, --it)
 				SetInvalid(it);
 			return it;
 		};
-		bool someRights = lastExtRight_it != end();	// there are some right entries
+		bool someRights = lastExtRight_it != end();	// there're some right bounds
 
-		// 1) reset extra right entries
+		// 1) reset adjacent right bounds
 		if (someRights) {
-			if (someBS || newBS)	// newBS is true when there are only right entries
+			if (someBS || newBS)	// newBS is true when there're only right bounds
 				ResetExtEntries(lastExtRight_it, extRightCnt);
 			else {						// ** 'negative' BS width
 				lastExtRight_it->second.Reverse = true;		// change 'right' bound to 'left'
 				if (extRightCnt > 0)
-					ResetExtEntries(--lastExtRight_it, --extRightCnt);	// reset other extra entries
+					ResetExtEntries(--lastExtRight_it, --extRightCnt);	// reset other adjacent bounds
 			}
 			lastExtRight_it = end();
 		}
-		// 2) reset extra left entries
-		if (someBS || !someRights)	// someRights is false when there are only left entries
+		// 2) reset adjacent left bounds
+		if (someBS || !someRights)	// someRights is false when there're only left bounds
 			ResetExtEntries(--it, extLeftCnt);
 		else if(extLeftCnt > 0) {		// ** 'negative' BS width
-			auto itR = ResetExtEntries(--it, --extLeftCnt);	// reset other extra entries
+			auto itR = ResetExtEntries(--it, --extLeftCnt);	// reset other adjacent entries
 			if (itR != end()) {
 				itR->second.Reverse = false;				// change 'left' bound to 'right
 				// decrease the width of the updated BS if needed
@@ -1340,8 +1342,8 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 			if (BS_map::IsValid(vp[i])) {
 				auto len = int(LEN(vp[i], vp[i + 1]));
 				if (len <= 0)
-					printf("+> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, vp[i]->second.Score);
-				vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i], vp[i + 1]));
+					printf("+> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, SCORE(vp[i]));
+				SCORE(vp[i]) = spline.AvrScoreInRange(offset, LEN(vp[i], vp[i + 1]));
 			}
 		}
 	}
@@ -1353,8 +1355,8 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 			if (BS_map::IsValid(vp[i])) {
 				auto len = int(LEN(vp[i - 1], vp[i]));
 				if (len <= 0)
-					printf("-> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, vp[i]->second.Score);
-				vp[i]->second.Score = spline.AvrScoreInRange(offset, LEN(vp[i - 1], vp[i]), -1);
+					printf("-> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, SCORE(vp[i]));
+				SCORE(vp[i]) = spline.AvrScoreInRange(offset, LEN(vp[i - 1], vp[i]), -1);
 			}
 		}
 	}
@@ -1444,7 +1446,7 @@ void BS_map::PrintStat() const
 		++bsNumb;
 		if (stat) {
 			//const fraglen len = LEN(end, start);
-			float score = start->second.Score;
+			float score = SCORE(start);
 			if (minScore > score)		minScore = score, minScoreNumb = bsNumb;
 
 			//if (score < 1) {
@@ -1565,14 +1567,14 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 		auto& end	= VP[R].front().Iter;
 
 		LineAddUInts(POS(start), POS(end), ++bsNumb, true);	// 3 basic fields
-		LineAddScore(start->second.Score, true);					// BS score
+		LineAddScore(SCORE(start), true);
 
 		// *** extended boudaries info
 		LineAddChar(DOT, true);
 		lastSep[1] = VP[R].size() - 1;
-		LineAddFloat(end->second.Score, VP[1].size() - 1 || lastSep[1]);	// ratio
+		LineAddFloat(SCORE(end), VP[1].size() - 1 || lastSep[1]);	// ratio
 
-		// *** extra deviations info
+		// *** adjacent deviations info
 		for (BYTE s : {L, R}) {
 			const BYTE vpLen = BYTE(VP[s].size() - 1);
 			if (!vpLen) continue;
@@ -1583,7 +1585,7 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 			};
 			function<void(BYTE, char)> saveExtraVal = [this, &vp](BYTE i, char specChar) {
 				if (specChar)	LineAddChar(specChar);
-				LineAddScore(vp[i].Iter->second.Score, false);
+				LineAddScore(SCORE(vp[i].Iter), false);
 			};
 			auto saveExtraFields = [&](function<void(BYTE, char)>& fn, char specChar, bool delim) {
 				BYTE i = !s;
@@ -1651,9 +1653,9 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 		addExtraLines(VP[L]);
 		// *** add basic feature
 		LineAddUInts(POS(start), POS(end), bsNumb, true);
-		LineAddFloat(start->second.Score, true);		// BS score
+		LineAddFloat(SCORE(start), true);		// BS score
 		LineAddChars(delims, reclen(strlen(delims)), false);
-		LineAddFloat(end->second.Score, false);			// reverse/forward ratio
+		LineAddFloat(SCORE(end), false);		// reverse/forward ratio
 		LineToIOBuff(offset);
 
 		addExtraLines(VP[R]);
