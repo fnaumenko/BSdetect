@@ -824,10 +824,15 @@ private:
 	//	@param rCover[in]: read coverage
 	void SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover);
 
+	// Extends narrow BS to the minimum acceptable with correction of adjacent bounds
+	//	@param itL: left bound iterator of the BS
+	//	@param itR: right bound iterator of the BS
+	void ExtendNarrowBS(iter& itL, iter& itR);
+
 	// Extends single in the group too narrow BS to the minimum acceptable width
 	//	@param start: start iterator of the group
 	//	@param end: end iterator of the group
-	void ExtendNarrowBS(iter& start, iter& end);
+	void ExtendSingleNarrowBS(iter& start, iter& end);
 
 	// Extends too narrow BSs in the group to the minimum acceptable width
 	//	@param start: start iterator of the group

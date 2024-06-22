@@ -1086,7 +1086,7 @@ const short MIN_BS_WIDTH = 5;
 //	@param end: BS iterator pointed to base right bound
 //	@param isLess: if true then the width should be less than the minimum
 //	@returns: true if the condition is met and the width is adjusted
-bool FitToMinWidth(BS_map::iter& start, BS_map::iter& end, bool isLess = true)
+bool FitToMinWidth(BS_map::iter& start, BS_map::iter& end, bool isLess)
 {
 	const auto diff = MIN_BS_WIDTH - LEN(start,end);
 	if ((diff <= 0) == isLess)	return false;
@@ -1100,34 +1100,32 @@ bool FitToMinWidth(BS_map::iter& start, BS_map::iter& end, bool isLess = true)
 	return true;
 };
 
-void BS_map::ExtendNarrowBS(iter& start, iter& end)
+void BS_map::ExtendNarrowBS(iter& itL, iter& itR)
 {
-	USHORT leftCnt = 0;
+	if (FitToMinWidth(itL, itR, true)) {
+		//check left bounds
+		for (auto it = prev(itL); it != end(); it--)
+			if (IsValid(it))
+				if (POS(it) < POS(itL))	break;
+				else					SetInvalid(it);
+		// check right bounds
+		for (auto it = next(itR); it != end(); it++)
+			if (IsValid(it))
+				if (POS(it) > POS(itR))	break;
+				else					SetInvalid(it);
+	}
+}
+
+void BS_map::ExtendSingleNarrowBS(iter& start, iter& end)
+{
 	iter itEnd = next(end) == this->end() ? this->end() : next(end);
 
-	for (auto it = start; it != itEnd; it++) {
-		if (!IsValid(it))	continue;
-
-		if (it->second.Reverse)
-			leftCnt++;
-		else {
-			auto itL = prev(it);	// if itL==begin() then leftCnt is 1
-			FitToMinWidth(itL, it);
-			// check left bounds
-			for (auto it = --itL; leftCnt > 1; leftCnt--, it--) {
-				if (POS(it) < POS(itL))
-					break;
-				SetInvalid(it);
-			}
-			// check right bounds
-			for (auto itR = next(it); itR != itEnd; itR++) {
-				if (POS(it) < POS(itR))
-					break;
-				SetInvalid(itR);
-			}
+	for (auto it = start; it != itEnd; it++)
+		if (IsValid(it) && !it->second.Reverse) {
+			auto itL = prev(it);
+			ExtendNarrowBS(itL, it);
 			break;
 		}
-	}
 }
 
 void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool closeProx)
@@ -1151,12 +1149,10 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 	if (closeProx) {
 		iter	lastR = end();		// last BS right bound
 		vector<pair<iter, iter>> newBss;
-		//printf("C %d %d\n", start->second.GrpNumb, start->first);
 		newBss.reserve(bss.size() - 1);
 		for (const auto& bs : bss) {
 			if (lastR != end())
 				if (LEN(lastR, bs.first) <= MIN_BS_WIDTH) {
-					//printf("C\t%d %d\n", lastR->second.GrpNumb, lastR->first);
 					for (auto it = lastR; it != bs.second; it++)
 						SetInvalid(it);
 					newBss.emplace_back(prev(lastR), bs.second);	// save previous & current
@@ -1173,18 +1169,7 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 	// extend narrow BS if there are any left
 	if (narrowBS)
 		for (auto& bs : bss)
-			if (FitToMinWidth(bs.first, bs.second)) {
-				//check left bounds
-				for (auto it = prev(bs.first); it != end(); it--)
-					if (IsValid(it))
-						if (POS(it) < POS(bs.first))	break;
-						else							SetInvalid(it);
-				// check right bounds
-				for (auto it = next(bs.second); it != end(); it++)
-					if (IsValid(it))
-						if (POS(it) > POS(bs.second))	break;
-						else							SetInvalid(it);
-			}
+			ExtendNarrowBS(bs.first, bs.second);
 }
 
 void BS_map::ExtendNarrowBSs()
@@ -1211,7 +1196,7 @@ void BS_map::ExtendNarrowBSs()
 			if (narrowBS || closeProx) {
 				// rigorous group bypass
 				if (bsCnt == 1)
-					ExtendNarrowBS(itStart, itEnd);
+					ExtendSingleNarrowBS(itStart, itEnd);
 				else
 					ExtendNarrowBSsInGroup(itStart, itEnd, narrowBS, closeProx);
 				narrowBS = closeProx = false;
