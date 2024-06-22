@@ -352,7 +352,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 	const bool isFeatures = is_same<T, ValuesMap>::value;
 
 	const char* title = "strand      received      selected";
-	printf("\n%s\n%s\n", titles[isFeatures], title);
+	printf("%s\n%s\n", titles[isFeatures], title);
 	PrintSolidLine(USHORT(strlen(title) + 2));
 	for (BYTE s = 0; s < 1 + strands; s++) {
 		chrlen rawLen = 0, refineLen = 0;
@@ -369,6 +369,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 			rgn.size(), Percent(rawLen, chrLen),
 			realCnt, Percent(refineLen, chrLen));
 	}
+	printf("\n");
 }
 
 //===== CoverRegions
@@ -1468,7 +1469,7 @@ void BS_map::PrintStat() const
 		//};
 
 		// score
-		printf("\nmin score: %2.2f (%d)\n", minScore, minScoreNumb);
+		printf("min score: %2.2f (%d)\n", minScore, minScoreNumb);
 		//ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
 		//printf("reverse\t%2.2f (%3d)   %2.2f (%3d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
 		//printf("forward\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
@@ -1480,34 +1481,58 @@ void BS_map::PrintStat() const
 }
 
 #ifdef MY_DEBUG
-void BS_map::PrintWidthDistrib(const string& fName) const
+void BS_map::PrintDistrib(const string& fName, const char* title, function<USHORT(citer&, citer&, float&)> func) const
 {
-	map<fraglen, vector<chrlen>> freq;
-	chrlen	totalLen = 0, bsNumb = 0;
+	map<USHORT, vector<chrlen>> freq;
+	float	total = 0;
+	chrlen	cnt = 0;
 	TxtOutFile file(fName.c_str());
 
-	// collect numbers
+	// collect distribution
 	DoBasic([&](citer& start, citer& end) {
-		auto len = fraglen(LEN(start, end));
-		totalLen += len;
-		freq[len].push_back(++bsNumb);
+		if (!IsValid(start))	return;
+		auto val = func(start, end, total);
+		freq[val].push_back(++cnt);
 		}
 	);
-	// print numbers
-	const char* length = "width";
-	file.Write("BS WIDTH FREQUENCY:\n");
-	file.Write("%s cnt  numbers\n", length);
+	// print distribution
+	string stitle(title);
+	transform(stitle.begin(), stitle.end(), stitle.begin(),	::toupper);
+	file.Write("BS %s FREQUENCY:\n", stitle.c_str());
+	file.Write("%s\tcnt\tnumbers\n", title);
 	for (const auto& item : freq) {
-		file.Write("%4d %4u  ", item.first, UINT(item.second.size()));
+		file.Write("%4d\t%u\t", item.first, UINT(item.second.size()));
 		auto it = item.second.begin();
 		file.Write("%d", *it);
 		for (it++; it != item.second.end(); it++)
 			file.Write(",%d", *it);
 		file.Write("\n");
 	}
-	auto avrWidth = float(totalLen) / bsNumb;
-	file.Write("average %s: %.2f\n", length, avrWidth);
-	printf("\naverage %s: %.2f\n", length, avrWidth);
+	auto avr = total / cnt;
+	file.Write("average %s: %.2f\n", title, avr);
+	printf("average %s: %.2f\n", title, avr);
+}
+
+void BS_map::PrintWidthDistrib(const string& fName) const
+{
+	PrintDistrib(fName, "width", 
+		[](BS_map::citer& start, BS_map::citer& end, float& total) {
+			auto len = LEN(start, end);
+			total += len;
+			return len;
+		}
+	);
+}
+
+void BS_map::PrintScoreDistrib(const string& fName) const
+{
+	PrintDistrib(fName, "score",
+		[](BS_map::citer& start, BS_map::citer&, float& total) {
+			auto fscore = SCORE(start);
+			total += fscore;
+			return USHORT(round(fscore * 1000)) / 10;
+		}
+	);
 }
 
 void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos) const

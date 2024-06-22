@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 06/19/2024
+Last modified: 06/22/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -217,7 +217,7 @@ void Detector::CallBS(chrid cID)
 	}
 	//_frag—overs.WriteChrom(cID); return;
 
-	Verb::PrintMsg(Verb::RT, "Locate binding sites");
+	Verb::PrintMsg(Verb::RT, "Locate binding sites\n");
 	_timer.Start();
 	if (/*resetCover && */regions.SetPotentialRegions(fragCovers, cLen, 3))
 		return;
@@ -231,13 +231,14 @@ void Detector::CallBS(chrid cID)
 	derivs.Set(splines);			_splines.WriteChrom(cID);
 	
 	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
-	//bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
+	bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
-	//bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
+	bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
 	bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
-	//bss.PrintWidthDistrib(_outFName + ".BSS_width.txt");
+	bss.PrintWidthDistrib(_outFName + ".BSS_width.txt");
+	bss.PrintScoreDistrib(_outFName + ".BSS_score.txt");
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);

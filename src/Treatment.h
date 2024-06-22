@@ -922,9 +922,21 @@ public:
 	}
 
 #ifdef MY_DEBUG
+private:
+	// Prints BS width distribution
+	//	@param fName: name of file to print
+	//	@param title: specific word to print
+	//	@param func: specific function
+	void PrintDistrib(const string& fName, const char* title, function<USHORT(citer&,citer&,float&)> func) const;
+
+public:
 	// Prints BS width distribution
 	//	@param fName: name of file to print
 	void PrintWidthDistrib(const string& fName) const;
+
+	// Prints BS score distribution
+	//	@param fName: name of file to print
+	void PrintScoreDistrib(const string& fName) const;
 
 	// Prints BS positions
 	//	@param fName: name of file to print
