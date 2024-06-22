@@ -1000,6 +1000,7 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 #define	POS(it)	(it)->second.RefPos
 #define LEN(itStart,itEnd)	short(POS(itEnd) - POS(itStart))
 #define	SCORE(it)	(it)->second.Score
+#define	GrpNUMB(it)	(it)->second.GrpNumb
 
 void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 {
@@ -1117,11 +1118,11 @@ void BS_map::ExtendNarrowBS(iter& itL, iter& itR)
 	}
 }
 
-void BS_map::ExtendSingleNarrowBS(iter& start, iter& end)
+void BS_map::ExtendSingleNarrowBS(iter& start, const iter& end)
 {
-	iter itEnd = next(end) == this->end() ? this->end() : next(end);
+	const iter itEnd = next(end) == this->end() ? this->end() : next(end);
 
-	for (auto it = start; it != itEnd; it++)
+	for (auto& it = start; it != itEnd; it++)
 		if (IsValid(it) && !it->second.Reverse) {
 			auto itL = prev(it);
 			ExtendNarrowBS(itL, it);
@@ -1129,7 +1130,7 @@ void BS_map::ExtendSingleNarrowBS(iter& start, iter& end)
 		}
 }
 
-void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool closeProx)
+void BS_map::ExtendNarrowBSsInGroup(iter& start, const iter& stop, bool narrowBS, bool closeProx)
 {
 	bool lastLeft = true;
 	iter itEnd = next(stop) == end() ? end() : next(stop);
@@ -1137,7 +1138,7 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, iter& stop, bool narrowBS, bool
 
 	bss.reserve(4);
 	// collect BS
-	for (auto it = start; it != itEnd; it++)
+	for (auto& it = start; it != itEnd; it++)
 		if (IsValid(it))
 			if (it->second.Reverse)
 				lastLeft = true;
@@ -1194,7 +1195,7 @@ void BS_map::ExtendNarrowBSs()
 	for (auto it = begin(); it != end(); it++) {
 		if (!IsValid(it))	continue;
 
-		if (grpNumb != it->second.GrpNumb) {
+		if (grpNumb != GrpNUMB(it)) {
 			if (narrowBS || closeProx) {
 				// rigorous group bypass
 				if (bsCnt == 1)
@@ -1205,7 +1206,7 @@ void BS_map::ExtendNarrowBSs()
 			}
 			lastRpos = bsCnt = 0;
 			itStart = end();
-			grpNumb = it->second.GrpNumb;
+			grpNumb = GrpNUMB(it);
 		}
 
 		if (it->second.Reverse)
@@ -1286,14 +1287,14 @@ void BS_map::Refine()
 	};
 
 	// *** refine
-	for (auto it = begin(); it != end(); it++)
-	{
-		const bool newRgn = grpNumb != it->second.GrpNumb;
+	for (auto it = begin(); it != end(); it++) {
+		const bool newRgn = grpNumb != GrpNUMB(it);
+
 		if (newRgn) {
 			// 'close' previous region
 			ResetAllExtEntries(it);
 			// reset current region
-			newBS = grpNumb = it->second.GrpNumb;
+			newBS = grpNumb = GrpNUMB(it);
 			someBS = extLeftCnt = extRightCnt = 0;
 		}
 
@@ -1327,8 +1328,8 @@ void BS_map::Refine()
 void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& maxScore)
 {
 	/*
-	fill the score from left to right (for reverse)
-	or from rigth to left (for direct) extended bounds
+	* fill the score from left to right (for reverse)
+	* or from rigth to left (for direct) extended bounds
 	*/
 	chrlen	startPos = POS(VP[L].front());
 	int32_t offset;
@@ -1342,7 +1343,7 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 			if (BS_map::IsValid(vp[i])) {
 				auto len = int(LEN(vp[i], vp[i + 1]));
 				if (len <= 0)
-					printf("+> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, SCORE(vp[i]));
+					printf("+> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, GrpNUMB(vp[i]), SCORE(vp[i]));
 				SCORE(vp[i]) = spline.AvrScoreInRange(offset, LEN(vp[i], vp[i + 1]));
 			}
 		}
@@ -1355,7 +1356,7 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 			if (BS_map::IsValid(vp[i])) {
 				auto len = int(LEN(vp[i - 1], vp[i]));
 				if (len <= 0)
-					printf("-> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, vp[i]->second.GrpNumb, SCORE(vp[i]));
+					printf("-> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, GrpNUMB(vp[i]), SCORE(vp[i]));
 				SCORE(vp[i]) = spline.AvrScoreInRange(offset, LEN(vp[i - 1], vp[i]), -1);
 			}
 		}
@@ -1373,12 +1374,12 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 	start.Score = end.Score = score;
 }
 
-void BS_map::SetGroupScores(iter& itStart, iter& itEnd, const Values& spline, float& maxScore)
+void BS_map::SetGroupScores(iter& start, const iter& end, const Values& spline, float& maxScore)
 {
 	vector<iter> VP[2];	// 0 - forward, 1 - reversed
 
 	VP[R].reserve(4), VP[L].reserve(4);
-	for (auto& it = itStart; it != itEnd; it++)
+	for (auto& it = start; it != end; it++)
 		if (IsValid(it)) {
 			if (it->second.Reverse && VP[R].size() && VP[L].size()) {
 				SetBSscores(VP, spline, maxScore);
@@ -1406,14 +1407,14 @@ void BS_map::SetScore(const DataSet<TreatedCover>& fragCovers)
 	for (auto it = begin(); it != end(); it++) {
 		if (!IsValid(it))	continue;
 
-		if (grpNumb != it->second.GrpNumb) {
+		if (grpNumb != GrpNUMB(it)) {
 			// build single fragment coverage spline for the whole group
 			cover.SetLocalSpline(spliner, POS(itStart), POS(itEnd), spline);
 			SetGroupScores(itStart, ++itEnd, spline, maxScore);
 
 			spline.clear();
 			itStart = end();
-			grpNumb = it->second.GrpNumb;
+			grpNumb = GrpNUMB(it);
 		}
 		if (itStart == end())
 			itStart = it;

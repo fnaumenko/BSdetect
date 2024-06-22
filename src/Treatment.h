@@ -832,24 +832,24 @@ private:
 	// Extends single in the group too narrow BS to the minimum acceptable width
 	//	@param start: start iterator of the group
 	//	@param end: end iterator of the group
-	void ExtendSingleNarrowBS(iter& start, iter& end);
+	void ExtendSingleNarrowBS(iter& start, const iter& end);
 
 	// Extends too narrow BSs in the group to the minimum acceptable width
 	//	@param start: start iterator of the group
 	//	@param end: end iterator of the group
 	//	@param narrowBS: if true then there is at least one narrow BS in the group
 	//	@param closeProx: if true then there is at least one close proximities in the group
-	void ExtendNarrowBSsInGroup(iter& start, iter& end, bool narrowBS, bool closeProx);
+	void ExtendNarrowBSsInGroup(iter& start, const iter& end, bool narrowBS, bool closeProx);
 
 	// Extends too narrow BSs to the minimum acceptable width by adjusting reference position
 	void ExtendNarrowBSs();
 
 	// Sets BSs scores within the group according to fragment coverage spline
-	//	@param itStart: first valid iter in the group
-	//	@param itEnd: next of the last valid iter in the group
+	//	@param start: first valid iterator in the group
+	//	@param end: next of the last valid iterator in the group
 	//	@param spline: local fragment coverage spline
 	//	@maxScore[out]: cumulative maximum score 
-	void SetGroupScores(iter& itStart, iter& itEnd, const Values& vals, float& maxScore);
+	void SetGroupScores(iter& start, const iter& end, const Values& vals, float& maxScore);
 
 public:
 	// positioned value
