@@ -880,7 +880,8 @@ public:
 
 	// Applies lambda to each binding site within the group taking into account adjacent bounds
 	template<typename F>
-	void DoExtend(F&& lambda) const {
+	void DoExtend(F&& lambda) const
+	{
 		vector<citer> VP[2];
 
 		VP[R].reserve(4), VP[L].reserve(4);
@@ -897,16 +898,14 @@ public:
 			lambda(VP);
 	}
 
-#define DO_BASIC \
-	for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++) \
-		if (IsValid(it) && !REVERSE(it) && REVERSE(it0)) \
-			lambda(it0, it)
-
 	// Applies lambda to each group denotes the binding sites
 	template<typename F>
-	void DoBasic(F&& lambda) const { DO_BASIC; }
-	template<typename F>
-	void DoBasic(F&& lambda) { DO_BASIC; }
+	void DoBasic(F&& lambda) const
+	{
+		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
+			if (IsValid(it) && !REVERSE(it) && REVERSE(it0))
+				lambda(it0, it);
+	}
 
 #ifdef MY_DEBUG
 private:

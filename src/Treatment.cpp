@@ -1366,9 +1366,9 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 	auto& start = VP[L].back()->second;
 	auto& end = VP[R].front()->second;
 	offset = int32_t(start.RefPos - startPos);
-	auto len = int(end.RefPos - start.RefPos);
-	if (len <= 0)
-		printf("!> %d  len: %d  numb: %d  score: %.3f %.3f\n", VP[L].back()->first, len, start.GrpNumb, start.Score, end.Score);
+	//auto len = int(end.RefPos - start.RefPos);
+	//if (len <= 0)
+	//	printf("!> %d  len: %d  numb: %d  score: %.3f %.3f\n", VP[L].back()->first, len, start.GrpNumb, start.Score, end.Score);
 	float score = spline.AvrScoreInRange(offset, end.RefPos - start.RefPos);
 
 	if (maxScore < score)	maxScore = score;
@@ -1437,45 +1437,18 @@ void BS_map::PrintStat() const
 
 	const bool stat = Verb::Level(Verb::DBG);	// collect and print statistics
 	chrlen	bsNumb = 0;
-	//chrlen	minNegNumb, maxNegNumb, minPosNumb, maxPosNumb = 0;
-	//float	minNegRatio, minPosRatio, maxNegRatio = 0, maxPosRatio = 0;
 	chrlen	minScoreNumb;
 	float	minScore = 1.f;
-	//minNegRatio = minPosRatio = 1000;
 
-	// define min/max length, minScore, min***Ratio/max***Ratio
 	DoBasic([&](citer& start, citer& end) {
 		++bsNumb;
 		if (stat) {
-			//const fraglen len = LEN(end, start);
 			float score = SCORE(start);
 			if (minScore > score)		minScore = score, minScoreNumb = bsNumb;
-
-			//if (score < 1) {
-			//	if (minNegRatio > score)		minNegRatio = score, minNegNumb = bsNumb;
-			//	else if (maxNegRatio < score)	maxNegRatio = score, maxNegNumb = bsNumb;
-			//}
-			//else
-			//	if (minPosRatio > score)		minPosRatio = score, minPosNumb = bsNumb;
-			//	else if (maxPosRatio < score)	maxPosRatio = score, maxPosNumb = bsNumb;
 		}
-		});
-	if (stat) {
-		//auto ptTableTitle = [](const char* title) {
-		//	auto len = USHORT(strlen(title) + 1);
-		//	PrintSolidLine(len);
-		//	printf("%s\n", title);
-		//	PrintSolidLine(len);
-		//};
-
-		// score
-		printf("min score: %2.2f (%d)\n", minScore, minScoreNumb);
-		//ptTableTitle("RATIO:\tmin  (cnt)   max  (cnt)");
-		//printf("reverse\t%2.2f (%3d)   %2.2f (%3d)\n", 1 / maxNegRatio, minNegNumb, 1 / minNegRatio, maxNegNumb);
-		//printf("forward\t%2.2f (%3d)   %2.2f (%3d)\n", minPosRatio, minPosNumb, maxPosRatio, maxPosNumb);
-
-		printf("\n");
-	}
+	});
+	if (stat)
+		printf("min score: %2.2f (%d)\n\n", minScore, minScoreNumb);
 
 	printf("BS count: %d\n\n", bsNumb);
 }
@@ -1486,7 +1459,6 @@ void BS_map::PrintDistrib(const string& fName, const char* title, function<USHOR
 	map<USHORT, vector<chrlen>> freq;
 	float	total = 0;
 	chrlen	cnt = 0;
-	TxtOutFile file(fName.c_str());
 
 	// collect distribution
 	DoExtend([&](const vector<citer>* VP) {
@@ -1496,7 +1468,9 @@ void BS_map::PrintDistrib(const string& fName, const char* title, function<USHOR
 	);
 
 	// print distribution
+	TxtOutFile file(fName.c_str());
 	string stitle(title);
+
 	transform(stitle.begin(), stitle.end(), stitle.begin(),	::toupper);
 	file.Write("BS %s FREQUENCY:\n", stitle.c_str());
 	file.Write("%s\tcnt\tnumbers\n", title);
@@ -1685,7 +1659,8 @@ void BedWriter::WriteChromExtData(chrid cID, const BS_map& bss)
 		LineToIOBuff(offset);
 
 		addExtraLines(VP[R]);
-		});
+		}
+	);
 }
 
 void BedWriter::WriteChromROI(chrid cID, const BS_map& bss)
@@ -1694,14 +1669,10 @@ void BedWriter::WriteChromROI(chrid cID, const BS_map& bss)
 	chrlen bsNumb = 0;
 
 	bss.DoBasic([&](BS_map::citer& start, BS_map::citer& end) {
-		LineAddUInts(
-			POS(start) - Glob::ROI_ext,
-			POS(end) + Glob::ROI_ext,
-			++bsNumb,
-			false
-		);
+		LineAddUInts(POS(start) - Glob::ROI_ext, POS(end) + Glob::ROI_ext, ++bsNumb, false);
 		LineToIOBuff(offset);
-		});
+		}
+	);
 }
 
 
