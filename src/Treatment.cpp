@@ -1124,7 +1124,7 @@ void BS_map::ExtendSingleNarrowBS(iter& start, const iter& end)
 	const iter itEnd = next(end) == this->end() ? this->end() : next(end);
 
 	for (auto& it = start; it != itEnd; it++)
-		if (IsValid(it) && !it->second.Reverse) {
+		if (IsValid(it) && !REVERSE(it)) {
 			auto itL = prev(it);
 			ExtendNarrowBS(itL, it);
 			break;
@@ -1141,7 +1141,7 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, const iter& stop, bool narrowBS
 	// collect BS
 	for (auto& it = start; it != itEnd; it++)
 		if (IsValid(it))
-			if (it->second.Reverse)
+			if (REVERSE(it))
 				lastLeft = true;
 			else if (lastLeft) {
 				bss.emplace_back(prev(it), it);
@@ -1210,7 +1210,7 @@ void BS_map::ExtendNarrowBSs()
 			grpNumb = GrpNUMB(it);
 		}
 
-		if (it->second.Reverse)
+		if (REVERSE(it))
 			lastLeft = true;
 		else
 			if (lastLeft) {		// BS right boud
@@ -1267,7 +1267,7 @@ void BS_map::Refine()
 			if (someBS || newBS)	// newBS is true when there're only right bounds
 				ResetExtEntries(lastExtRight_it, extRightCnt);
 			else {						// ** 'negative' BS width
-				lastExtRight_it->second.Reverse = true;		// change 'right' bound to 'left'
+				REVERSE(lastExtRight_it) = true;	// change 'right' bound to 'left'
 				if (extRightCnt > 0)
 					ResetExtEntries(--lastExtRight_it, --extRightCnt);	// reset other adjacent bounds
 			}
@@ -1279,7 +1279,7 @@ void BS_map::Refine()
 		else if(extLeftCnt > 0) {		// ** 'negative' BS width
 			auto itR = ResetExtEntries(--it, --extLeftCnt);	// reset other adjacent entries
 			if (itR != end()) {
-				itR->second.Reverse = false;				// change 'left' bound to 'right
+				REVERSE(itR) = false;				// change 'left' bound to 'right
 				// decrease the width of the updated BS if needed
 				auto itL = prev(itR);
 				FitToMinWidth(itL, itR, false);
@@ -1299,11 +1299,11 @@ void BS_map::Refine()
 			someBS = extLeftCnt = extRightCnt = 0;
 		}
 
-		if (it->second.Reverse) {	// Left bound
+		if (REVERSE(it)) {	// Left bound
 			extLeftCnt++;
 			newBS = false;
 		}
-		else {						// Right bound
+		else {				// Right bound
 			if (newBS && !extLeftCnt)
 				if (!extRightCnt || !newRgn)
 					lastExtRight_it = it;
@@ -1382,11 +1382,11 @@ void BS_map::SetGroupScores(iter& start, const iter& end, const Values& spline, 
 	VP[R].reserve(4), VP[L].reserve(4);
 	for (auto& it = start; it != end; it++)
 		if (IsValid(it)) {
-			if (it->second.Reverse && VP[R].size() && VP[L].size()) {
+			if (REVERSE(it) && VP[R].size() && VP[L].size()) {
 				SetBSscores(VP, spline, maxScore);
 				VP[R].clear(), VP[L].clear();
 			}
-			VP[it->second.Reverse].push_back(it);
+			VP[REVERSE(it)].push_back(it);
 		}
 	// last BS
 	if (VP[R].size() && VP[L].size())

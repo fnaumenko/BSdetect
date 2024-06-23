@@ -876,7 +876,9 @@ public:
 
 	void PrintStat() const;
 
-	// Applies lambda to each binding site within the group
+#define REVERSE(it)	(it)->second.Reverse
+
+	// Applies lambda to each binding site within the group taking into account adjacent bounds
 	template<typename F>
 	void DoExtend(F&& lambda) const {
 		vector<citer> VP[2];
@@ -884,11 +886,11 @@ public:
 		VP[R].reserve(4), VP[L].reserve(4);
 		for (auto it = begin(); it != end(); it++)
 			if (IsValid(it)) {
-				if (it->second.Reverse && VP[R].size() && VP[L].size()) {
+				if (REVERSE(it) && VP[R].size() && VP[L].size()) {
 					lambda(VP);
 					VP[R].clear(), VP[L].clear();
 				}
-				VP[it->second.Reverse].emplace_back(it);
+				VP[REVERSE(it)].emplace_back(it);
 			}
 		// last BS
 		if (VP[R].size() && VP[L].size())
@@ -897,7 +899,7 @@ public:
 
 #define DO_BASIC \
 	for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++) \
-		if (IsValid(it) && !it->second.Reverse && it0->second.Reverse) \
+		if (IsValid(it) && !REVERSE(it) && REVERSE(it0)) \
 			lambda(it0, it)
 
 	// Applies lambda to each group denotes the binding sites
