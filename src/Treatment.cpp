@@ -1342,9 +1342,9 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 		offset = int32_t(POS(vp.front()) - startPos);
 		for (BYTE i = 0; i < extLen; i++) {		// left to right, increasing offset
 			if (BS_map::IsValid(vp[i])) {
-				auto len = int(LEN(vp[i], vp[i + 1]));
-				if (len <= 0)
-					printf("+> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, GrpNUMB(vp[i]), SCORE(vp[i]));
+				//auto len = int(LEN(vp[i], vp[i + 1]));
+				//if (len <= 0)
+				//	printf("+> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, GrpNUMB(vp[i]), SCORE(vp[i]));
 				SCORE(vp[i]) = spline.AvrScoreInRange(offset, LEN(vp[i], vp[i + 1]));
 			}
 		}
@@ -1355,9 +1355,9 @@ void SetBSscores(const vector<BS_map::iter>* VP, const Values& spline, float& ma
 		offset = int32_t(POS(vp.back()) - startPos);
 		for (BYTE i = extLen; i; i--) {			// right to left, decreasing offset
 			if (BS_map::IsValid(vp[i])) {
-				auto len = int(LEN(vp[i - 1], vp[i]));
-				if (len <= 0)
-					printf("-> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, GrpNUMB(vp[i]), SCORE(vp[i]));
+				//auto len = int(LEN(vp[i - 1], vp[i]));
+				//if (len <= 0)
+				//	printf("-> %d  len: %d  numb: %d  score: %.3f\n", vp[i]->first, len, GrpNUMB(vp[i]), SCORE(vp[i]));
 				SCORE(vp[i]) = spline.AvrScoreInRange(offset, LEN(vp[i - 1], vp[i]), -1);
 			}
 		}
@@ -1481,7 +1481,7 @@ void BS_map::PrintStat() const
 }
 
 #ifdef MY_DEBUG
-void BS_map::PrintDistrib(const string& fName, const char* title, function<USHORT(citer&, citer&, float&)> func) const
+void BS_map::PrintDistrib(const string& fName, const char* title, function<USHORT(const citer&, const citer&, float&)> func) const
 {
 	map<USHORT, vector<chrlen>> freq;
 	float	total = 0;
@@ -1489,12 +1489,12 @@ void BS_map::PrintDistrib(const string& fName, const char* title, function<USHOR
 	TxtOutFile file(fName.c_str());
 
 	// collect distribution
-	DoBasic([&](citer& start, citer& end) {
-		if (!IsValid(start))	return;
-		auto val = func(start, end, total);
+	DoExtend([&](const vector<citer>* VP) {
+		auto val = func(VP[L].back(), VP[R].front(), total);
 		freq[val].push_back(++cnt);
 		}
 	);
+
 	// print distribution
 	string stitle(title);
 	transform(stitle.begin(), stitle.end(), stitle.begin(),	::toupper);
@@ -1516,7 +1516,7 @@ void BS_map::PrintDistrib(const string& fName, const char* title, function<USHOR
 void BS_map::PrintWidthDistrib(const string& fName) const
 {
 	PrintDistrib(fName, "width", 
-		[](BS_map::citer& start, BS_map::citer& end, float& total) {
+		[](const citer& start, const citer& end, float& total) {
 			auto len = LEN(start, end);
 			total += len;
 			return len;
@@ -1527,7 +1527,7 @@ void BS_map::PrintWidthDistrib(const string& fName) const
 void BS_map::PrintScoreDistrib(const string& fName) const
 {
 	PrintDistrib(fName, "score",
-		[](BS_map::citer& start, BS_map::citer&, float& total) {
+		[](const citer& start, const citer&, float& total) {
 			auto fscore = SCORE(start);
 			total += fscore;
 			return USHORT(round(fscore * 1000)) / 10;
@@ -1581,16 +1581,16 @@ void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 	}
 }
 
-void BedWriter::WriteChromData(chrid cID, BS_map& bss)
+void BedWriter::WriteChromData(chrid cID, const BS_map& bss)
 {
 	const reclen offset = AddChromToLine(cID);
 	bool lastSep[]{ false, false };
 	chrlen bsNumb = 0;
 
-	bss.DoExtend([&](const vector<BS_map::PosValue>* VP) {
+	bss.DoExtend([&](const vector<BS_map::citer>* VP) {
 		// *** save basic info
-		auto& start = VP[L].back().Iter;
-		auto& end	= VP[R].front().Iter;
+		auto& start = VP[L].back();
+		auto& end	= VP[R].front();
 
 		LineAddUInts(POS(start), POS(end), ++bsNumb, true);	// 3 basic fields
 		LineAddScore(SCORE(start), true);
@@ -1607,11 +1607,11 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 
 			auto& vp = VP[s];
 			function<void(BYTE, char)> saveExtraPos = [this, &vp](BYTE i, char specChar) {
-				LineAddArgs("%c%d", specChar, vp[i].Iter->first);
+				LineAddArgs("%c%d", specChar, vp[i]->first);
 			};
 			function<void(BYTE, char)> saveExtraVal = [this, &vp](BYTE i, char specChar) {
 				if (specChar)	LineAddChar(specChar);
-				LineAddScore(SCORE(vp[i].Iter), false);
+				LineAddScore(SCORE(vp[i]), false);
 			};
 			auto saveExtraFields = [&](function<void(BYTE, char)>& fn, char specChar, bool delim) {
 				BYTE i = !s;
@@ -1628,12 +1628,12 @@ void BedWriter::WriteChromData(chrid cID, BS_map& bss)
 		});
 }
 
-void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
+void BedWriter::WriteChromExtData(chrid cID, const BS_map& bss)
 {
 	chrlen bsNumb = 0;
 	const reclen offset = AddChromToLine(cID);
 
-	bss.DoExtend([&](const vector<BS_map::PosValue>* VP) {
+	bss.DoExtend([&](const vector<BS_map::citer>* VP) {
 		const BYTE COLORS_CNT = 4;
 		static const string colors[]{
 			// color		 ind	feature_score/BS_score
@@ -1653,25 +1653,25 @@ void BedWriter::WriteChromExtData(chrid cID, BS_map& bss)
 			//"130,140,30",	// 3	>=0.6	dark yellow-green
 			//"30,100,30",	// 4	>=0.8	dark green
 		};
-		const auto& start = VP[L].back().Iter;	// basic feature start
-		const float score = VP[L].back().Val;	// basic feature score
+		const auto& start = VP[L].back();	// basic feature start
+		const float score = SCORE(start);	// basic feature score
 
-		auto addExtraLines = [=, &bsNumb](const vector<BS_map::PosValue>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
+		auto addExtraLines = [=, &bsNumb](const vector<BS_map::citer>& vp) {	// &bsNumb is essential, otherwise bsNumb goes out of sync
 			if (vp.size() == 1)	return;
 			for (auto it0 = vp.begin(), it = next(it0); it != vp.end(); it0++, it++) {
-				LineAddUInts(POS(it0->Iter), POS(it->Iter), bsNumb, true);
-				LineAddFloat(it0->Val, true);	// BS score
+				LineAddUInts(POS(*it0), POS(*it), bsNumb, true);
+				LineAddFloat(SCORE(*it0), true);
 				LineAddChar(DOT, true);
-				LineAddInts(POS(it0->Iter), POS(it->Iter), true);
+				LineAddInts(POS(*it0), POS(*it), true);
 				// colors
-				auto ind = BYTE(10 * it0->Val / score) / 2;
+				auto ind = BYTE(10 * SCORE(*it0) / score) / 2;
 				if (ind > COLORS_CNT - 1)	ind = COLORS_CNT - 1;
 				LineAddStr(colors[ind], false);
 				LineToIOBuff(offset);
 			}
 		};
 
-		const auto& end = VP[R].front().Iter;
+		const auto& end = VP[R].front();
 		const char* delims = ".\t.\t.\t.\t";
 
 		++bsNumb;

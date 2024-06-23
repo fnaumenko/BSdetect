@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/22/2024
+Last modified: 06/23/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -852,14 +852,6 @@ private:
 	void SetGroupScores(iter& start, const iter& end, const Values& vals, float& maxScore);
 
 public:
-	// positioned value
-	struct PosValue {
-		iter	Iter;
-		float	Val;
-
-		PosValue(iter it, float val) : Iter(it), Val(val) {}
-	};
-
 	// Returns true if boundary is valid
 	static bool IsValid(iter it)	{ return it->second.Score; }
 	static bool IsValid(citer it)	{ return it->second.Score; }
@@ -886,9 +878,8 @@ public:
 
 	// Applies lambda to each binding site within the group
 	template<typename F>
-	void DoExtend(F&& lambda)
-	{
-		vector<PosValue> VP[2];
+	void DoExtend(F&& lambda) const {
+		vector<citer> VP[2];
 
 		VP[R].reserve(4), VP[L].reserve(4);
 		for (auto it = begin(); it != end(); it++)
@@ -897,29 +888,23 @@ public:
 					lambda(VP);
 					VP[R].clear(), VP[L].clear();
 				}
-				VP[it->second.Reverse].emplace_back(it, it->second.Score);
+				VP[it->second.Reverse].emplace_back(it);
 			}
-
-		// last element
+		// last BS
 		if (VP[R].size() && VP[L].size())
 			lambda(VP);
 	}
 
+#define DO_BASIC \
+	for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++) \
+		if (IsValid(it) && !it->second.Reverse && it0->second.Reverse) \
+			lambda(it0, it)
+
 	// Applies lambda to each group denotes the binding sites
 	template<typename F>
-	void DoBasic(F&& lambda) const
-	{
-		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
-			if (IsValid(it) && !it->second.Reverse && it0->second.Reverse)
-				lambda(it0, it);
-	}
+	void DoBasic(F&& lambda) const { DO_BASIC; }
 	template<typename F>
-	void DoBasic(F&& lambda)
-	{
-		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
-			if (IsValid(it) && !it->second.Reverse && it0->second.Reverse)
-				lambda(it0, it);
-	}
+	void DoBasic(F&& lambda) { DO_BASIC; }
 
 #ifdef MY_DEBUG
 private:
@@ -927,7 +912,7 @@ private:
 	//	@param fName: name of file to print
 	//	@param title: specific word to print
 	//	@param func: specific function
-	void PrintDistrib(const string& fName, const char* title, function<USHORT(citer&,citer&,float&)> func) const;
+	void PrintDistrib(const string& fName, const char* title, function<USHORT(const citer&, const citer&,float&)> func) const;
 
 public:
 	// Prints BS width distribution
@@ -980,12 +965,12 @@ public:
 	// Writes BSs as lines containing 7 or 11-fields feature; adds a gray color to feature with zero score
 	//	@param cID: chrom ID
 	//	@param bss: binding sites (const in fact)
-	void WriteChromData(chrid cID, BS_map& bss);
+	void WriteChromData(chrid cID, const BS_map& bss);
 
 	// Writes extended BSs; adds a gray color to feature with zero score
 	//	@param cID: chrom ID
 	//	@param bss: binding sites (const in fact)
-	void WriteChromExtData(chrid cID, BS_map& bss);
+	void WriteChromExtData(chrid cID, const BS_map& bss);
 
 	// Writes Regions of interest (extended binding sites) as a 4-fields features
 	//	@param cID: chrom ID
