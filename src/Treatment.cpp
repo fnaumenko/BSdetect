@@ -248,7 +248,7 @@ void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
 
 	// unconditional close of the region; always applied to the left region
 	auto closeRgn = [&](BYTE s) {
-		T::SetInvalid(it[s]);
+		T::Discard(it[s]);
 		suspend &= ~(1 << s);	// reset suspend s
 		it[s]++;
 	};
@@ -278,7 +278,7 @@ void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
 		else {							// weak intersection or no one
 			// conditional close of the region
 			if (suspend)	suspend = 0;
-			else			T::SetInvalid(it[s]);
+			else			T::Discard(it[s]);
 			// close remaining complementary regions
 			if (++it[s] == rgns[s].end()) {
 				closeLastRgns(!s);
@@ -318,8 +318,8 @@ void EliminateMultiOverlapsRegions(T rgns[2])
 
 		BYTE s = T::End(it0[0]) > T::End(it0[1]);	// s denotes the index of the left ended region: 0 - pos, 1 - neg
 		if (T::Start(it[s]) <= T::End(it0[!s])) {	// in this case it[s] (next) region is not weak
-			T::SetInvalid(it0[0]);
-			T::SetInvalid(it0[1]);
+			T::Discard(it0[0]);
+			T::Discard(it0[1]);
 			it0[s]++;
 		}
 		it[s] = next(++it0[s]);
@@ -353,7 +353,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 		for (auto it = rgn.begin(); it != itEnd; it++) {
 			const chrlen len = T::Length(it);
 			rawLen += len;
-			if (T::IsValid(it)) refineLen += len, realCnt++;
+			if (T::Admitted(it)) refineLen += len, realCnt++;
 		}
 		printf(format[isFeatures], sStrandTITLES[s + strands],
 			rgn.size(), Percent(rawLen, chrLen),
@@ -392,15 +392,17 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacit
 }
 
 #ifdef MY_DEBUG
-void CoverRegions::PrintScoreDistrib(const string& fname) const
+const string distExt = ".dist";
+
+void CoverRegions::PrintScoreDistrib(const string& fname, bool all) const
 {
 	map<coval, chrlen> freq;
 
 	for (const auto& rgn : *this)
-		freq[rgn.value]++;
-	TxtOutFile file(fname.c_str());
-
-	//printf("\nREGIONS LENGTH FREQUENCY\n");
+		if(all || !rgn.Admitted())
+			freq[rgn.value]++;
+	
+	TxtOutFile file((fname + distExt).c_str());
 	file.Write("score\tfreq\n");
 	for (const auto& item : freq)
 		file.Write("%d\t%d\n", item.first, item.second);
@@ -412,16 +414,11 @@ void CoverRegions::PrintScoreDistrib(const string& fname) const
 bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
 {
 	chrlen capacity = cLen / (Glob::FragLen * 100);
-	if (Glob::IsPE) {
+	if (Glob::IsPE)
 		TotalData().SetPotentialRegions(cover.TotalData(), capacity, cutoff * 2);
-		//TotalData().PrintScoreDistrib("RGNS.dist");
-	}
 	else {
 		StrandData(FWD).SetPotentialRegions(cover.StrandData(FWD), capacity, cutoff);
 		StrandData(RVS).SetPotentialRegions(cover.StrandData(RVS), capacity, cutoff);
-
-		//StrandData(FWD).PrintScoreDistrib("RGNS.pos.dist");
-		//StrandData(RVS).PrintScoreDistrib("RGNS.neg.dist");
 
 		EliminateNonOverlapsRegions<CoverRegions>(Data(), Glob::FragLen);
 		if (noMultiOverl)
@@ -435,15 +432,14 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 }
 
 #ifdef MY_DEBUG
-void DataCoverRegions::PrintScoreDistrib(const string& fname) const
+void DataCoverRegions::PrintScoreDistrib(const string& fname, bool all) const
 {
-	const string ext = ".dist";
 
 	if (Glob::IsPE)
-		TotalData().PrintScoreDistrib(fname + ext);
+		TotalData().PrintScoreDistrib(fname, all);
 	else {
-		StrandData(FWD).PrintScoreDistrib(fname + sStrandEXT[FWD] + ext);
-		StrandData(RVS).PrintScoreDistrib(fname + sStrandEXT[RVS] + ext);
+		StrandData(FWD).PrintScoreDistrib(fname + sStrandEXT[FWD], all);
+		StrandData(RVS).PrintScoreDistrib(fname + sStrandEXT[RVS], all);
 	}
 }
 #endif
@@ -663,7 +659,7 @@ void ValuesMap::AddRegion(chrlen pos, Values& vals)
 void ValuesMap::BuildSpline(const TreatedCover& cover, const CoverRegions& rgns, bool redifRgns, fraglen splineBase)
 {
 	for (const auto& rgn : rgns)
-		if (rgn.IsValid())
+		if (rgn.Admitted())
 			BuildRegionSpline(cover, rgn, redifRgns, splineBase);
 }
 
@@ -687,7 +683,7 @@ void ValuesMap::NumberGroups()
 			return false;		// non-overlapping
 		(++it[s])->second.GrpNumb = numb;
 		if (nextStart + minOverlap >= End(it[!s]))
-			it[s]->second.SetInvalid();	// overlapping is insufficient
+			it[s]->second.Discard();	// overlapping is insufficient
 		return true;			// overlapping
 	};
 
@@ -1536,7 +1532,7 @@ void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 
 	for (const auto& rgn : rgns) {
 		LineAddUInts(rgn.Start(), rgn.End(), rgn.value, false);
-		if (!rgn.IsValid()) {		// discarded items
+		if (!rgn.Admitted()) {		// discarded items
 			LineAddChars("\t.\t.\t", 5, false);
 			LineAddInts(rgn.Start(), rgn.End(), true);
 			LineAddChars(sGRAY, colorLen, false);

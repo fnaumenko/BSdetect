@@ -136,7 +136,7 @@ public:
 	// Returns maximum value within sequential values
 	float MaxVal() const { return _maxVal; }
 
-	void SetInvalid() { _maxVal = 0; }
+	void Discard() { _maxVal = 0; }
 
 	void Reserve(USHORT capacity = 40) { reserve(capacity); }
 
@@ -448,7 +448,7 @@ struct CoverRegion
 
 	CoverRegion(coviter& start, coviter& end, coval val) : itStart(start), itEnd(end), value(val) {}
 
-	bool	IsValid()	const { return valid; }
+	bool	Admitted()	const { return valid; }
 	chrlen	Start()		const { return itStart->first; }
 	chrlen	End()		const { return itEnd->first; }
 	chrlen	Length()	const { return End() - Start(); }
@@ -469,7 +469,9 @@ class CoverRegions : public vector<CoverRegion>
 
 #ifdef MY_DEBUG
 	// Prints frequency distribution of potentail regions value ('score')
-	void PrintScoreDistrib(const string& fname) const;
+	//	@param fname: name of file to print
+	//	@param all: if true then print all regions, otherwise only invalid ones
+	void PrintScoreDistrib(const string& fname, bool all) const;
 #endif
 
 public:
@@ -478,8 +480,8 @@ public:
 	static chrlen	End		(cIter it) { return it->End(); }
 	static chrlen	Length	(cIter it) { return it->Length(); }
 	static bool		IsWeak	(cIter it) { return it->value <= CUTOFF_STRAND_EXT_RGN; }
-	static bool	IsValid	(cIter it) { return it->valid; }
-	static void	SetInvalid	(Iter it)  { it->valid = false; }
+	static bool		Admitted(cIter it) { return it->valid; }
+	static void		Discard	(Iter it)  { it->valid = false; }
 };
 
 class DataCoverRegions : public DataSet<CoverRegions>
@@ -504,7 +506,10 @@ public:
 	}
 
 #ifdef MY_DEBUG
-	void PrintScoreDistrib(const string& fname) const;
+	// Prints frequency distribution of potentail regions value ('score')
+	//	@param fname: name of file to print
+	//	@param all: if true then print all regions, otherwise only invalid ones
+	void PrintScoreDistrib(const string& fname, bool all = true) const;
 #endif
 };
 
@@ -541,12 +546,12 @@ class ValuesMap : public tValuesMap
 
 public:
 	// methods used in EliminateNonOverlaps()
-	static chrlen	Start (cIter it) { return it->first; }
-	static chrlen	End	  (cIter it) { return it->first + it->second.Length(); }
-	static chrlen	Length(cIter it) { return it->second.Length(); }
-	static bool		IsWeak(cIter)	 { return false; }
-	static bool		IsValid(cIter it) { return it->second.MaxVal(); }
-	static void		SetInvalid(Iter it) { it->second.SetInvalid(); }
+	static chrlen	Start	(cIter it)	{ return it->first; }
+	static chrlen	End		(cIter it)	{ return it->first + it->second.Length(); }
+	static chrlen	Length	(cIter it)	{ return it->second.Length(); }
+	static bool		IsWeak	(cIter)		{ return false; }
+	static bool		Admitted(cIter it)	{ return it->second.MaxVal(); }
+	static void		Discard	(Iter it)	{ it->second.Discard(); }
 
 	chrlen	Start() const { return Start(begin()); }
 	chrlen	End()	const { return End(begin()); }

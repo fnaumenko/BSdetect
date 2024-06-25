@@ -221,7 +221,8 @@ void Detector::CallBS(chrid cID)
 	_timer.Start();
 	if (/*resetCover && */regions.SetPotentialRegions(fragCovers, cLen, 3))
 		return;
-	//regions.PrintScoreDistrib(_outFName + ".RGNS_2");
+	regions.PrintScoreDistrib(_outFName + ".RGNS_inval", false);
+	//regions.PrintScoreDistrib(_outFName + ".RGNS_all", true);
 
 	splines.BuildSpline(readCovers, regions, true);	_regions.WriteChrom(cID);
 	splines.EliminateNonOverlaps();
@@ -237,8 +238,8 @@ void Detector::CallBS(chrid cID)
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
 	//bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
-	//bss.PrintWidthDistrib(_outFName + ".BSS_width.txt");
-	//bss.PrintScoreDistrib(_outFName + ".BSS_score.txt");
+	//bss.PrintWidthDistrib(_outFName + ".BSS_width");
+	//bss.PrintScoreDistrib(_outFName + ".BSS_score");
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);
