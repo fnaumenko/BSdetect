@@ -245,12 +245,10 @@ void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
 
 	auto start	= [&it](BYTE s) -> chrlen { return T::Start(it[s]); };
 	auto end	= [&it](BYTE s) -> chrlen { return T::End(it[s]); };
-	auto isWeak	= [&it](BYTE s) -> bool   { return T::IsWeak(it[s]); };
-	auto markAsEmpty = [&it](BYTE s) { T::MarkAsEmpty(it[s]); };
 
 	// unconditional close of the region; always applied to the left region
 	auto closeRgn = [&](BYTE s) {
-		markAsEmpty(s);
+		T::SetInvalid(it[s]);
 		suspend &= ~(1 << s);	// reset suspend s
 		it[s]++;
 	};
@@ -269,18 +267,18 @@ void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
 			+++++++	  ?????		more regions?		right overlaps
 			***************************************/
 			bool valid = true;
-			if (isWeak(s))	closeRgn(s),  valid = false;
-			if (isWeak(!s))	closeRgn(!s), valid = false;
+			if (T::IsWeak(it[s]))	closeRgn(s),  valid = false;
+			if (T::IsWeak(it[!s]))	closeRgn(!s), valid = false;
 			if (valid) {
-				if (end(s) < end(!s))	s = !s;
+				s ^= end(s) < end(!s);	// flip by condition
 				it[!s]++;
-				suspend |= 1 << s;	// set suspend s
+				suspend |= 1 << s;		// set suspend s
 			}
 		}
 		else {							// weak intersection or no one
 			// conditional close of the region
 			if (suspend)	suspend = 0;
-			else			markAsEmpty(s);
+			else			T::SetInvalid(it[s]);
 			// close remaining complementary regions
 			if (++it[s] == rgns[s].end()) {
 				closeLastRgns(!s);
@@ -304,32 +302,24 @@ void EliminateMultiOverlapsRegions(T rgns[2])
 	typename T::iterator it0[2]{ rgns[0].begin(), rgns[1].begin() };
 	typename T::iterator it[2] { next(it0[0]), next(it0[1]) };
 
-	auto start	= [&it] (BYTE s) -> chrlen	{ return T::Start(it[s]); };
-	auto end	= [&it0](BYTE s) -> chrlen	{ return T::End(it0[s]); };
-	auto isWeak = [&it0](BYTE s) -> bool	{ return T::IsWeak(it0[s]); };
-	auto markAsEmpty = [&it, &rgns](BYTE s) { T::MarkAsEmpty(it[s]); };
-	auto markBothAsEmpty = [&it0, &rgns]()	{
-		T::MarkAsEmpty(it0[0]);
-		T::MarkAsEmpty(it0[1]);
-	};
 	auto jumpOverWeaks = [&](BYTE s) {
-		if (isWeak(s)) {
-			it0[s]++;
-			if (isWeak(s))	it0[s]++;
-			it[s] = it0[s] != End[s] ? next(it0[s]) : it0[s];
-			return true;
-		}
-		return false;
+		if (!T::IsWeak(it0[s]))
+			return false;
+		if (T::IsWeak(++it0[s]))
+			it[s] = ++it0[s] != End[s] ? next(it0[s]) : it0[s];
+		else
+			it[s] = next(it0[s]);
+		return true;
 	};
 
 	while (it[0] != End[0] && it[1] != End[1]) {
 		if (jumpOverWeaks(0))	continue;
 		if (jumpOverWeaks(1))	continue;
 
-		BYTE s = end(0) > end(1);	// s denotes the index of the left ended region: 0 - pos, 1 - neg
-		if (start(s) <= end(!s)) {	// in this case it[s] (next) region is not weak
-			markBothAsEmpty();
-			markAsEmpty(s);
+		BYTE s = T::End(it0[0]) > T::End(it0[1]);	// s denotes the index of the left ended region: 0 - pos, 1 - neg
+		if (T::Start(it[s]) <= T::End(it0[!s])) {	// in this case it[s] (next) region is not weak
+			T::SetInvalid(it0[0]);
+			T::SetInvalid(it0[1]);
 			it0[s]++;
 		}
 		it0[s]++;	it[s] = next(it0[s]);
@@ -363,7 +353,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 		for (auto it = rgn.begin(); it != itEnd; it++) {
 			const chrlen len = T::Length(it);
 			rawLen += len;
-			if (T::IsNotEmpty(it)) refineLen += len, realCnt++;
+			if (T::IsValid(it)) refineLen += len, realCnt++;
 		}
 		printf(format[isFeatures], sStrandTITLES[s + strands],
 			rgn.size(), Percent(rawLen, chrLen),
@@ -673,7 +663,7 @@ void ValuesMap::AddRegion(chrlen pos, Values& vals)
 void ValuesMap::BuildSpline(const TreatedCover& cover, const CoverRegions& rgns, bool redifRgns, fraglen splineBase)
 {
 	for (const auto& rgn : rgns)
-		if (rgn.value)
+		if (rgn.IsValid())
 			BuildRegionSpline(cover, rgn, redifRgns, splineBase);
 }
 
@@ -697,7 +687,7 @@ void ValuesMap::NumberGroups()
 			return false;		// non-overlapping
 		(++it[s])->second.GrpNumb = numb;
 		if (nextStart + minOverlap >= End(it[!s]))
-			it[s]->second.MarkAsEmpty();	// overlapping is insufficient
+			it[s]->second.SetInvalid();	// overlapping is insufficient
 		return true;			// overlapping
 	};
 
@@ -1546,7 +1536,7 @@ void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 
 	for (const auto& rgn : rgns) {
 		LineAddUInts(rgn.Start(), rgn.End(), rgn.value, false);
-		if (!rgn.value) {		// discarded items
+		if (!rgn.IsValid()) {		// discarded items
 			LineAddChars("\t.\t.\t", 5, false);
 			LineAddInts(rgn.Start(), rgn.End(), true);
 			LineAddChars(sGRAY, colorLen, false);

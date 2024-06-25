@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/23/2024
+Last modified: 06/25/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -136,7 +136,7 @@ public:
 	// Returns maximum value within sequential values
 	float MaxVal() const { return _maxVal; }
 
-	void MarkAsEmpty() { _maxVal = 0; }
+	void SetInvalid() { _maxVal = 0; }
 
 	void Reserve(USHORT capacity = 40) { reserve(capacity); }
 
@@ -444,12 +444,14 @@ struct CoverRegion
 	coviter	itStart;
 	coviter	itEnd;
 	coval	value;
+	bool	valid = true;
 
 	CoverRegion(coviter& start, coviter& end, coval val) : itStart(start), itEnd(end), value(val) {}
 
-	chrlen	Start()	 const { return itStart->first; }
-	chrlen	End()	 const { return itEnd->first; }
-	chrlen	Length() const { return End() - Start(); }
+	bool	IsValid()	const { return valid; }
+	chrlen	Start()		const { return itStart->first; }
+	chrlen	End()		const { return itEnd->first; }
+	chrlen	Length()	const { return End() - Start(); }
 };
 
 class CoverRegions : public vector<CoverRegion>
@@ -476,8 +478,8 @@ public:
 	static chrlen	End		(cIter it) { return it->End(); }
 	static chrlen	Length	(cIter it) { return it->Length(); }
 	static bool		IsWeak	(cIter it) { return it->value <= CUTOFF_STRAND_EXT_RGN; }
-	static bool	IsNotEmpty	(cIter it) { return it->value; }
-	static void	MarkAsEmpty	(Iter it)  { it->value = 0; }
+	static bool	IsValid	(cIter it) { return it->valid; }
+	static void	SetInvalid	(Iter it)  { it->valid = false; }
 };
 
 class DataCoverRegions : public DataSet<CoverRegions>
@@ -543,8 +545,8 @@ public:
 	static chrlen	End	  (cIter it) { return it->first + it->second.Length(); }
 	static chrlen	Length(cIter it) { return it->second.Length(); }
 	static bool		IsWeak(cIter)	 { return false; }
-	static bool		IsNotEmpty(cIter it) { return it->second.MaxVal(); }
-	static void		MarkAsEmpty(Iter it) { it->second.MarkAsEmpty(); }
+	static bool		IsValid(cIter it) { return it->second.MaxVal(); }
+	static void		SetInvalid(Iter it) { it->second.SetInvalid(); }
 
 	chrlen	Start() const { return Start(begin()); }
 	chrlen	End()	const { return End(begin()); }
