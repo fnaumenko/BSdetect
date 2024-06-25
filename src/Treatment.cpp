@@ -322,7 +322,7 @@ void EliminateMultiOverlapsRegions(T rgns[2])
 			T::SetInvalid(it0[1]);
 			it0[s]++;
 		}
-		it0[s]++;	it[s] = next(it0[s]);
+		it[s] = next(++it0[s]);
 		it0[!s]++;	it[!s]++;
 	}
 }
