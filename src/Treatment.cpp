@@ -237,28 +237,28 @@ void CombCover::Fill(const Reads& reads)
 
 // marks as empty non-overlapping and weak-overlapping regions
 template<typename T>
-void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
+void DiscardNonOverlapRegions(T rgns[2], fraglen minOverlapLen)
 {
 	const typename T::iterator itEnd[2]{ rgns[0].end(), rgns[1].end() };
 	typename T::iterator it[2]{ rgns[0].begin(), rgns[1].begin() };
-	BYTE s, suspend = 0;	// if 1st or 2nd bit is set then pos or neg region is suspended and analyzed in the next pass
+	BYTE s, suspend = 0;	// if 1st or 2nd bit is set then direct or reverse region is suspended and analyzed in the next pass
 
 	auto start	= [&it](BYTE s) -> chrlen { return T::Start(it[s]); };
 	auto end	= [&it](BYTE s) -> chrlen { return T::End(it[s]); };
 
 	// unconditional close of the region; always applied to the left region
-	auto closeRgn = [&](BYTE s) {
+	auto discardeRgn = [&](BYTE s) {
 		T::Discard(it[s]);
 		suspend &= ~(1 << s);	// reset suspend s
 		it[s]++;
 	};
-	auto closeLastRgns = [&it, &itEnd, &closeRgn](BYTE s) {
+	auto discardeLastRgns = [&it, &itEnd, &discardeRgn](BYTE s) {
 		while (it[s] != itEnd[s])
-			closeRgn(s);
+			discardeRgn(s);
 	};
 
 	while (it[0] != itEnd[0] && it[1] != itEnd[1]) {
-		s = start(0) > start(1);	// s denotes the index of the left started region: 0 - pos, 1 - neg
+		s = start(0) > start(1);	// s denotes the index of the left started region: 0 - direct, 1 - reverse
 		if (end(s) > start(!s) + minOverlapLen) {	// strong intersection
 			/***************************************
 				-----    ?????	more regions?		left overlaps
@@ -267,8 +267,8 @@ void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
 			+++++++	  ?????		more regions?		right overlaps
 			***************************************/
 			bool valid = true;
-			if (T::IsWeak(it[s]))	closeRgn(s),  valid = false;
-			if (T::IsWeak(it[!s]))	closeRgn(!s), valid = false;
+			if (T::IsWeak(it[s]))	discardeRgn(s), valid = false;
+			if (T::IsWeak(it[!s]))	discardeRgn(!s), valid = false;
 			if (valid) {
 				s ^= end(s) < end(!s);	// flip by condition
 				it[!s]++;
@@ -281,7 +281,7 @@ void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
 			else			T::Discard(it[s]);
 			// close remaining complementary regions
 			if (++it[s] == rgns[s].end()) {
-				closeLastRgns(!s);
+				discardeLastRgns(!s);
 				break;			// no need to check in while()
 			}
 		}
@@ -290,40 +290,41 @@ void EliminateNonOverlapsRegions(T rgns[2], fraglen minOverlapLen)
 	// close 'out of scope' regions
 	if ((s = it[1] != itEnd[1]) || it[0] != itEnd[0]) {
 		it[s]++;
-		closeLastRgns(s);
+		discardeLastRgns(s);
 	}
 }
 
 // marks as empty multi-overlapping (more than 2) regions
 template<typename T>
-void EliminateMultiOverlapsRegions(T rgns[2])
+void DiscardMultiOverlapRegions(T rgns[2])
 {
 	const typename T::iterator End[]{ rgns[0].end(), rgns[1].end() };
 	typename T::iterator it0[2]{ rgns[0].begin(), rgns[1].begin() };
-	typename T::iterator it[2] { next(it0[0]), next(it0[1]) };
+	typename T::iterator it[2]{ next(it0[0]), next(it0[1]) };
 
 	auto jumpOverWeaks = [&](BYTE s) {
-		if (!T::IsWeak(it0[s]))
-			return false;
-		if (T::IsWeak(++it0[s]))
-			it[s] = ++it0[s] != End[s] ? next(it0[s]) : it0[s];
-		else
-			it[s] = next(it0[s]);
+		if (!T::IsWeak(it0[s]))	return false;
+
+		it[s] = T::IsWeak(++it0[s]) ?
+			++it0[s] != End[s] ? next(it0[s]) : it0[s]:
+			next(it0[s]);
 		return true;
 	};
 
 	while (it[0] != End[0] && it[1] != End[1]) {
+		if (!T::Admitted(it[0])) { it0[0]++; it[0]++;  continue; }
+		if (!T::Admitted(it[1])) { it0[1]++; it[1]++;  continue; }
 		if (jumpOverWeaks(0))	continue;
 		if (jumpOverWeaks(1))	continue;
 
-		BYTE s = T::End(it0[0]) > T::End(it0[1]);	// s denotes the index of the left ended region: 0 - pos, 1 - neg
+		BYTE s = T::End(it0[0]) > T::End(it0[1]);	// s denotes the index of the left ended region: 0 - direct, 1 - reverse
 		if (T::Start(it[s]) <= T::End(it0[!s])) {	// in this case it[s] (next) region is not weak
 			T::Discard(it0[0]);
 			T::Discard(it0[1]);
 			it0[s]++;
 		}
-		it[s] = next(++it0[s]);
-		it0[!s]++;	it[!s]++;
+		it0[0]++;	it[0]++;
+		it0[1]++;	it[1]++;
 	}
 }
 
@@ -420,9 +421,9 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 		StrandData(FWD).SetPotentialRegions(cover.StrandData(FWD), capacity, cutoff);
 		StrandData(RVS).SetPotentialRegions(cover.StrandData(RVS), capacity, cutoff);
 
-		EliminateNonOverlapsRegions<CoverRegions>(Data(), Glob::FragLen);
+		DiscardNonOverlapRegions<CoverRegions>(Data(), Glob::FragLen);
 		if (noMultiOverl)
-			EliminateMultiOverlapsRegions<CoverRegions>(Data());
+			DiscardMultiOverlapRegions<CoverRegions>(Data());
 		if (Verb::Level(Verb::DBG))
 			PrintRegionStats<CoverRegions>(Data(), cLen);
 	}
@@ -663,9 +664,9 @@ void ValuesMap::BuildSpline(const TreatedCover& cover, const CoverRegions& rgns,
 			BuildRegionSpline(cover, rgn, redifRgns, splineBase);
 }
 
-void ValuesMap::EliminateNonOverlaps()
+void ValuesMap::DiscardNonOverlaps()
 {
-	EliminateNonOverlapsRegions<ValuesMap>(this, SSpliner<coval>::SilentLength(CurveTYPE, ReadSplineBASE));
+	DiscardNonOverlapRegions<ValuesMap>(this, SSpliner<coval>::SilentLength(CurveTYPE, ReadSplineBASE));
 }
 
 void ValuesMap::NumberGroups()

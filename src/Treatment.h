@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/25/2024
+Last modified: 06/27/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -475,7 +475,7 @@ class CoverRegions : public vector<CoverRegion>
 #endif
 
 public:
-	// methods used in EliminateNonOverlaps()
+	// methods used in DiscardNonOverlaps()
 	static chrlen	Start	(cIter it) { return it->Start(); }
 	static chrlen	End		(cIter it) { return it->End(); }
 	static chrlen	Length	(cIter it) { return it->Length(); }
@@ -545,7 +545,7 @@ class ValuesMap : public tValuesMap
 	void AddRegion(chrlen pos, Values& vals);
 
 public:
-	// methods used in EliminateNonOverlaps()
+	// methods used in DiscardNonOverlaps()
 	static chrlen	Start	(cIter it)	{ return it->first; }
 	static chrlen	End		(cIter it)	{ return it->first + it->second.Length(); }
 	static chrlen	Length	(cIter it)	{ return it->second.Length(); }
@@ -567,7 +567,7 @@ public:
 	void BuildSpline(const TreatedCover& cover, const CoverRegions& rgns, bool redifRgns, fraglen splineBase);
 
 	// Resets non overlapping spline value
-	void EliminateNonOverlaps();
+	void DiscardNonOverlaps();
 
 	// Sets a single consecutive group number to each overlapped non-empty spline
 	void NumberGroups();
@@ -591,7 +591,7 @@ public:
 	float GetPeakPosDiff() const;
 
 	// Resets non overlapping spline value
-	void EliminateNonOverlaps() { Data()->EliminateNonOverlaps(); }
+	void DiscardNonOverlaps() { Data()->DiscardNonOverlaps(); }
 
 	// Sets a single consecutive group number to each overlapped not empty spline
 	void NumberGroups() { Data()->NumberGroups(); }

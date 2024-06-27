@@ -147,40 +147,6 @@ int main(int argc, char* argv[])
 
 //===== Detector
 
-float Detector::GetPeakPosDiff(chrid cID)
-{
-	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
-	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
-	DataCoverRegions& regions = static_cast<DataCoverRegions&>(_regions.ChromData(cID));
-	DataValuesMap& splines	  = static_cast<DataValuesMap&>(_splines.ChromData(cID));
-
-	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
-	_timer.Start();
-	coval maxVal = readCovers.StrandData(FWD).GetMaxVal();
-	coval cutoff = maxVal / 3;
-	//auto cutoff = coval(0.1f * maxVal);
-	//auto cutoff = maxVal / 9;
-	//coval cutoff = 5;
-	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, cutoff);
-	if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], cutoff, true))
-		return false;
-	// calculate mean difference as the average of three attempts
-	float peakDiff = 0;
-	BYTE cnt = 0;
-
-	Verb::PrintMsg(Verb::DBG);
-	for (BYTE splineBase = 20; splineBase <= 80; splineBase += 30) {
-		splines.BuildSpline(fragCovers, regions, false, splineBase);
-		auto diff = splines.GetPeakPosDiff();
-		peakDiff += diff;
-		Verb::PrintMsgVar(Verb::DBG, "spline base: %d  diff: %.2f\n", splineBase, diff);
-		splines.Clear();
-		cnt++;
-	}
-	_timer.Stop(0, false, true);	cout << LF;
-	return peakDiff / cnt;
-}
-
 void Detector::CallBS(chrid cID)
 {
 	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
@@ -215,34 +181,70 @@ void Detector::CallBS(chrid cID)
 		regions.Clear();
 		Glob::FragLenUndef = false;
 	}
-	//_frag—overs.WriteChrom(cID); return;
+	//_frag—overs.WriteChrom(cID); 
+	//return;
 
 	Verb::PrintMsg(Verb::RT, "Locate binding sites\n");
 	_timer.Start();
 	if (/*resetCover && */regions.SetPotentialRegions(fragCovers, cLen, 3))
 		return;
-	regions.PrintScoreDistrib(_outFName + ".RGNS_inval", false);
+	//regions.PrintScoreDistrib(_outFName + ".RGNS_inval", false);
 	//regions.PrintScoreDistrib(_outFName + ".RGNS_all", true);
 
 	splines.BuildSpline(readCovers, regions, true);	_regions.WriteChrom(cID);
-	splines.EliminateNonOverlaps();
+	splines.DiscardNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
 	splines.NumberGroups();
 	//_frag—overs.WriteChrom(cID); _read—overs.WriteChrom(cID);	return;
 	derivs.Set(splines);			_splines.WriteChrom(cID);
 	
 	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
-	//bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
+	bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
-	//bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
+	bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
-	//bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
-	//bss.PrintWidthDistrib(_outFName + ".BSS_width");
-	//bss.PrintScoreDistrib(_outFName + ".BSS_score");
+	bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
+	bss.PrintWidthDistrib(_outFName + ".BSS_width");
+	bss.PrintScoreDistrib(_outFName + ".BSS_score");
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);
 
 	_timer.Stop("Threament: ");	cout << LF;
+}
+
+float Detector::GetPeakPosDiff(chrid cID)
+{
+	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
+	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
+	DataCoverRegions& regions = static_cast<DataCoverRegions&>(_regions.ChromData(cID));
+	DataValuesMap& splines = static_cast<DataValuesMap&>(_splines.ChromData(cID));
+
+	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
+	_timer.Start();
+	coval maxVal = readCovers.StrandData(FWD).GetMaxVal();
+	coval cutoff = maxVal / 3;
+	//auto cutoff = coval(0.1f * maxVal);
+	//auto cutoff = maxVal / 9;
+	//coval cutoff = 5;
+	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, cutoff);
+	if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], cutoff, true))
+		return false;
+	// calculate mean difference as the average of three attempts
+	float peakDiff = 0;
+	BYTE cnt = 0;
+
+	//_regions.WriteChrom(cID);	return 1;
+	Verb::PrintMsg(Verb::DBG);
+	for (BYTE splineBase = 20; splineBase <= 80; splineBase += 30) {
+		splines.BuildSpline(fragCovers, regions, false, splineBase);
+		auto diff = splines.GetPeakPosDiff();
+		peakDiff += diff;
+		Verb::PrintMsgVar(Verb::DBG, "spline base: %d  diff: %.2f\n", splineBase, diff);
+		splines.Clear();
+		cnt++;
+	}
+	_timer.Stop(0, false, true);	cout << LF;
+	return peakDiff / cnt;
 }
