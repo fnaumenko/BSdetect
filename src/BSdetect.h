@@ -73,6 +73,7 @@ public:
 		, _frag—overs(cSizes, 3-2*Glob::IsPE, saveCover, outFName + FNameFragExt, "fragment coverage")
 		, _read—overs(cSizes, 2, saveCover, outFName + FNameReadExt, "read coverage")
 		, _regions(cSizes, 2-Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
+		//, _regions(cSizes, 2 - Glob::IsPE, true, outFName + ".RGNS", "potential regions")
 		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
 		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
 #ifdef MY_DEBUG

@@ -241,24 +241,26 @@ void DiscardNonOverlapRegions(T rgns[2], fraglen minOverlapLen)
 {
 	const typename T::iterator itEnd[2]{ rgns[0].end(), rgns[1].end() };
 	typename T::iterator it[2]{ rgns[0].begin(), rgns[1].begin() };
-	BYTE s, suspend = 0;	// if 1st or 2nd bit is set then direct or reverse region is suspended and analyzed in the next pass
+	BYTE s;		// index of the left started region: 0 - direct, 1 - reverse
+	BYTE suspended = 0;	// if 1st|2nd bit is set then direct|reverse region is suspended and should be analyzed in the next pass
 
 	auto start	= [&it](BYTE s) -> chrlen { return T::Start(it[s]); };
 	auto end	= [&it](BYTE s) -> chrlen { return T::End(it[s]); };
 
-	// unconditional close of the region; always applied to the left region
+	// unconditional discarde the region
 	auto discardeRgn = [&](BYTE s) {
 		T::Discard(it[s]);
-		suspend &= ~(1 << s);	// reset suspend s
+		suspended &= ~(1 << s);	// reset suspended s
 		it[s]++;
 	};
+	// unconditional discarde the regions; always applied to the left region
 	auto discardeLastRgns = [&it, &itEnd, &discardeRgn](BYTE s) {
 		while (it[s] != itEnd[s])
 			discardeRgn(s);
 	};
 
 	while (it[0] != itEnd[0] && it[1] != itEnd[1]) {
-		s = start(0) > start(1);	// s denotes the index of the left started region: 0 - direct, 1 - reverse
+		s = start(0) > start(1);
 		if (end(s) > start(!s) + minOverlapLen) {	// strong intersection
 			/***************************************
 				-----    ?????	more regions?		left overlaps
@@ -272,12 +274,12 @@ void DiscardNonOverlapRegions(T rgns[2], fraglen minOverlapLen)
 			if (valid) {
 				s ^= end(s) < end(!s);	// flip by condition
 				it[!s]++;
-				suspend |= 1 << s;		// set suspend s
+				suspended |= 1 << s;	// set suspended s
 			}
 		}
 		else {							// weak intersection or no one
 			// conditional close of the region
-			if (suspend)	suspend = 0;
+			if (suspended)	suspended = 0;
 			else			T::Discard(it[s]);
 			// close remaining complementary regions
 			if (++it[s] == rgns[s].end()) {
@@ -294,38 +296,29 @@ void DiscardNonOverlapRegions(T rgns[2], fraglen minOverlapLen)
 	}
 }
 
-// marks as empty multi-overlapping (more than 2) regions
-template<typename T>
-void DiscardMultiOverlapRegions(T rgns[2])
+bool CoverRegions::DiscardOverlapChain(Iter it[2], cIter itEnd[2])
 {
-	const typename T::iterator End[]{ rgns[0].end(), rgns[1].end() };
-	typename T::iterator it0[2]{ rgns[0].begin(), rgns[1].begin() };
-	typename T::iterator it[2]{ next(it0[0]), next(it0[1]) };
+	BYTE s = End(it[0]) > End(it[1]);	// index of the left ended region: 0 - direct, 1 - reverse
 
-	auto jumpOverWeaks = [&](BYTE s) {
-		if (!T::IsWeak(it0[s]))	return false;
+	if (Start(it[!s]) > End(it[s]))	{ it[s]++;	return false; }
+	if (++it[s] == itEnd[s])					return true;
+	if (!Admitted(it[s]))						return false;
+	if (End(it[!s]) < Start(it[s]))	{ it[!s]++;	return false; }
+	Discard(prev(it[s]));
+	Discard(it[s]);
+	Discard(it[!s]);
+	return DiscardOverlapChain(it, itEnd);
+}
 
-		it[s] = T::IsWeak(++it0[s]) ?
-			++it0[s] != End[s] ? next(it0[s]) : it0[s]:
-			next(it0[s]);
-		return true;
-	};
+void CoverRegions::DiscardMultiOverlapRegions(CoverRegions rgns[2])
+{
+	cIter itEnd[2]{ rgns[0].end(), rgns[1].end() };
+	Iter it[2]{ rgns[0].begin(), rgns[1].begin() };
 
-	while (it[0] != End[0] && it[1] != End[1]) {
-		if (!T::Admitted(it[0])) { it0[0]++; it[0]++;  continue; }
-		if (!T::Admitted(it[1])) { it0[1]++; it[1]++;  continue; }
-		if (jumpOverWeaks(0))	continue;
-		if (jumpOverWeaks(1))	continue;
-
-		BYTE s = T::End(it0[0]) > T::End(it0[1]);	// s denotes the index of the left ended region: 0 - direct, 1 - reverse
-		if (T::Start(it[s]) <= T::End(it0[!s])) {	// in this case it[s] (next) region is not weak
-			T::Discard(it0[0]);
-			T::Discard(it0[1]);
-			it0[s]++;
-		}
-		it0[0]++;	it[0]++;
-		it0[1]++;	it[1]++;
-	}
+	while (it[0] != itEnd[0] && it[1] != itEnd[1])
+		if (!Admitted(it[0]))		it[0]++;
+		else if (!Admitted(it[1]))	it[1]++;
+		else if (DiscardOverlapChain(it, itEnd))	break;
 }
 
 // prints regions before and after selection
@@ -393,6 +386,31 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacit
 }
 
 #ifdef MY_DEBUG
+void CoverRegions::CheckSingleOverlapping(const CoverRegions rgns[2], fraglen minOverlapLen)
+{
+	chrlen numb = 0;
+	bool done = true;
+	cIter itEnd[2]{ rgns[0].end(), rgns[1].end() };
+	cIter it[2]{ rgns[0].begin(), rgns[1].begin() };
+
+	printf("Overlapping check:");
+	while (it[0] != itEnd[0] && it[1] != itEnd[1]) {
+		BYTE s = End(it[0]) > End(it[1]);	// index of the left ended region: 0 - direct, 1 - reverse
+
+		if (Start(it[!s]) + minOverlapLen > End(it[s])) { it[s]++; continue; }
+		if (!Admitted(it[0]) ^ !Admitted(it[1])) {
+			printf("\n%3d FVD: %d-%d %3d %d, RVS: %d-%d %3d %d", ++numb,
+				Start(it[0]), End(it[0]), it[0]->value, Admitted(it[0]),
+				Start(it[1]), End(it[1]), it[1]->value, Admitted(it[1])
+			);
+			done = false;
+		}
+		it[0]++, it[1]++;
+	}
+	if(done)	printf(" done");
+	printf("\n");
+}
+
 const string distExt = ".dist";
 
 void CoverRegions::PrintScoreDistrib(const string& fname, bool all) const
@@ -423,9 +441,13 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 
 		DiscardNonOverlapRegions<CoverRegions>(Data(), Glob::FragLen);
 		if (noMultiOverl)
-			DiscardMultiOverlapRegions<CoverRegions>(Data());
+			CoverRegions::DiscardMultiOverlapRegions(Data());
 		if (Verb::Level(Verb::DBG))
 			PrintRegionStats<CoverRegions>(Data(), cLen);
+#ifdef MY_DEBUG
+		if (noMultiOverl)
+			CoverRegions::CheckSingleOverlapping(Data(), Glob::FragLen);
+#endif
 	}
 	if (!Empty())	return false;
 	Verb::PrintMsg(Verb::CRIT, "No enriched regions found");

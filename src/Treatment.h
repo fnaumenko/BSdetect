@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 06/27/2024
+Last modified: 07/02/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -461,6 +461,15 @@ class CoverRegions : public vector<CoverRegion>
 
 	friend class DataCoverRegions;
 
+	// Recursively discards multiple overlapping strand regions
+	//	@param it: pair of current compared region iterators
+	//	@param itEnd: pair of end iterators
+	static bool DiscardOverlapChain(Iter it[2], cIter itEnd[2]);
+
+	// Discards multiple overlapping (not 'one-to-one') strand regions
+	//	@param rgns: direct/reverse compared regions
+	static void DiscardMultiOverlapRegions(CoverRegions rgns[2]);
+
 	// Fills the instance by potential regions on extended read coverage
 	//	@param cover: fragment coverage
 	//	@param capacity: capacity to reserve the instance
@@ -468,6 +477,11 @@ class CoverRegions : public vector<CoverRegion>
 	void SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff);
 
 #ifdef MY_DEBUG
+	// Checks for only single ('one-to-one') overlapping strand regions and prints false cases
+	//	@param rgns: direct/reverse compared regions
+	//	@param minOverlapLen: minimum allowed intersection length 
+	static void CheckSingleOverlapping(const CoverRegions rgns[2], fraglen minOverlapLen);
+
 	// Prints frequency distribution of potentail regions value ('score')
 	//	@param fname: name of file to print
 	//	@param all: if true then print all regions, otherwise only invalid ones
