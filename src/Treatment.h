@@ -549,9 +549,8 @@ class ValuesMap : public tValuesMap
 	// Filters and fill spline curve by read cover within potential region
 	//	@param cover: raw read cover
 	//	@param rgn: potential region
-	//	@param redifineRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildRegionSpline(const TreatedCover& cover, const CoverRegion& rgn, bool redifineRgns, fraglen splineBase);
+	void BuildRegionSpline(const TreatedCover& cover, const CoverRegion& rgn, fraglen splineBase);
 
 	// Adds values with given position
 	//	@param pos: starting position of values
@@ -576,9 +575,8 @@ public:
 	// Filters and fill spline curve by read cover within potential regions
 	//	@param cover: raw read/frag cover
 	//	@param rgns: potential regions
-	//	@param redifRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(const TreatedCover& cover, const CoverRegions& rgns, bool redifRgns, fraglen splineBase);
+	void BuildSpline(const TreatedCover& cover, const CoverRegions& rgns, fraglen splineBase);
 
 	// Resets non overlapping spline value
 	void DiscardNonOverlaps();
@@ -597,9 +595,8 @@ public:
 	// Filters and fill spline curve by PE read cover within potential regions
 	//	@param cover: raw read/frag cover
 	//	@param rgns: potential regions
-	//	@param redifineRgns: if true then redifine regions position
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, bool redifineRgns, fraglen splineBase = ReadSplineBASE);
+	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, fraglen splineBase = ReadSplineBASE);
 
 	// Calculates the deviation from the default average fragment length
 	float GetPeakPosDiff() const;

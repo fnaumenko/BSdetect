@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 06/22/2024
+Last modified: 07/02/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -163,6 +163,7 @@ void Detector::CallBS(chrid cID)
 	_splineWriter.SetChromID(cID);	TreatedCover::SetSpecialWriter(_splineWriter);
 	//Incline::SetOutFile(cID, "incline.txt");
 #endif
+	_timer.Start();
 
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 
@@ -185,17 +186,15 @@ void Detector::CallBS(chrid cID)
 	//return;
 
 	Verb::PrintMsg(Verb::RT, "Locate binding sites\n");
-	_timer.Start();
 	if (/*resetCover && */regions.SetPotentialRegions(fragCovers, cLen, 3))
 		return;
 	//regions.PrintScoreDistrib(_outFName + ".RGNS_inval", false);
 	//regions.PrintScoreDistrib(_outFName + ".RGNS_all", true);
 
-	splines.BuildSpline(readCovers, regions, true);	_regions.WriteChrom(cID);
+	splines.BuildSpline(readCovers, regions);	_regions.WriteChrom(cID);
 	splines.DiscardNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
 	splines.NumberGroups();
-	//_frag—overs.WriteChrom(cID); _read—overs.WriteChrom(cID);	return;
 	derivs.Set(splines);			_splines.WriteChrom(cID);
 	
 	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
@@ -225,9 +224,7 @@ float Detector::GetPeakPosDiff(chrid cID)
 	_timer.Start();
 	coval maxVal = readCovers.StrandData(FWD).GetMaxVal();
 	coval cutoff = maxVal / 3;
-	//auto cutoff = coval(0.1f * maxVal);
-	//auto cutoff = maxVal / 9;
-	//coval cutoff = 5;
+	//coval cutoff = 2 * maxVal / 3;
 	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, cutoff);
 	if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], cutoff, true))
 		return false;
@@ -235,13 +232,16 @@ float Detector::GetPeakPosDiff(chrid cID)
 	float peakDiff = 0;
 	BYTE cnt = 0;
 
-	//_regions.WriteChrom(cID);	
+	//_regions.WriteChrom(cID, false);	
 	//return 1;
 
-	//_regions.WriteChrom(cID);	return 1;
 	Verb::PrintMsg(Verb::DBG);
-	for (BYTE splineBase = 20; splineBase <= 80; splineBase += 30) {
-		splines.BuildSpline(fragCovers, regions, false, splineBase);
+	const BYTE step = 30;
+	for (BYTE splineBase = 20; splineBase <= step * 4; splineBase += step) {
+	//for (BYTE splineBase = 80; splineBase <= 80; splineBase += step) {
+		splines.BuildSpline(fragCovers, regions, splineBase);
+		//_splines.WriteChrom(cID);
+		//return 1;
 		auto diff = splines.GetPeakPosDiff();
 		peakDiff += diff;
 		Verb::PrintMsgVar(Verb::DBG, "spline base: %d  diff: %.2f\n", splineBase, diff);
