@@ -440,14 +440,14 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 		StrandData(RVS).SetPotentialRegions(cover.StrandData(RVS), capacity, cutoff);
 
 		DiscardNonOverlapRegions<CoverRegions>(Data(), Glob::FragLen);
-		if (noMultiOverl)
+		if (noMultiOverl) {
 			CoverRegions::DiscardMultiOverlapRegions(Data());
-		if (Verb::Level(Verb::DBG))
-			PrintRegionStats<CoverRegions>(Data(), cLen);
 #ifdef MY_DEBUG
-		if (noMultiOverl)
 			CoverRegions::CheckSingleOverlapping(Data(), Glob::FragLen);
 #endif
+		}
+		if (Verb::Level(Verb::DBG))
+			PrintRegionStats<CoverRegions>(Data(), cLen);
 	}
 	if (!Empty())	return false;
 	Verb::PrintMsg(Verb::CRIT, "No enriched regions found");
