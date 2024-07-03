@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 07/02/2024
+Last modified: 07/03/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -547,10 +547,10 @@ class ValuesMap : public tValuesMap
 #endif
 
 	// Filters and fill spline curve by read cover within potential region
-	//	@param cover: raw read cover
+	//	@param rCover: raw read coverage or nullptr in case of frag coverage
 	//	@param rgn: potential region
 	//	@param splineBase: half-length of spliner moving window
-	void BuildRegionSpline(const TreatedCover& cover, const CoverRegion& rgn, fraglen splineBase);
+	void BuildRegionSpline(const TreatedCover* rCover, const CoverRegion& rgn, fraglen splineBase);
 
 	// Adds values with given position
 	//	@param pos: starting position of values
@@ -573,10 +573,10 @@ public:
 	float MaxVal() const { return _maxVal; }
 
 	// Filters and fill spline curve by read cover within potential regions
-	//	@param cover: raw read/frag cover
+	//	@param rCover: raw read coverage or nullptr in case of frag coverage
 	//	@param rgns: potential regions
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(const TreatedCover& cover, const CoverRegions& rgns, fraglen splineBase);
+	void BuildSpline(const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase);
 
 	// Resets non overlapping spline value
 	void DiscardNonOverlaps();
@@ -592,11 +592,11 @@ public:
 class DataValuesMap : public DataSet<ValuesMap>
 {
 public:
-	// Filters and fill spline curve by PE read cover within potential regions
-	//	@param cover: raw read/frag cover
+	// Filters and fill spline curve by read coverage within potential regions
+	//	@param rCover: raw read coverage or nullptr in case of frag coverage
 	//	@param rgns: potential regions
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, fraglen splineBase = ReadSplineBASE);
+	void BuildSpline(const DataSet<TreatedCover>* rcover, const DataCoverRegions& rgns, fraglen splineBase = ReadSplineBASE);
 
 	// Calculates the deviation from the default average fragment length
 	float GetPeakPosDiff() const;

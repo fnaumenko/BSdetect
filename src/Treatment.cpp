@@ -353,7 +353,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 			rgn.size(), Percent(rawLen, chrLen),
 			realCnt, Percent(refineLen, chrLen));
 	}
-	//printf("\n");
+	printf("\n");
 }
 
 //===== CoverRegions
@@ -597,20 +597,27 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 }
 #endif
 
-void ValuesMap::BuildRegionSpline(const TreatedCover& cover, const CoverRegion& rgn, fraglen splineBase)
+void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion& rgn, fraglen splineBase)
 {
 	assert(Glob::ReadLen);
 	coviter it0;	// at the beginning the start it, then used as a variable
 	coviter itEnd;	// the end it
 	SSpliner<coval> spliner(CurveTYPE, splineBase);
-
 	chrlen pos = rgn.itStart->first - spliner.SilentLength() / 2;
-	for (it0 = prev(rgn.itStart); it0->first > pos; it0--);
-	pos = rgn.itEnd->first + spliner.SilentLength();
-	for (itEnd = next(rgn.itEnd); itEnd->first < pos; itEnd++);
+
+	if (rCover) {
+		it0 = rCover->upper_bound(pos);
+		//itEnd = rCover->lower_bound(rgn.itEnd->first + spliner.SilentLength());
+		pos = rgn.itEnd->first + spliner.SilentLength();
+		for (itEnd = it0, advance(itEnd, 10); itEnd->first < pos; itEnd++);
+	}
+	else {
+		for (it0 = prev(rgn.itStart); it0->first > pos; it0--);
+		pos = rgn.itEnd->first + spliner.SilentLength();
+		for (itEnd = next(rgn.itEnd); itEnd->first < pos; itEnd++);
+	}
 
 	// *** spline via covmap local copy, filtering unsignificant splines
-	pos = it0->first + 1;
 	chrlen newPos = 0;
 	bool isZeroBefore = true;
 	Values vals;
@@ -624,6 +631,7 @@ void ValuesMap::BuildRegionSpline(const TreatedCover& cover, const CoverRegion& 
 				vals.Clear();
 	};
 
+	pos = it0->first + 1;
 	for (auto it = next(it0); it != itEnd; it0++, it++) {	// loop through the cover
 
 		if (isZeroBefore)
@@ -671,11 +679,11 @@ void ValuesMap::AddRegion(chrlen pos, Values& vals)
 	vals.Reserve();
 }
 
-void ValuesMap::BuildSpline(const TreatedCover& cover, const CoverRegions& rgns, fraglen splineBase)
+void ValuesMap::BuildSpline(const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase)
 {
 	for (const auto& rgn : rgns)
 		if (rgn.Admitted())
-			BuildRegionSpline(cover, rgn, splineBase);
+			BuildRegionSpline(rCover, rgn, splineBase);
 }
 
 void ValuesMap::DiscardNonOverlaps()
@@ -723,11 +731,15 @@ void ValuesMap::PrintStat(chrlen clen) const
 //===== DataValuesMap
 
 void DataValuesMap::BuildSpline(
-	const DataSet<TreatedCover>& cover, const DataCoverRegions& rgns, fraglen splineBase)
+	const DataSet<TreatedCover>* rCover, const DataCoverRegions& rgns, fraglen splineBase)
 {
 	BYTE strand = !Glob::IsPE;	// TOTAL for PE or FWD for SE
-	StrandData(FWD).BuildSpline(cover.StrandData(FWD), rgns.StrandData(eStrand(  strand)), splineBase);
-	StrandData(RVS).BuildSpline(cover.StrandData(RVS), rgns.StrandData(eStrand(2*strand)), splineBase);
+	StrandData(FWD).BuildSpline(
+		rCover ? &rCover->StrandData(FWD) : nullptr, rgns.StrandData(eStrand(strand)), splineBase
+	);
+	StrandData(RVS).BuildSpline(
+		rCover ? &rCover->StrandData(RVS) : nullptr, rgns.StrandData(eStrand(2*strand)), splineBase
+	);
 }
 
 float DataValuesMap::GetPeakPosDiff() const
@@ -757,6 +769,8 @@ float DataValuesMap::GetPeakPosDiff() const
 	}
 	if (missed)
 		Verb::PrintMsgVar(Verb::DBG, "%4.1f%% rejected regions;\t", Percent(missed, pData.size()));
+	else
+		Verb::PrintMsg("\t\t\t");
 
 	int sum0 = 0;
 	for (auto diff : diffs)
@@ -1469,7 +1483,7 @@ void BS_map::PrintDistrib(const string& fName, const char* title, function<USHOR
 	);
 
 	// print distribution
-	TxtOutFile file(fName.c_str());
+	TxtOutFile file((fName + distExt).c_str());
 	string stitle(title);
 
 	transform(stitle.begin(), stitle.end(), stitle.begin(),	::toupper);

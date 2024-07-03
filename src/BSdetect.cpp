@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 07/02/2024
+Last modified: 07/03/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -156,7 +156,6 @@ void Detector::CallBS(chrid cID)
 	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
 	BS_map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];
-	//bool	resetCover = true;
 
 #ifdef MY_DEBUG
 	_lineWriter.SetChromID(cID);	BoundsValues::SetSpecialWriter(_lineWriter);
@@ -168,6 +167,7 @@ void Detector::CallBS(chrid cID)
 	if (!Glob::ReadLen)	Glob::ReadLen = _file->ReadLength();
 
 	if (Glob::FragLenUndef) {		// can be true for SE sequence only
+		Timer timer;
 		auto peakDiff = short(round(GetPeakPosDiff(cID)));
 		Verb::PrintMsgVar(Verb::RT, "Mean fragment length: %d\n", FragDefLEN - peakDiff);
 		if (peakDiff > 10) {			// significant difference
@@ -176,22 +176,21 @@ void Detector::CallBS(chrid cID)
 			_frag—overs.Clear();
 			_frag—overs.Fill(_reads);
 		}
-		//else
-		//	resetCover = false;
 		_reads.Clear();
 		regions.Clear();
 		Glob::FragLenUndef = false;
+		timer.Stop();	cout << LF;
 	}
 	//_frag—overs.WriteChrom(cID); 
 	//return;
 
 	Verb::PrintMsg(Verb::RT, "Locate binding sites\n");
-	if (/*resetCover && */regions.SetPotentialRegions(fragCovers, cLen, 3))
+	if (regions.SetPotentialRegions(fragCovers, cLen, 3))
 		return;
-	//regions.PrintScoreDistrib(_outFName + ".RGNS_inval", false);
+	//regions.PrintScoreDistrib(_outFName + ".RGNS_discard", false);
 	//regions.PrintScoreDistrib(_outFName + ".RGNS_all", true);
 
-	splines.BuildSpline(readCovers, regions);	_regions.WriteChrom(cID);
+	splines.BuildSpline(&readCovers, regions);	_regions.WriteChrom(cID);
 	splines.DiscardNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
 	splines.NumberGroups();
@@ -204,8 +203,8 @@ void Detector::CallBS(chrid cID)
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
 	//bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
-	//bss.PrintWidthDistrib(_outFName + ".BSS_width");
-	//bss.PrintScoreDistrib(_outFName + ".BSS_score");
+	bss.PrintWidthDistrib(_outFName + ".BSS_width");
+	bss.PrintScoreDistrib(_outFName + ".BSS_score");
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);
@@ -221,11 +220,10 @@ float Detector::GetPeakPosDiff(chrid cID)
 	DataValuesMap& splines = static_cast<DataValuesMap&>(_splines.ChromData(cID));
 
 	Verb::PrintMsg(Verb::DBG, "Determine mean fragment length");
-	_timer.Start();
 	coval maxVal = readCovers.StrandData(FWD).GetMaxVal();
 	coval cutoff = maxVal / 3;
 	//coval cutoff = 2 * maxVal / 3;
-	Verb::PrintMsgVar(Verb::DBG, "Max cover: %d;  cutoff: %d\n", maxVal, cutoff);
+	Verb::PrintMsgVar(Verb::DBG, "Max coverage: %d;  cutoff: %d\n", maxVal, cutoff);
 	if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], cutoff, true))
 		return false;
 	// calculate mean difference as the average of three attempts
@@ -235,11 +233,11 @@ float Detector::GetPeakPosDiff(chrid cID)
 	//_regions.WriteChrom(cID, false);	
 	//return 1;
 
-	Verb::PrintMsg(Verb::DBG);
+	//Verb::PrintMsg(Verb::DBG);
 	const BYTE step = 30;
 	for (BYTE splineBase = 20; splineBase <= step * 4; splineBase += step) {
 	//for (BYTE splineBase = 80; splineBase <= 80; splineBase += step) {
-		splines.BuildSpline(fragCovers, regions, splineBase);
+		splines.BuildSpline(nullptr, regions, splineBase);
 		//_splines.WriteChrom(cID);
 		//return 1;
 		auto diff = splines.GetPeakPosDiff();
@@ -248,6 +246,5 @@ float Detector::GetPeakPosDiff(chrid cID)
 		splines.Clear();
 		cnt++;
 	}
-	_timer.Stop(0, false, true);	cout << LF;
 	return peakDiff / cnt;
 }
