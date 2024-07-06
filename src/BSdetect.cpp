@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 07/03/2024
+Last modified: 07/06/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -22,7 +22,7 @@ const string Product::Title = "BSdetect";
 const string Product::Version = "1.0";
 const string Product::Descr = "binding sites detector";
 
-const char* ProgParam = "<in-file>";	// program parameter tip
+const char* ProgParam = "<alignment>";	// program parameter tip
 const string OutFileExt = FT::Ext(FT::eType::DIST);
 
 //const char* inputs[] = { "FRAG","READ" };	// input option; corresponds to Inp
@@ -42,13 +42,15 @@ const BYTE Options::Option::IndentInTabs = 3;
 Options::Option Options::List[] = {
 	{ 'g', sGen,	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "chromosome sizes file", NULL },
 	{ 'c',Chrom::Abbr,tOpt::NONE,tNAME,	gOTHER,	NO_DEF, 0, 0, NULL, "treat specified chromosome only", NULL },
-	{ 'd',"dup-lvl",tOpt::OBLIG, tINT,	gOTHER,	1, 0, 2, NULL,
-	"duplicate reads rejection level:\n-1 - keep all duplicates, 1 - keep one among duplicates, 2 - keep two among duplicates", NULL },
+	{ 'd',"dup-lvl",tOpt::NONE, tINT,	gOTHER,	1, 0, 3, NULL,
+	"duplicate reads rejection level:\n0 - keep all duplicates,\n1..3 - keep 1..3 reads among duplicates", NULL },
 	{ 'f',"fr-len",	tOpt::NONE,	tINT,	gOTHER, 0, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]", NULL },
 	{ 's',"save-cover",tOpt::NONE,tENUM,gOTHER,	FALSE,	NO_VAL,	0, NULL, "save coverage", NULL },
 	{ 'i',"save-inter",tOpt::HIDDEN,tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save intermediate data", NULL },
 	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL,
 	"print each read ambiguity, if they exist" },
+	{ 'R',"rd-len",	tOpt::HIDDEN,	tINT,	gOTHER, 50, 20, 1000, NULL,
+	"fixed length of output read, or mean length of variable reads", NULL },
 	{ 'r',"rank-score",	tOpt::NONE,tENUM,gOTHER, TRUE, 0, 2, (char*)Booleans,
 	"turn on/off rendering the main result score in greyscale", NULL },
 	{ 'O', sOutput,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF,	0,	0, NULL, "output files common name", NULL },
@@ -56,14 +58,11 @@ Options::Option Options::List[] = {
 	{ 'V',"verbose",tOpt::NONE,	tENUM,	gOTHER, Verb::RT, Verb::CRIT, float(Verb::Size()), (char*)Verb::ValTitles, Verb::ValDescr, NULL },
 	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrVersion, NULL },
 	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sPrUsage, NULL },
-
-	{ 'R',"rd-len",	tOpt::NONE,	tINT,	gOTHER, 50, 20, 1000, NULL,
-	"fixed length of output read, or minimum length of variable reads", NULL },
 };
 const BYTE Options::OptCount = ArrCnt(Options::List);
 
 const Options::Usage Options::Usages[] = {	// content of 'Usage' variants in help
-	{ vUNDEF, ProgParam, true, "bla-bla" }
+	{ vUNDEF, ProgParam, true, ".bam or .bed[.gz] file" }
 };
 const BYTE Options::UsageCount = ArrCnt(Options::Usages);
 
@@ -124,7 +123,14 @@ int main(int argc, char* argv[])
 		else
 		{
 			// pre-read first item to check for PE sequence
-			RBedReader file(iName, &cSizes, Options::GetIVal(oDUP_LVL), eOInfo::LAC, Verb::Level(Verb::DBG), false, true, true);
+			RBedReader file(
+				iName,
+				&cSizes,
+				Options::GetIVal(oDUP_LVL),
+				eOInfo::LAC,
+				Verb::Level(Verb::DBG),
+				false, true, true
+			);
 			Verb::PrintMsg(Verb::DBG);
 			file.GetNextItem();		// no need to check for empty sequence
 			Glob::SetPE(file.IsPaired());

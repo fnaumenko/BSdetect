@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 06/19/2024
+Last modified: 07/06/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -18,14 +18,13 @@ enum optValue {		// options id
 	oSAVE_COVER,
 	oSAVE_INTER,
 	oALARM,
+	oREAD_LEN,
 	oRANK_SCORE,
 	oOUTFILE,
 	oTIME,
 	oVERB,
 	oVERSION,
 	oHELP,
-
-	oREAD_LEN
 };
 
 // BS detector
@@ -90,10 +89,9 @@ public:
 		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
 		file.Pass(*this);
 		_file = nullptr;
-		_timer.Start();
 	}
 
-	// Pre-covered data constructor. For PE only!
+	// Pre-covered data constructor
 	//	@param inFName: fragment coverage file name
 	//	@param outFName: common output file name
 	//	@param cSizes: chrom sizes

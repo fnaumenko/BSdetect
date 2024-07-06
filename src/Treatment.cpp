@@ -767,10 +767,11 @@ float DataValuesMap::GetPeakPosDiff() const
 		pPos.clear();
 		nPos.clear();
 	}
-	if (missed)
-		Verb::PrintMsgVar(Verb::DBG, "%4.1f%% rejected regions;\t", Percent(missed, pData.size()));
-	else
-		Verb::PrintMsg("\t\t\t");
+	if(Verb::Level(Verb::DBG))
+		if (missed)
+			printf("%4.1f%% rejected regions;\t", Percent(missed, pData.size()));
+		else
+			printf("\t\t\t");
 
 	int sum0 = 0;
 	for (auto diff : diffs)
