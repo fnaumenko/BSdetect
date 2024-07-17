@@ -13,7 +13,7 @@ Options:
   -g|--gen <name>       chromosome sizes file
   -c|--chr <name>       treat specified chromosome only
   -d|--dup-lvl <int>    duplicate reads rejection level:
-                        -1 - keep all duplicates,
+                        0 - keep all duplicates,
                         1 - keep one among duplicates,
                         2 - keep two among duplicates, [1]
   -f|--fr-len <int>     mean fragment length for SE sequence [AUTO] [0]
