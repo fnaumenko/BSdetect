@@ -249,7 +249,7 @@ void DiscardNonOverlapRegions(T rgns[2], fraglen minOverlapLen)
 
 	// unconditional discarde the region
 	auto discardeRgn = [&](BYTE s) {
-		T::Discard(it[s]);
+		rgns[s].Discard(it[s]);
 		suspended &= ~(1 << s);	// reset suspended s
 		it[s]++;
 	};
@@ -280,7 +280,7 @@ void DiscardNonOverlapRegions(T rgns[2], fraglen minOverlapLen)
 		else {							// weak intersection or no one
 			// conditional close of the region
 			if (suspended)	suspended = 0;
-			else			T::Discard(it[s]);
+			else			rgns[s].Discard(it[s]);
 			// close remaining complementary regions
 			if (++it[s] == rgns[s].end()) {
 				discardeLastRgns(!s);
