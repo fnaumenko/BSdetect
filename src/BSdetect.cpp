@@ -209,8 +209,8 @@ void Detector::CallBS(chrid cID)
 	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
 	//bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
-	bss.PrintWidthDistrib(_outFName + ".BSS_width");
-	bss.PrintScoreDistrib(_outFName + ".BSS_score");
+	//bss.PrintWidthDistrib(_outFName + ".BSS_width");
+	//bss.PrintScoreDistrib(_outFName + ".BSS_score");
 #endif
 	bss.PrintStat();
 	_bss.WriteChrom(cID);

@@ -21,7 +21,7 @@ class IGVlocus
 	mutable char _buf[2 * 10 + 5 + 2];	// 2 * max position length + Chrom::MaxAbbrNameLength + 2 separators
 
 	// Prints IGV locus to inner buffer
-	//	@return: the total number of characters written
+	//	@returns: the total number of characters written
 	chrlen NPrint(chrlen start, chrlen end) const
 	{
 		return sprintf(_buf, "%s:%d-%d", _chrom.c_str(), start - Glob::ROI_ext, end + Glob::ROI_ext);
@@ -34,7 +34,7 @@ public:
 	//const char* Buff() const { return _buf; }
 
 	// Prints IGV locus to inner buffer
-	//	@return: inner buffer
+	//	@returns: inner buffer
 	const char* Print(chrlen start, chrlen end) const { NPrint(start, end); return _buf; }
 
 	const char* Print(chrlen pos) const { return Print(pos, pos); }

@@ -32,9 +32,9 @@ static class Verb
 public:
 	enum eVerb {	// verbose level
 		CRIT,	// print critical messages only
-		RES,	// print vCRIT + results
-		RT,		// print vRES + runtime info
-		DBG		// print vPAR + additional info
+		RES,	// print CRIT + results
+		RT,		// print RES + runtime info
+		DBG		// print RT + additional info
 	};
 	static const char* ValTitles[];
 	static const char* ValDescr;
@@ -156,7 +156,7 @@ public:
 	//	@param offset[in,out]: start of range; 
 	//	@param len: range length 
 	//	@param factor: -1 for forward, 1 for reverse bypass
-	//	@return: average score
+	//	@returns: average score
 	float AvrScoreInRange(int32_t& offset, int32_t len, int8_t factor = 1) const;
 
 #ifdef MY_DEBUG
