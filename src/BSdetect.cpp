@@ -23,10 +23,7 @@ const string Product::Version = "1.0";
 const string Product::Descr = "binding sites detector";
 
 const char* ProgParam = "<alignment>";	// program parameter tip
-const string OutFileExt = FT::Ext(FT::eType::DIST);
-
-//const char* inputs[] = { "FRAG","READ" };	// input option; corresponds to Inp
-const char* smodes[] = { "SE","PE" };				// corresponds to DataWriter::eMode
+//const string OutFileExt = FT::Ext(FT::eType::DIST);
 
 // *** Options definition
 
@@ -40,24 +37,23 @@ const BYTE Options::Option::IndentInTabs = 3;
 //	defVal (if NO_DEF then no default value printed),
 //	minVal (if NO_VAL then value is prohibited), maxVal, strVal, descr, addDescr }
 Options::Option Options::List[] = {
-	{ 'g', sGen,	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "chromosome sizes file", NULL },
-	{ 'c', sChrom,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF, 0, 0, NULL, sHelpChrom, NULL },
+	{ 'g', sGen,	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "chromosome sizes file" },
+	{ 'c', sChrom,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF, 0, 0, NULL, sHelpChrom },
 	{ 'd',"dup-lvl",tOpt::NONE, tINT,	gOTHER,	1, 0, 3, NULL,
-	"duplicate reads rejection level:\n0 - keep all duplicates,\n1..3 - keep 1..3 reads among duplicates", NULL },
-	{ 'f',"fr-len",	tOpt::NONE,	tINT,	gOTHER, 0, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]", NULL },
-	{ 's',"save-cover",tOpt::NONE,tENUM,gOTHER,	FALSE,	NO_VAL,	0, NULL, "save coverage", NULL },
-	{ 'i',"save-inter",tOpt::HIDDEN,tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save intermediate data", NULL },
-	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL,
-	"print each read ambiguity, if they exist" },
+	"duplicate reads rejection level:\n0 - keep all duplicates,\n1..3 - keep 1..3 reads among duplicates" },
+	{ 'f',"fr-len",	tOpt::NONE,	tINT,	gOTHER, 0, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]" },
+	{ 's',"save-cover",tOpt::NONE,tENUM,gOTHER,	FALSE,	NO_VAL,	0, NULL, "save coverage" },
+	{ 'i',"save-inter",tOpt::HIDDEN,tENUM,	gOTHER,	FALSE,	NO_VAL,	0, NULL, "save intermediate data" },
+	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL, "print each read ambiguity, if they exist" },
 	{ 'R',"rd-len",	tOpt::HIDDEN,	tINT,	gOTHER, 50, 20, 1000, NULL,
-	"fixed length of output read, or mean length of variable reads", NULL },
+	"fixed length of output read, or mean length of variable reads" },
 	{ 'r',"rank-score",	tOpt::NONE,tENUM,gOTHER, TRUE, 0, 2, (char*)Booleans,
-	"turn on/off rendering the main result score in greyscale", NULL },
-	{ 'O', sOutput,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF,	0,	0, NULL, "output files common name", NULL },
-	{ 't',	sTime,	tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL, 0, NULL, sHelpTime, NULL },
-	{ 'V',"verbose",tOpt::NONE,	tENUM,	gOTHER, Verb::RT, Verb::CRIT, float(Verb::Size()), (char*)Verb::ValTitles, Verb::ValDescr, NULL },
-	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHelpVersion, NULL },
-	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHelpUsage, NULL },
+	"turn on/off rendering the main result score in greyscale" },
+	{ 'O', sOutput,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF,	0,	0, NULL, "output files common name" },
+	{ 't',	sTime,	tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL, 0, NULL, sHelpTime },
+	{ 'V',"verbose",tOpt::NONE,	tENUM,	gOTHER, Verb::RT, Verb::CRIT, float(Verb::Size()), (char*)Verb::ValTitles, Verb::ValDescr },
+	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHelpVersion },
+	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHelpUsage },
 };
 const BYTE Options::OptCount = ArrCnt(Options::List);
 
