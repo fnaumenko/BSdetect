@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 07/25/2024
+Last modified: 07/26/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -41,7 +41,7 @@ const BYTE Options::Option::IndentInTabs = 3;
 //	minVal (if NO_VAL then value is prohibited), maxVal, strVal, descr, addDescr }
 Options::Option Options::List[] = {
 	{ 'g', sGen,	tOpt::NONE,	tNAME,	gOTHER, vUNDEF, 0, 0, NULL, "chromosome sizes file", NULL },
-	{ 'c',Chrom::Abbr,tOpt::NONE,tNAME,	gOTHER,	NO_DEF, 0, 0, NULL, "treat specified chromosome only", NULL },
+	{ 'c', sChrom,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF, 0, 0, NULL, sHelpChrom, NULL },
 	{ 'd',"dup-lvl",tOpt::NONE, tINT,	gOTHER,	1, 0, 3, NULL,
 	"duplicate reads rejection level:\n0 - keep all duplicates,\n1..3 - keep 1..3 reads among duplicates", NULL },
 	{ 'f',"fr-len",	tOpt::NONE,	tINT,	gOTHER, 0, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]", NULL },
