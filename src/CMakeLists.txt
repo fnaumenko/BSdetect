@@ -34,6 +34,7 @@ include_directories( ${CMAKE_CURRENT_SOURCE_DIR}/${BASIC_DIR} )
 set(Header_Files
     ${BASIC_DIR}/common.h
     ${BASIC_DIR}/ChromData.h
+    ${BASIC_DIR}/CrossRgns.h
     ${BASIC_DIR}/DataReader.h
     ${BASIC_DIR}/Options.h
     ${BASIC_DIR}/OrderedData.h

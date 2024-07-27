@@ -2,20 +2,19 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 07/03/2024
+Last modified: 07/27/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
 #include "DataReader.h"
 #include "OrderedData.h"
 #include "ChromData.h"
+#include "CrossRgns.h"
 #include "Spline.h"
-#include <fstream>
-#include <stdexcept>
-#include <iterator>
-
-#include <stdlib.h>     // abs
-#include <stdio.h>
+//#include <fstream>
+//#include <stdexcept>
+//#include <iterator>
+//#include <stdio.h>
 
 #define MY_DEBUG
 
@@ -234,19 +233,6 @@ public:
 	}
 };
 
-//===== TXT FILE AS DUMP
-
-class TxtOutFile
-{
-	FILE* _file;
-public:
-	TxtOutFile(const char* name) { _file = fopen(name, "w"); }
-	~TxtOutFile() { fclose(_file); }
-
-	template<typename... Args>
-	void Write(const char* format, Args ... args) { fprintf(_file, format, args...); }
-};
-
 #endif	// MY_DEBUG
 
 //===== DATA
@@ -296,11 +282,11 @@ struct Incline
 	void Print() const { printf("%d %d, Deriv: %-2.2f\n", Pos, TopPos, Deriv); }
 
 private:
-	static shared_ptr<TxtOutFile> OutFile;
+	static shared_ptr<FormWriter> OutFile;
 	static chrid cID;
 
 public:
-	static void SetOutFile(chrid cid, const char* fname) { cID = cid;  OutFile.reset(new TxtOutFile(fname)); }
+	static void SetOutFile(chrid cid, const char* fname) { cID = cid;  OutFile.reset(new FormWriter(fname)); }
 
 	void Write();
 #endif
@@ -448,7 +434,7 @@ struct CoverRegion
 
 	CoverRegion(coviter& start, coviter& end, coval val) : itStart(start), itEnd(end), value(val) {}
 
-	bool	Admitted()	const { return valid; }
+	bool	Accepted()	const { return valid; }
 	chrlen	Start()		const { return itStart->first; }
 	chrlen	End()		const { return itEnd->first; }
 	chrlen	Length()	const { return End() - Start(); }
@@ -490,12 +476,13 @@ class CoverRegions : public vector<CoverRegion>
 
 public:
 	// methods used in DiscardNonOverlaps()
-	static chrlen	Start	(cIter it) { return it->Start(); }
-	static chrlen	End		(cIter it) { return it->End(); }
-	static chrlen	Length	(cIter it) { return it->Length(); }
-	static bool		IsWeak	(cIter it) { return it->value <= CUTOFF_STRAND_EXT_RGN; }
-	static bool		Admitted(cIter it) { return it->valid; }
-	static void		Discard	(Iter it)  { it->valid = false; }
+	static chrlen	Start	(cIter it)	{ return it->Start(); }
+	static chrlen	End		(cIter it)	{ return it->End(); }
+	static chrlen	Length	(cIter it)	{ return it->Length(); }
+	static bool		IsWeak	(cIter it)	{ return it->value <= CUTOFF_STRAND_EXT_RGN; }
+	static void		Accept	(const iterator it[2]) {}			// stub
+	static void		Discard	(Iter it)	{ it->valid = false; }
+	static bool		Accepted(cIter it)	{ return it->valid; }
 };
 
 class DataCoverRegions : public DataSet<CoverRegions>
@@ -562,9 +549,10 @@ public:
 	static chrlen	Start	(cIter it)	{ return it->first; }
 	static chrlen	End		(cIter it)	{ return it->first + it->second.Length(); }
 	static chrlen	Length	(cIter it)	{ return it->second.Length(); }
-	static bool		IsWeak	(cIter)		{ return false; }
-	static bool		Admitted(cIter it)	{ return it->second.MaxVal(); }
+	static bool		IsWeak	(cIter)		{ return false; }	// stub
+	static void		Accept	(const iterator it[2]) {}		// stub
 	static void		Discard	(Iter it)	{ it->second.Discard(); }
+	static bool		Accepted(cIter it)	{ return it->second.MaxVal(); }
 
 	chrlen	Start() const { return Start(begin()); }
 	chrlen	End()	const { return End(begin()); }

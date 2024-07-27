@@ -12,35 +12,6 @@ readlen Glob::ReadLen = 0;
 fraglen Glob::FragLen = FragDefLEN;
 fraglen Glob::ROI_ext = 500;
  
-//===== IGVlocus
-
-#ifdef MY_DEBUG
-class IGVlocus
-{
-	const string _chrom;
-	mutable char _buf[2 * 10 + 5 + 2];	// 2 * max position length + Chrom::MaxAbbrNameLength + 2 separators
-
-	// Prints IGV locus to inner buffer
-	//	@returns: the total number of characters written
-	chrlen NPrint(chrlen start, chrlen end) const
-	{
-		return sprintf(_buf, "%s:%d-%d", _chrom.c_str(), start - Glob::ROI_ext, end + Glob::ROI_ext);
-	}
-
-public:
-	IGVlocus(chrid cID) : _chrom(Chrom::AbbrName(cID)) {}
-
-	// Returns inner buffer
-	//const char* Buff() const { return _buf; }
-
-	// Prints IGV locus to inner buffer
-	//	@returns: inner buffer
-	const char* Print(chrlen start, chrlen end) const { NPrint(start, end); return _buf; }
-
-	const char* Print(chrlen pos) const { return Print(pos, pos); }
-};
-#endif
-
 //===== Verb
 
 const char* Verb::ValTitles[] = { "SL","RES","RT","DBG" };
@@ -84,7 +55,7 @@ void OSpecialWriter::WriteIncline(BYTE reverse, chrlen start, coviter& itStop)
 
 //===== Incline
 
-shared_ptr<TxtOutFile> Incline::OutFile = nullptr;
+shared_ptr<FormWriter> Incline::OutFile = nullptr;
 chrid Incline::cID;
 
 void Incline::Write()
@@ -234,67 +205,7 @@ void CombCover::Fill(const Reads& reads)
 			AddExtRead(rd, s);
 }
 
-
-// marks as empty non-overlapping and weak-overlapping regions
-template<typename T>
-void DiscardNonOverlapRegions(T rgns[2], fraglen minOverlapLen)
-{
-	const typename T::iterator itEnd[2]{ rgns[0].end(), rgns[1].end() };
-	typename T::iterator it[2]{ rgns[0].begin(), rgns[1].begin() };
-	BYTE s;		// index of the left started region: 0 - direct, 1 - reverse
-	BYTE suspended = 0;	// if 1st|2nd bit is set then direct|reverse region is suspended and should be analyzed in the next pass
-
-	auto start	= [&it](BYTE s) -> chrlen { return T::Start(it[s]); };
-	auto end	= [&it](BYTE s) -> chrlen { return T::End(it[s]); };
-
-	// unconditional discarde the region
-	auto discardeRgn = [&](BYTE s) {
-		rgns[s].Discard(it[s]);
-		suspended &= ~(1 << s);	// reset suspended s
-		it[s]++;
-	};
-	// unconditional discarde the regions; always applied to the left region
-	auto discardeLastRgns = [&it, &itEnd, &discardeRgn](BYTE s) {
-		while (it[s] != itEnd[s])
-			discardeRgn(s);
-	};
-
-	while (it[0] != itEnd[0] && it[1] != itEnd[1]) {
-		s = start(0) > start(1);
-		if (end(s) > start(!s) + minOverlapLen) {	// strong intersection
-			/***************************************
-				-----    ?????	more regions?		left overlaps
-			+++++++++++++		suspended...		left overlaps
-				---------		suspended...		right overlaps
-			+++++++	  ?????		more regions?		right overlaps
-			***************************************/
-			bool valid = true;
-			if (T::IsWeak(it[s]))	discardeRgn(s), valid = false;
-			if (T::IsWeak(it[!s]))	discardeRgn(!s), valid = false;
-			if (valid) {
-				s ^= end(s) < end(!s);	// flip by condition
-				it[!s]++;
-				suspended |= 1 << s;	// set suspended s
-			}
-		}
-		else {							// weak intersection or no one
-			// conditional close of the region
-			if (suspended)	suspended = 0;
-			else			rgns[s].Discard(it[s]);
-			// close remaining complementary regions
-			if (++it[s] == rgns[s].end()) {
-				discardeLastRgns(!s);
-				break;			// no need to check in while()
-			}
-		}
-	}
-
-	// close 'out of scope' regions
-	if ((s = it[1] != itEnd[1]) || it[0] != itEnd[0]) {
-		it[s]++;
-		discardeLastRgns(s);
-	}
-}
+//===== CoverRegions
 
 bool CoverRegions::DiscardOverlapChain(Iter it[2], cIter itEnd[2])
 {
@@ -302,7 +213,7 @@ bool CoverRegions::DiscardOverlapChain(Iter it[2], cIter itEnd[2])
 
 	if (Start(it[!s]) > End(it[s]))	{ it[s]++;	return false; }
 	if (++it[s] == itEnd[s])					return true;
-	if (!Admitted(it[s]))						return false;
+	if (!Accepted(it[s]))						return false;
 	if (End(it[!s]) < Start(it[s]))	{ it[!s]++;	return false; }
 	Discard(prev(it[s]));
 	Discard(it[s]);
@@ -316,8 +227,8 @@ void CoverRegions::DiscardMultiOverlapRegions(CoverRegions rgns[2])
 	Iter it[2]{ rgns[0].begin(), rgns[1].begin() };
 
 	while (it[0] != itEnd[0] && it[1] != itEnd[1])
-		if (!Admitted(it[0]))		it[0]++;
-		else if (!Admitted(it[1]))	it[1]++;
+		if (!Accepted(it[0]))		it[0]++;
+		else if (!Accepted(it[1]))	it[1]++;
 		else if (DiscardOverlapChain(it, itEnd))	break;
 }
 
@@ -347,7 +258,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 		for (auto it = rgn.begin(); it != itEnd; it++) {
 			const chrlen len = T::Length(it);
 			rawLen += len;
-			if (T::Admitted(it)) refineLen += len, realCnt++;
+			if (T::Accepted(it)) refineLen += len, realCnt++;
 		}
 		printf(format[isFeatures], sStrandTITLES[s + strands],
 			rgn.size(), Percent(rawLen, chrLen),
@@ -398,10 +309,10 @@ void CoverRegions::CheckSingleOverlapping(const CoverRegions rgns[2], fraglen mi
 		BYTE s = End(it[0]) > End(it[1]);	// index of the left ended region: 0 - direct, 1 - reverse
 
 		if (Start(it[!s]) + minOverlapLen > End(it[s])) { it[s]++; continue; }
-		if (!Admitted(it[0]) ^ !Admitted(it[1])) {
+		if (!Accepted(it[0]) ^ !Accepted(it[1])) {
 			printf("\n%3d FVD: %d-%d %3d %d, RVS: %d-%d %3d %d", ++numb,
-				Start(it[0]), End(it[0]), it[0]->value, Admitted(it[0]),
-				Start(it[1]), End(it[1]), it[1]->value, Admitted(it[1])
+				Start(it[0]), End(it[0]), it[0]->value, Accepted(it[0]),
+				Start(it[1]), End(it[1]), it[1]->value, Accepted(it[1])
 			);
 			done = false;
 		}
@@ -418,10 +329,10 @@ void CoverRegions::PrintScoreDistrib(const string& fname, bool all) const
 	map<coval, chrlen> freq;
 
 	for (const auto& rgn : *this)
-		if(all || !rgn.Admitted())
+		if(all || !rgn.Accepted())
 			freq[rgn.value]++;
 	
-	TxtOutFile file((fname + distExt).c_str());
+	FormWriter file((fname + distExt).c_str());
 	file.Write("score\tfreq\n");
 	for (const auto& item : freq)
 		file.Write("%d\t%d\n", item.first, item.second);
@@ -682,7 +593,7 @@ void ValuesMap::AddRegion(chrlen pos, Values& vals)
 void ValuesMap::BuildSpline(const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase)
 {
 	for (const auto& rgn : rgns)
-		if (rgn.Admitted())
+		if (rgn.Accepted())
 			BuildRegionSpline(rCover, rgn, splineBase);
 }
 
@@ -1484,7 +1395,7 @@ void BS_map::PrintDistrib(const string& fName, const char* title, function<USHOR
 	);
 
 	// print distribution
-	TxtOutFile file((fName + distExt).c_str());
+	FormWriter file((fName + distExt).c_str());
 	string stitle(title);
 
 	transform(stitle.begin(), stitle.end(), stitle.begin(),	::toupper);
@@ -1531,7 +1442,7 @@ void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
-	TxtOutFile file(fName.c_str());
+	FormWriter file(fName.c_str());
 	file.Write("  pos    numb bnd  ref pos score   IGV view\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
@@ -1562,7 +1473,7 @@ void BedWriter::WriteChromData(chrid cID, const CoverRegions& rgns)
 
 	for (const auto& rgn : rgns) {
 		LineAddUInts(rgn.Start(), rgn.End(), rgn.value, false);
-		if (!rgn.Admitted()) {		// discarded items
+		if (!rgn.Accepted()) {		// discarded items
 			LineAddChars("\t.\t.\t", 5, false);
 			LineAddInts(rgn.Start(), rgn.End(), true);
 			LineAddChars(sGRAY, colorLen, false);
