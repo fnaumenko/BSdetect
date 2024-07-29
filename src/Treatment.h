@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 07/27/2024
+Last modified: 07/29/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -46,6 +46,10 @@ public:
 
 	//static void PrintMsgVar(eVerb level, const char* format, ...);
 
+	// Prints variadic message depending on eVerb
+	//	@param level: level from which printing will be performed
+	//	@param format: format string
+	//	@param args: printing arguments
 	template<typename... Args>
 	static void PrintMsgVar(eVerb level, const char* format, Args ... args) { 
 		if (Level(level)) printf(format, args...);

@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 07/27/2024
+Last modified: 07/29/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -122,11 +122,12 @@ int main(int argc, char* argv[])
 				iName,
 				&cSizes,
 				Options::GetIVal(oDUP_LVL),
-				eOInfo::LAC,
-				Verb::Level(Verb::DBG),
-				false, true, true
+				eOInfo::NM,
+				false	//Verb::Level(Verb::DBG)	// check for sorting
 			);
-			Verb::PrintMsg(Verb::DBG);
+			//Verb::PrintMsg(Verb::DBG);
+			//file.PrintFirstLF();
+			cout << LF;
 			file.GetNextItem();		// no need to check for empty sequence
 			Glob::SetPE(file.IsPaired());
 
