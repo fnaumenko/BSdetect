@@ -271,8 +271,8 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 
 void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff)
 {
-	const fraglen minLen = 3 * (Glob::FragLen / 2);		//1.5 fragment lengths
-	//const auto minLen = fraglen(1.6f * Glob::FragLen);
+	//const fraglen minLen = 3 * (Glob::FragLen / 2);		//1.5 fragment lengths
+	const auto minLen = fraglen(1.3f * Glob::FragLen);	// 1.4 test minimum
 	chrlen	start = 0, end = 0;
 	coviter itStart, itEnd;
 
@@ -514,7 +514,7 @@ void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion&
 	coviter it0;	// at the beginning the start it, then used as a variable
 	coviter itEnd;	// the end it
 	SSpliner<coval> spliner(CurveTYPE, splineBase);
-	chrlen pos = rgn.itStart->first - spliner.SilentLength() / 2;
+	chrlen pos = rgn.itStart->first - spliner.SilentLength();
 
 	// set it0
 	if (rCover)
@@ -529,7 +529,7 @@ void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion&
 	in the case where there are no more reads in the potential region 
 	after the last significant coverage, 'emptiness'
 	*/
-	if (itEnd->second)	itEnd++;
+	if (itEnd->second)	itEnd++;	// itEnd->second != 0 means that is not the last iterator
 
 	// *** spline via covmap local copy, filtering unsignificant splines
 	chrlen newPos = 0;
@@ -598,10 +598,8 @@ void ValuesMap::AddRegion(chrlen pos, Values& vals)
 void ValuesMap::BuildSpline(const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase)
 {
 	for (const auto& rgn : rgns)
-		if (rgn.Accepted()) {
-			auto start = rgn.Start();
+		if (rgn.Accepted())
 			BuildRegionSpline(rCover, rgn, splineBase);
-		}
 }
 
 void ValuesMap::DiscardNonOverlaps()
@@ -653,10 +651,14 @@ void DataValuesMap::BuildSpline(
 {
 	BYTE strand = !Glob::IsPE;	// TOTAL for PE or FWD for SE
 	StrandData(FWD).BuildSpline(
-		rCover ? &rCover->StrandData(FWD) : nullptr, rgns.StrandData(eStrand(strand)), splineBase
+		rCover ? &rCover->StrandData(FWD) : nullptr,
+		rgns.StrandData(eStrand(strand)),
+		splineBase
 	);
 	StrandData(RVS).BuildSpline(
-		rCover ? &rCover->StrandData(RVS) : nullptr, rgns.StrandData(eStrand(2*strand)), splineBase
+		rCover ? &rCover->StrandData(RVS) : nullptr,
+		rgns.StrandData(eStrand(2*strand)),
+		splineBase
 	);
 }
 
