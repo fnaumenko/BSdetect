@@ -516,17 +516,20 @@ void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion&
 	SSpliner<coval> spliner(CurveTYPE, splineBase);
 	chrlen pos = rgn.itStart->first - spliner.SilentLength() / 2;
 
-	if (rCover) {
+	// set it0
+	if (rCover)
 		it0 = rCover->upper_bound(pos);
-		//itEnd = rCover->lower_bound(rgn.itEnd->first + spliner.SilentLength());
-		pos = rgn.itEnd->first + spliner.SilentLength();
-		for (itEnd = it0, advance(itEnd, 10); itEnd->first < pos; itEnd++);
-	}
-	else {
+	else
 		for (it0 = prev(rgn.itStart); it0->first > pos; it0--);
-		pos = rgn.itEnd->first + spliner.SilentLength();
-		for (itEnd = next(rgn.itEnd); itEnd->first < pos; itEnd++);
-	}
+	// set itEnd
+	pos = rgn.itEnd->first + spliner.SilentLength();
+	for (itEnd = it0, advance(itEnd, 10); itEnd->first < pos; itEnd++);	// 10 iterators is not enough for significant coverage in any case
+	/*
+	incrementing itEnd is required to smoothly complete the spline
+	in the case where there are no more reads in the potential region 
+	after the last significant coverage, 'emptiness'
+	*/
+	if (itEnd->second)	itEnd++;
 
 	// *** spline via covmap local copy, filtering unsignificant splines
 	chrlen newPos = 0;
@@ -535,15 +538,15 @@ void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion&
 
 	// adds spline, eliminating unsignificant one
 	auto addDecentRgn = [this,&vals,&newPos]() {
-		if (vals.MaxVal())
-			if (vals.MaxVal() > 2.)
-				this->AddRegion(newPos, vals);
-			else
-				vals.Clear();
+		if (vals.MaxVal() > 2.)
+			this->AddRegion(newPos, vals);
+		else
+			vals.Clear();
 	};
 
 	pos = it0->first + 1;
-	for (auto it = next(it0); it != itEnd; it0++, it++) {	// loop through the cover
+	auto it = next(it0);
+	for (; it != itEnd; it0++, it++) {	// loop through the cover
 
 		if (isZeroBefore)
 			// skip 2 duplicated reads or standalone read or contiguous reads
@@ -570,17 +573,19 @@ void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion&
 		for (; pos <= it->first; pos++) {			// loop through positions between iterators
 			float val = spliner.Push(it0->second);
 			if (val) {
-				if (!vals.MaxVal())
+				if (!vals.Length())
 					newPos = spliner.CorrectX(pos);	// start new spline
 				vals.AddValue(val);
 			}
 			else 
-				addDecentRgn();						// end new spline
+				if (vals.Length())
+					addDecentRgn();	// end new spline
 		}
 
 		isZeroBefore = !it0->second;
 	}
-	addDecentRgn();
+	if (vals.Length())
+		addDecentRgn();
 }
 
 void ValuesMap::AddRegion(chrlen pos, Values& vals)
@@ -593,8 +598,10 @@ void ValuesMap::AddRegion(chrlen pos, Values& vals)
 void ValuesMap::BuildSpline(const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase)
 {
 	for (const auto& rgn : rgns)
-		if (rgn.Accepted())
+		if (rgn.Accepted()) {
+			auto start = rgn.Start();
 			BuildRegionSpline(rCover, rgn, splineBase);
+		}
 }
 
 void ValuesMap::DiscardNonOverlaps()
