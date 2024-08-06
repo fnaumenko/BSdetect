@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 07/29/2024
+Last modified: 08/06/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -541,7 +541,7 @@ class ValuesMap : public tValuesMap
 	//	@param rCover: raw read coverage or nullptr in case of frag coverage
 	//	@param rgn: potential region
 	//	@param splineBase: half-length of spliner moving window
-	void BuildRegionSpline(const TreatedCover* rCover, const CoverRegion& rgn, fraglen splineBase);
+	void BuildRegionSpline(bool reverse, const TreatedCover* rCover, const CoverRegion& rgn, fraglen splineBase);
 
 	// Adds values with given position
 	//	@param pos: starting position of values
@@ -568,7 +568,7 @@ public:
 	//	@param rCover: raw read coverage or nullptr in case of frag coverage
 	//	@param rgns: potential regions
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase);
+	void BuildSpline(bool reverse, const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase);
 
 	// Resets non overlapping spline value
 	void DiscardNonOverlaps();

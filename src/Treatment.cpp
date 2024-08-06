@@ -507,19 +507,23 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 }
 #endif
 
-void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion& rgn, fraglen splineBase)
+void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, const CoverRegion& rgn, fraglen splineBase)
 {
 	assert(Glob::ReadLen);
 	coviter it0;	// at the beginning the start it, then used as a variable
 	coviter itEnd;	// the end it
 	SSpliner<coval> spliner(CurveTYPE, splineBase);
+	//chrlen pos = rgn.itStart->first - (reverse ? spliner.SilentLength() : spliner.SilentLength()/2);
 	chrlen pos = rgn.itStart->first - spliner.SilentLength();
 
 	// set it0
 	if (rCover) {
 		it0 = rCover->upper_bound(pos);
-		if (!it0->second)	it0--;
-		if (it0 != rCover->begin())	it0--;
+		if (reverse) 
+		{
+			if (!it0->second)	it0--;
+			if (it0 != rCover->begin())	it0--;
+		}
 	}
 	else
 		for (it0 = prev(rgn.itStart); it0->first > pos; it0--);
@@ -532,7 +536,8 @@ void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion&
 	in the case where there are no more reads in the potential region 
 	after the last significant coverage, 'emptiness'
 	*/
-	if (itEnd->second)	itEnd++;	// itEnd->second != 0 means that is not the last iterator
+	if (!reverse)
+		if (itEnd->second)	itEnd++;	// itEnd->second != 0 means that is not the last iterator
 
 	// *** spline via covmap local copy, filtering unsignificant splines
 	chrlen newPos = 0;
@@ -598,11 +603,11 @@ void ValuesMap::AddRegion(chrlen pos, Values& vals)
 	vals.Reserve();
 }
 
-void ValuesMap::BuildSpline(const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase)
+void ValuesMap::BuildSpline(bool reverse, const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase)
 {
 	for (const auto& rgn : rgns)
 		if (rgn.Accepted())
-			BuildRegionSpline(rCover, rgn, splineBase);
+			BuildRegionSpline(reverse, rCover, rgn, splineBase);
 }
 
 void ValuesMap::DiscardNonOverlaps()
@@ -654,11 +659,13 @@ void DataValuesMap::BuildSpline(
 {
 	BYTE strand = !Glob::IsPE;	// TOTAL for PE or FWD for SE
 	StrandData(FWD).BuildSpline(
+		false,
 		rCover ? &rCover->StrandData(FWD) : nullptr,
 		rgns.StrandData(eStrand(strand)),
 		splineBase
 	);
 	StrandData(RVS).BuildSpline(
+		true,
 		rCover ? &rCover->StrandData(RVS) : nullptr,
 		rgns.StrandData(eStrand(2*strand)),
 		splineBase
