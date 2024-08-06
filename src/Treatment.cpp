@@ -271,8 +271,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 
 void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff)
 {
-	//const fraglen minLen = 3 * (Glob::FragLen / 2);		//1.5 fragment lengths
-	const auto minLen = fraglen(1.3f * Glob::FragLen);	// 1.4 test minimum
+	const auto minLen = fraglen(1.1f * Glob::FragLen);	// 1.1 is empirical value obtained by testing
 	chrlen	start = 0, end = 0;
 	coviter itStart, itEnd;
 
@@ -517,10 +516,14 @@ void ValuesMap::BuildRegionSpline(const TreatedCover* rCover, const CoverRegion&
 	chrlen pos = rgn.itStart->first - spliner.SilentLength();
 
 	// set it0
-	if (rCover)
+	if (rCover) {
 		it0 = rCover->upper_bound(pos);
+		if (!it0->second)	it0--;
+		if (it0 != rCover->begin())	it0--;
+	}
 	else
 		for (it0 = prev(rgn.itStart); it0->first > pos; it0--);
+
 	// set itEnd
 	pos = rgn.itEnd->first + spliner.SilentLength();
 	for (itEnd = it0, advance(itEnd, 10); itEnd->first < pos; itEnd++);	// 10 iterators is not enough for significant coverage in any case
