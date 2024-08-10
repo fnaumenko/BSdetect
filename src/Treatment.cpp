@@ -271,7 +271,7 @@ void PrintRegionStats(const T* rgns, chrlen chrLen, bool strands = true)
 
 void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff)
 {
-	const auto minLen = fraglen(1.1f * Glob::FragLen);	// 1.1 is empirical value obtained by testing
+	const auto minLen = Glob::FragLen;	// empirical minLen obtained in tests
 	chrlen	start = 0, end = 0;
 	coviter itStart, itEnd;
 
@@ -349,11 +349,12 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 		StrandData(FWD).SetPotentialRegions(cover.StrandData(FWD), capacity, cutoff);
 		StrandData(RVS).SetPotentialRegions(cover.StrandData(RVS), capacity, cutoff);
 
-		DiscardNonOverlapRegions<CoverRegions>(Data(), Glob::FragLen);
+		auto minOverlap = fraglen(0.7f * Glob::FragLen); // empirical minOverlap obtained in tests
+		DiscardNonOverlapRegions<CoverRegions>(Data(), minOverlap);
 		if (noMultiOverl) {
 			CoverRegions::DiscardMultiOverlapRegions(Data());
 #ifdef MY_DEBUG
-			CoverRegions::CheckSingleOverlapping(Data(), Glob::FragLen);
+			CoverRegions::CheckSingleOverlapping(Data(), minOverlap);
 #endif
 		}
 		if (Verb::Level(Verb::DBG))
@@ -513,14 +514,20 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 	coviter it0;	// at the beginning the start it, then used as a variable
 	coviter itEnd;	// the end it
 	SSpliner<coval> spliner(CurveTYPE, splineBase);
-	//chrlen pos = rgn.itStart->first - (reverse ? spliner.SilentLength() : spliner.SilentLength()/2);
 	chrlen pos = rgn.itStart->first - spliner.SilentLength();
 
-	// set it0
+	/*
+	incrementing it0 (for forward cover) | itEnd (for reversed cover) is required 
+	to smoothly start|complete the spline in case where there are no more reads in the potential region
+	after the last significant coverage, 'emptiness'
+	*/
+
+	// *** set it0
 	if (rCover) {
+		// rgn iterators are fragment cover iterators. We should find position in the read cover
 		it0 = rCover->upper_bound(pos);
-		if (reverse) 
-		{
+		// increment it0 to smooth start the spline
+		if (reverse) {
 			if (!it0->second)	it0--;
 			if (it0 != rCover->begin())	it0--;
 		}
@@ -528,20 +535,16 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 	else
 		for (it0 = prev(rgn.itStart); it0->first > pos; it0--);
 
-	// set itEnd
+	// *** set itEnd
 	pos = rgn.itEnd->first + spliner.SilentLength();
 	for (itEnd = it0, advance(itEnd, 10); itEnd->first < pos; itEnd++);	// 10 iterators is not enough for significant coverage in any case
-	/*
-	incrementing itEnd is required to smoothly complete the spline
-	in the case where there are no more reads in the potential region 
-	after the last significant coverage, 'emptiness'
-	*/
+	// increment itEnd to smooth complete the spline
 	if (!reverse)
 		if (itEnd->second)	itEnd++;	// itEnd->second != 0 means that is not the last iterator
 
 	// *** spline via covmap local copy, filtering unsignificant splines
 	chrlen newPos = 0;
-	bool isZeroBefore = true;
+	chrlen lastZeroPos = 0;
 	Values vals;
 
 	// adds spline, eliminating unsignificant one
@@ -556,26 +559,32 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 	auto it = next(it0);
 	for (; it != itEnd; it0++, it++) {	// loop through the cover
 
-		if (isZeroBefore)
-			// skip 2 duplicated reads or standalone read or contiguous reads
-			if (!it->second) {
-				if (it0->second <= 2) {
-					if (++it == itEnd)	break;
-					it0++;
+		// skip reads that do not form a continuous coverage with the main heap
+		if (lastZeroPos) {
+			if (it0->first - lastZeroPos >= spliner.SilentLength()) {
+				// skip 2 duplicated reads or standalone read or contiguous single reads
+				if (!it->second) {
+					if (it0->second <= 2) {
+						if (++it == itEnd)	break;
+						it0++;
+					}
 				}
-			}
-			// skip 2 overlapping reads
-			else if (it->second == 2) {
-				auto it1 = next(it); if (it1 == itEnd)	break;
-				if (it1->second == 1) {
-					if (++it1 == itEnd)		break;
-					if (!it1->second) {
-						it = move(it1);		// !!! swap?
-						if(++it == itEnd)	break;
-						advance(it0, 3);
+				// skip 2 overlapping reads
+				else if (it->second == 2) {
+					auto it1 = next(it);
+					if (it1 == itEnd)	break;
+					if (it1->second == 1) {
+						if (++it1 == itEnd)		break;
+						if (!it1->second) {
+							it = it1;
+							if (++it == itEnd)	break;
+							advance(it0, 3);
+						}
 					}
 				}
 			}
+			lastZeroPos = 0;
+		}
 
 		// treat other reads
 		for (; pos <= it->first; pos++) {			// loop through positions between iterators
@@ -590,7 +599,7 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 					addDecentRgn();	// end new spline
 		}
 
-		isZeroBefore = !it0->second;
+		if (!it0->second)	lastZeroPos = it0->first;
 	}
 	if (vals.Length())
 		addDecentRgn();
