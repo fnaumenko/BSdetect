@@ -130,12 +130,13 @@ coval TreatedCover::GetMaxVal() const
 void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp& op, Incline& incline) const
 {
 	const int shift = op.Factor * itStop->first;
-	float sumX = 0, sumX2 = 0, sumY = 0, sumXY = 0;
-	coval PtCnt = 0;	// number of points along which the incline was drawn
+	float sumX2 = 0, sumXY = 0;
+	coval sumX = 0, sumY = 0;
+	coval PtCnt = 0;	// number of points along which the incline was build
 
 	incline.Clear();
 	for (; it != itStop; op.Next(it), PtCnt++) {
-		const int x = shift - op.Factor * it->first;
+		const chrlen x = shift - op.Factor * it->first;	// X-distance between current it and itStop
 		const coval y = op.GetPrev(it)->second;
 		sumX += x;
 		sumX2 += x * x;
@@ -145,13 +146,14 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 	if (PtCnt < 2)	return;
 
 	incline.Deriv = 
-		-(PtCnt * sumXY - sumX * sumY) /	// numerator
-		(PtCnt * sumX2 - sumX * sumX);		// denominator
+		-(sumXY * PtCnt - sumX * sumY) /	// numerator
+		(sumX2 * PtCnt - sumX * sumX);			// denominator
 	//angl = coeff * 180 / PI;	if (angl < 0) angl = -angl;
 
-	float x = (sumY + incline.Deriv * sumX) / (PtCnt * incline.Deriv);
+	float x = (incline.Deriv * sumX + sumY) / (incline.Deriv * PtCnt);
 	incline.Pos = itStop->first - op.Factor * chrlen(round(x));
 	incline.TopPos = itStop->first;
+	incline.Weight = coval(sumXY);
 
 #ifdef MY_DEBUG
 	incline.Write();
@@ -743,14 +745,14 @@ void BoundsValues::PushIncline(
 	chrlen grpNumb,
 	BYTE reverse,
 	const TracedPosVal& posVal,
-	const TreatedCover& cover,
+	const TreatedCover& rCover,
 	vector<Incline>& inclines
 
 ) const
 {
 	const StrandOp& opDir = StrandOps[reverse];		// forward operations
 	const StrandOp& opInv = StrandOps[!reverse];	// inversed operations
-	auto itStart = opDir.GetPrev(cover.upper_bound(posVal.Pos(R)));	// min val: right for forward, left for reverse
+	auto itStart = opDir.GetPrev(rCover.upper_bound(posVal.Pos(R)));	// min val: right for forward, left for reverse
 	auto itStop = itStart;									// max val: left for forward, right for reverse
 
 	// *** set itStop
@@ -763,13 +765,13 @@ void BoundsValues::PushIncline(
 
 	// *** it stop correction: calc the best BS position by successive linear regression approximations
 	Incline incline;
-	cover.LinearRegr(itStart, itStop, opDir, incline);
+	rCover.LinearRegr(itStart, itStop, opDir, incline);
 	if (!incline.Valid())	return;
 
 	coviter it0 = itStop;
 	Incline incline1{};
 	auto compare = [&](coviter& it) {
-		cover.LinearRegr(itStart, it, opDir, incline1);
+		rCover.LinearRegr(itStart, it, opDir, incline1);
 		if (!incline1.Valid() || opDir.EqLess(incline.Pos, incline1.Pos))	return true;
 		std::swap(incline, incline1);
 		itStop = it;
@@ -958,10 +960,10 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 #define	SCORE(it)	(it)->second.Score
 #define	GrpNUMB(it)	(it)->second.GrpNumb
 
-void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
+void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline)
 {
 	// all positions are added in ascending order
-	chrlen pos = incl.Pos + StrandOps[reverse].Factor * Glob::ReadLen;
+	chrlen pos = incline.Pos + StrandOps[reverse].Factor * Glob::ReadLen;
 	if (reverse) {		// insert left position; all right positions are already inserted
 		iter lastIt = _lastIt;
 
@@ -979,11 +981,11 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl)
 			lastIt--;
 		}
 
-		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb));
+		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb, incline.Weight));
 		POS(_lastIt) = _lastIt->first;
 	}
 	else {
-		auto it = emplace_hint(end(), pos, BS_PosVal(0, grpNumb));
+		auto it = emplace_hint(end(), pos, BS_PosVal(0, grpNumb, incline.Weight));
 		POS(it) = it->first;
 	}
 }
@@ -1039,12 +1041,12 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 
 const short MIN_BS_WIDTH = 5;
 
-// Fits the BS width to a minimum by adjusting the BS reference positions
+// Fits the BS length to a minimum by adjusting the BS reference positions
 //	@param start: BS iterator pointed to base left bound
 //	@param end: BS iterator pointed to base right bound
 //	@param isLess: if true then the width should be less than the minimum
 //	@returns: true if the condition is met and the width is adjusted
-bool FitToMinWidth(BS_map::iter& start, BS_map::iter& end, bool isLess)
+bool FitToMinLength(BS_map::iter& start, BS_map::iter& end, bool isLess)
 {
 	const auto diff = MIN_BS_WIDTH - LEN(start,end);
 	if ((diff <= 0) == isLess)	return false;
@@ -1060,7 +1062,7 @@ bool FitToMinWidth(BS_map::iter& start, BS_map::iter& end, bool isLess)
 
 void BS_map::ExtendNarrowBS(iter& itL, iter& itR)
 {
-	if (FitToMinWidth(itL, itR, true)) {
+	if (FitToMinLength(itL, itR, true)) {
 		//check left adjacent bounds
 		for (auto it = prev(itL); it != end(); it--)
 			if (IsValid(it))
@@ -1134,9 +1136,9 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, const iter& stop, bool narrowBS
 void BS_map::ExtendNarrowBSs()
 {
 	/*
-	* here the groups are 'canonical', e.g. 
-	* L L L R R L L R L R R
-	*     |_|     |_| |_|
+	here the groups are 'canonical', e.g. 
+	L L L R R L L R L R R
+	    |_|     |_| |_|
 	*/
 	bool	lastLeft = true;	// true if there was BS left bound
 	bool	narrowBS = false;	// true if there's at least one narrow BS
@@ -1187,15 +1189,15 @@ void BS_map::ExtendNarrowBSs()
 void BS_map::Refine()
 {
 	/*
-	* BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by forward reads
-	*
-	* Options for placing bounds in a region:
-	* canonical:					[[L] [R]]
-	* adjacent right/left bounds:	[R] [[L] [R]] [L]
-	* 'negative' BS width:			[R] [L]
-	*
-	* Method brings the instance to canonical form, resetting the score of all adjacent elements to zero,
-	* and marking BSs with 'negative' width.
+	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by forward reads
+
+	Options for placing bounds in a region:
+	canonical:					[[L] [R]]
+	adjacent right/left bounds:	[R] [[L] [R]] [L]
+	'negative' BS width:			[R] [L]
+	
+	Method brings the instance to canonical form, resetting the score of all adjacent elements to zero,
+	and marking BSs with 'negative' width.
 	*/
 	auto lastExtRight_it = end();	// iterator pointing to the last Right entry that starts the region 
 	uint16_t extRightCnt = 0;		// count of adjacent Right entries only (that starts the region)
@@ -1235,9 +1237,9 @@ void BS_map::Refine()
 			auto itR = ResetExtEntries(--it, --extLeftCnt);	// reset other adjacent entries
 			if (itR != end()) {
 				REVERSE(itR) = false;				// change 'left' bound to 'right
-				// decrease the width of the updated BS if needed
+				// decrease the length of the updated BS if needed
 				auto itL = prev(itR);
-				FitToMinWidth(itL, itR, false);
+				FitToMinLength(itL, itR, false);
 			}
 		}
 	};
@@ -1466,12 +1468,12 @@ void BS_map::PrintScoreDistrib(const string& fName) const
 
 void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos) const
 {
-	string format = "%9d % 5d  %c %8d %5.2f   %s\n";
+	string format = "%9d % 5d  %c %8d %5.2f %6d\t%s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
 	FormWriter file(fName.c_str());
-	file.Write("  pos    numb bnd  ref pos score   IGV view\n");
+	file.Write("  pos     numb bnd  ref_pos score weight\tlocus\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
 		if (selected && !x.second.Score)	continue;
@@ -1483,6 +1485,7 @@ void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos
 			bound[x.second.Reverse],
 			x.first != x.second.RefPos ? x.second.RefPos : 0,
 			x.second.Score,
+			x.second.Weight,
 			locus.Print(x.first)
 		);
 	}

@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 08/06/2024
+Last modified: 08/11/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -269,21 +269,22 @@ struct Incline
 {
 	chrlen	Pos;		// position of the incline on the x-axis (chromosome's position)
 	chrlen	TopPos;		// position of the top point of the incline
+	coval	Weight;
 	float	Deriv;		// derivative (tangent of the angle of incline)
 
 	bool Valid() const {
 		return
 			Pos					// zero Pos is the result of a failed regression calculation
 			&& Deriv < 1		// 1 (vertical line) is useless
-			&& Deriv >= 0.01;	// too small angle is useless
+			&& Deriv >= 0.01;	// near to gorizontal line is useless
 	}
 
-	void Clear() { Deriv = 0; Pos = 0; }
+	void Clear() { Deriv = 0, Pos = 0; }
 
 	bool operator != (const Incline& incl) const { return Pos != incl.Pos || TopPos != incl.TopPos; }
 
 #ifdef MY_DEBUG
-	void Print() const { printf("%d %d, Deriv: %-2.2f\n", Pos, TopPos, Deriv); }
+	void Print() const { printf("%d %d %d, Deriv: %-2.2f\n", Pos, TopPos, Weight, Deriv); }
 
 private:
 	static shared_ptr<FormWriter> OutFile;
@@ -619,8 +620,8 @@ class BoundValues : public Values
 	float	_val[2];	// region min, max values
 public:
 
-	BoundValues(chrlen startPos, float valMin, float valMax, Values& vals) 
-		: _pos(startPos), _val{valMin,valMax}, Values(move(vals))
+	BoundValues(chrlen startPos, float valMin, float valMax, Values& vals)
+		: _pos(startPos), _val{ valMin,valMax }, Values(move(vals))
 	{}
 
 	chrlen	Start()	const { return _pos; }
@@ -692,7 +693,7 @@ class BoundsValues : public vector<BoundValues>
 		chrlen grpNumb,
 		BYTE reverse,
 		const TracedPosVal& posVal,
-		const TreatedCover& cover,
+		const TreatedCover& rCover,
 		vector<Incline>& inclines
 	) const;
 
@@ -797,12 +798,13 @@ struct BS_PosVal
 	BYTE		 Reverse;
 	chrlen		 RefPos = 0;	// reference position; by default duplicates the map position, but can be adjusted
 	const chrlen GrpNumb;		// group number
+	const coval	 Weight;
 	float		 Score = 1;
 
 	// Constructor
 	//	@param reverse: 0 for forward, 1 for reverse
 	//	@param grpNumb: group number
-	BS_PosVal(BYTE reverse, chrlen grpNumb) : Reverse(reverse), GrpNumb(grpNumb) {}
+	BS_PosVal(BYTE reverse, chrlen grpNumb, coval weight) : Reverse(reverse), GrpNumb(grpNumb), Weight(weight) {}
 };
 
 class BS_map : public map<chrlen, BS_PosVal>
@@ -819,8 +821,8 @@ private:
 	// Inserts BS position (bound)
 	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
-	//	@param incl: inclined line
-	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl);
+	//	@param incline: inclined line
+	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline);
 
 	// Inserts group of BS positions (left/right bounds)
 	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
@@ -935,6 +937,7 @@ public:
 	void PrintScoreDistrib(const string& fName) const;
 
 	// Prints BS positions
+	//	@param cID: chrom ID
 	//	@param fName: name of file to print
 	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 
