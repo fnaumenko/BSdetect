@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 08/11/2024
+Last modified: 08/13/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -115,7 +115,7 @@ Group is a set of splines/derivatives/inclines within one potential region.
 Groups are numbered sequentially starting from 1, their numbering may not coincide with the numbering of potential regions (which can be "empty")
 */
 
-// Sequential float values
+// Sequential float values (for spline and deriv)
 class Values : public vector<float>
 {
 	float _maxVal;
@@ -269,7 +269,7 @@ struct Incline
 {
 	chrlen	Pos;		// position of the incline on the x-axis (chromosome's position)
 	chrlen	TopPos;		// position of the top point of the incline
-	coval	Weight;
+	float	TopCover;
 	float	Deriv;		// derivative (tangent of the angle of incline)
 
 	bool Valid() const {
@@ -284,7 +284,7 @@ struct Incline
 	bool operator != (const Incline& incl) const { return Pos != incl.Pos || TopPos != incl.TopPos; }
 
 #ifdef MY_DEBUG
-	void Print() const { printf("%d %d %d, Deriv: %-2.2f\n", Pos, TopPos, Weight, Deriv); }
+	void Print() const { printf("%d %d %2.1f, Deriv: %-2.2f\n", Pos, TopPos, TopCover, Deriv); }
 
 private:
 	static shared_ptr<FormWriter> OutFile;
@@ -617,6 +617,7 @@ public:
 class BoundValues : public Values
 {
 	chrlen	_pos;		// region start position
+	//float	_topCover;
 	float	_val[2];	// region min, max values
 public:
 
@@ -630,16 +631,27 @@ public:
 	// Copies min, max values to the external pair
 	void	GetValues(float(&val)[2]) const { memcpy(val, _val, 2 * sizeof(float)); }
 
-	float	ValRatio() const { return _val[0] / _val[1]; }
+	float	MaxValue() const { return _val[1]; }
+};
+
+// Wrapper for vector<Incline> with addition of SpreadTopCover() method
+class Inclines : public vector<Incline>
+{
+	float	_topCover = 0;
+	USHORT	_firstInd = 0;
+
+public:
+	void Clear() { _topCover = 0; _firstInd = 0; clear(); }
+
+	// Sets maximum top-coverage among a group of intersecting inclines
+	//	@param reverse: 0 for forward, 1 for reverse
+	void SpreadTopCover(BYTE reverse);
 };
 
 // BoundValues collection representing 
 // rising (for the right side of the peak) or falling (for the left side of the peak) derivatives
 class BoundsValues : public vector<BoundValues>
 {
-#ifdef MY_DEBUG
-	static OSpecialWriter* LineWriter;	// line writer to save inclined
-#endif
 	using citer = vector<BoundValues>::const_iterator;
 
 	// Start/end positions and min/max values with storage of previous ones
@@ -655,7 +667,7 @@ class BoundsValues : public vector<BoundValues>
 
 		// Returns previous position
 		//	@param reverse: 0 - start, 1 - end
-		chrlen	PrevPos(BYTE reverse) const { return _pos0[reverse]; }
+		//chrlen	PrevPos(BYTE reverse) const { return _pos0[reverse]; }
 
 		// Returns current value
 		//	@param lim: 0 - min, 1 - max
@@ -685,16 +697,17 @@ class BoundsValues : public vector<BoundValues>
 	};
 
 #ifdef MY_DEBUG
+	static OSpecialWriter* LineWriter;	// line writer to save inclines
+
 	float _maxVal = 0;
 #endif
 	chrlen _grpNumb;	// group number
 
 	void PushIncline(
-		chrlen grpNumb,
 		BYTE reverse,
 		const TracedPosVal& posVal,
 		const TreatedCover& rCover,
-		vector<Incline>& inclines
+		Inclines& inclines
 	) const;
 
 	// Adds significant derivative values
@@ -717,6 +730,13 @@ class BoundsValues : public vector<BoundValues>
 		Values& derivs
 	);
 
+	// Adds inclined line
+	//	@param reverse[in]: 0 for forward (right bounds), 1 for reverse (left bounds)
+	//	@param posVal[in,out]: traced position-value
+	//	@param rCover[in]: read coverage
+	//	@param inclines[out]: filled inclined lines collection
+	void AddIncline(BYTE reverse, TracedPosVal& posVal, const TreatedCover& rCover, Inclines& inclines) const;
+
 public:
 #ifdef MY_DEBUG
 	static void SetSpecialWriter(OSpecialWriter& lineWriter) { LineWriter = &lineWriter; }
@@ -733,12 +753,12 @@ public:
 	// Collects forward inclined lines
 	//	@param rCover[in]: read coverage
 	//	@param inclines[out]: filled collection of forward inclined lines
-	void CollectForwardInclines	(const TreatedCover& cover, vector<Incline>& inclines) const;
+	void CollectForwardInclines(const TreatedCover& rCover, Inclines& inclines) const;
 
 	// Collects reversed inclined lines
 	//	@param rCover[in]: read coverage
 	//	@param inclines[out]: filled collection of reversed inclined lines
-	void CollectReverseInclines(const TreatedCover& cover, vector<Incline>& inclines) const;
+	void CollectReverseInclines(const TreatedCover& rCover, Inclines& inclines) const;
 
 	// Adds derivative values
 	//	@param spline: spline on the basis of which derivatives are calculated
@@ -798,13 +818,13 @@ struct BS_PosVal
 	BYTE		 Reverse;
 	chrlen		 RefPos = 0;	// reference position; by default duplicates the map position, but can be adjusted
 	const chrlen GrpNumb;		// group number
-	const coval	 Weight;
-	float		 Score = 1;
+	const float	 TopCover;
+	float		 Score  = 1;
 
 	// Constructor
 	//	@param reverse: 0 for forward, 1 for reverse
 	//	@param grpNumb: group number
-	BS_PosVal(BYTE reverse, chrlen grpNumb, coval weight) : Reverse(reverse), GrpNumb(grpNumb), Weight(weight) {}
+	BS_PosVal(BYTE reverse, chrlen grpNumb, float topCover) : Reverse(reverse), GrpNumb(grpNumb), TopCover(topCover) {}
 };
 
 class BS_map : public map<chrlen, BS_PosVal>
@@ -828,7 +848,7 @@ private:
 	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
 	//	@param inclines: forward/reversed (right/left) inclined lines
-	void AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines);
+	void AddBounds(BYTE reverse, chrlen grpNumb, float topCover, Inclines& inclines);
 
 	// Fills the instance with recognized left/right BS positions (bounds)
 	//	@param reverse[in]: 0 for forward (right bounds), 1 for reverse (left bounds)
@@ -871,12 +891,7 @@ public:
 	// Fills the instance with recognized binding sites
 	//	@param derivs: derivatives
 	//	@param rCover: read coverage
-	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover)
-	{
-		SetBounds(R, derivs.StrandData(FWD), rCover.StrandData(FWD));
-		_lastIt = begin();
-		SetBounds(L, derivs.StrandData(RVS), rCover.StrandData(RVS));
-	}
+	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover);
 
 	// Brings the instance to canonical order of placing BS bounds;
 	// may adjust reference position

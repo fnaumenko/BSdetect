@@ -153,7 +153,6 @@ void TreatedCover::LinearRegr(coviter it, const coviter& itStop, const StrandOp&
 	float x = (incline.Deriv * sumX + sumY) / (incline.Deriv * PtCnt);
 	incline.Pos = itStop->first - op.Factor * chrlen(round(x));
 	incline.TopPos = itStop->first;
-	incline.Weight = coval(sumXY);
 
 #ifdef MY_DEBUG
 	incline.Write();
@@ -736,28 +735,50 @@ void DataValuesMap::Print(chrid cID, chrlen stopNumb) const
 }
 #endif
 
+//===== Inclines
+
+void Inclines::SpreadTopCover(BYTE reverse)
+{
+	auto sz = USHORT(size());
+	if (sz) {
+		const auto& lastItem = back();
+		const auto topCover = lastItem.TopCover;
+		if (sz > 1) {
+			const auto lastInd = USHORT(sz - 1);
+			if (StrandOps[reverse].Less(lastItem.Pos, at(lastInd - 1).TopPos)) {
+				for (auto i = _firstInd; i < lastInd; i++)
+					at(i).TopCover = _topCover;
+				_topCover = topCover;
+				_firstInd = lastInd;
+				return;
+			}
+		}
+		if (_topCover < topCover)
+			_topCover = topCover;
+	}
+}
+
+
 //===== BoundsValues
 #ifdef MY_DEBUG
 OSpecialWriter* BoundsValues::LineWriter = nullptr;
 #endif
 
 void BoundsValues::PushIncline(
-	chrlen grpNumb,
 	BYTE reverse,
-	const TracedPosVal& posVal,
+	const BoundsValues::TracedPosVal& posVal,
 	const TreatedCover& rCover,
-	vector<Incline>& inclines
-
+	Inclines& inclines
 ) const
 {
 	const StrandOp& opDir = StrandOps[reverse];		// forward operations
 	const StrandOp& opInv = StrandOps[!reverse];	// inversed operations
-	auto itStart = opDir.GetPrev(rCover.upper_bound(posVal.Pos(R)));	// min val: right for forward, left for reverse
+	auto itStart = opDir.GetPrev(rCover.upper_bound(posVal.Pos(0)));	// min val: right for forward, left for reverse
 	auto itStop = itStart;									// max val: left for forward, right for reverse
 
 	// *** set itStop
-	if (reverse)	for (itStop++; itStop->first < posVal.Pos(L); itStop++);
-	else			for (itStop--; itStop->first > posVal.Pos(L); itStop--);
+	if (reverse)	for (itStop++; itStop->first < posVal.Pos(1); itStop++);
+	else			for (itStop--; itStop->first > posVal.Pos(1); itStop--);
 
 	// checking if there is an ordinary tag pool before the current start, masked by a spline
 	if (!opDir.GetPrev(itStart)->second)
@@ -793,6 +814,7 @@ void BoundsValues::PushIncline(
 		if (reverse && nextStep) { nextStep = false; it++; }
 		if (compare(it))	break;
 	}
+	incline.TopCover = posVal.Val(reverse);
 
 	if (inclines.size()) {
 		if (inclines.back() != incline)		// skip duplicate incline
@@ -809,23 +831,29 @@ void BoundsValues::PushIncline(
 #endif
 }
 
-void BoundsValues::CollectForwardInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
+void BoundsValues::AddIncline(BYTE reverse, TracedPosVal& posVal, const TreatedCover& rCover, Inclines& inclines) const
+{
+	PushIncline(reverse, posVal, rCover, inclines);
+	inclines.SpreadTopCover(reverse);
+	posVal.Retain();
+}
+
+void BoundsValues::CollectForwardInclines(const TreatedCover& rCover, Inclines& inclines) const
 {
 	TracedPosVal posVal;
-	for (auto it = rbegin(); it != rend(); it++) {		// loop through one derivative region
+
+	for (auto it = rbegin(); it != rend(); it++) {	// loop through one derivative region
 		posVal.Set(R, it);
-		PushIncline(_grpNumb, R, posVal, rCover, inclines);
-		posVal.Retain();
+		AddIncline(R, posVal, rCover, inclines);
 	}
 }
 
-void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, vector<Incline>& inclines) const
+void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, Inclines& inclines) const
 {
 	TracedPosVal posVal;
 	for (auto it = begin(); it != end(); it++) {		// loop through one derivative region
 		posVal.Set(L, it);
-		PushIncline(_grpNumb, L, posVal, rCover, inclines);
-		posVal.Retain();
+		AddIncline(L, posVal, rCover, inclines);
 	}
 }
 
@@ -872,6 +900,8 @@ void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos
 	bool	nextPit = false;
 	vector<Region> negligRgns;	// negligible derivator regions (inner only); typical capacity is 1
 
+	float topVal = 0;
+
 	// search for negligible regions
 	for (auto& val : deriv) {
 		if (val < minDeriv) {
@@ -907,14 +937,19 @@ void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 
 		Values deriv;			deriv.Reserve();
 		BoundsValues derivSet;	derivSet.reserve(4);
-		fraglen pos = 0;	// relative position
+		fraglen pos = 0;	// start relative position
 		const auto& itEnd = spline.second.end();
+
+		float topVal = 0;
 
 		// loop through spline
 		for (auto it0 = spline.second.begin(), it = next(it0); it != itEnd; it0++, it++) {
 			float tang = (*it - *it0) * factor;		// flip sign of pos strand delta
-			if (tang > 0)							// cut off tangent of a falling spline
+			if (tang > 0) {							// cut off tangent of a falling spline
 				deriv.AddValue(tang);
+				if (topVal < *it)
+					topVal = *it;
+			}
 			else {
 				pos++;
 				if (deriv.MaxVal()) {
@@ -922,6 +957,7 @@ void BoundsValuesMap::BuildDerivs(int factor, const ValuesMap& splines)
 
 					derivSet.AddValues(spline, pos, deriv);
 					pos += len;
+					topVal = 0;
 					deriv.Reserve();
 				}
 			}
@@ -981,16 +1017,16 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline)
 			lastIt--;
 		}
 
-		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb, incline.Weight));
+		_lastIt = emplace_hint(lastIt, pos, BS_PosVal(1, grpNumb, incline.TopCover));
 		POS(_lastIt) = _lastIt->first;
 	}
 	else {
-		auto it = emplace_hint(end(), pos, BS_PosVal(0, grpNumb, incline.Weight));
+		auto it = emplace_hint(end(), pos, BS_PosVal(0, grpNumb, incline.TopCover));
 		POS(it) = it->first;
 	}
 }
 
-void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
+void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, float topCover, Inclines& inclines)
 {
 	if (!inclines.size())	return;
 
@@ -1002,11 +1038,11 @@ void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 	);
 
 	// find permissible derivative limit
-	float limDeriv = 0;
+	float minDeriv = 0;
 	for (const auto& i : inclines)
-		limDeriv += i.Deriv;
-	limDeriv /= inclines.size();
-	limDeriv *= 0.15F;
+		minDeriv += i.Deriv;
+	minDeriv /= inclines.size();	// arithmetic mean
+	minDeriv *= 0.15F;				// 0.15: empirical rate
 
 	// *** Intersection Filter & Insignificant Incline Filter:
 	// insert only the best bounds (formed by the steepest inclines), and with a significant derivative
@@ -1016,7 +1052,7 @@ void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 	AddPos(reverse, grpNumb, *it);		// definitely add the first, steepest (tightest) incline
 	for (it++; it != inclines.cend(); it++)
 		if (StrandOps[!reverse].EqLess(it->TopPos, addedPos)
-		&& it->Deriv > limDeriv)	
+		&& it->Deriv > minDeriv)	
 		{
 			AddPos(reverse, grpNumb, *it);
 			addedPos = it->TopPos;
@@ -1025,17 +1061,17 @@ void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines)
 
 void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const TreatedCover& rCover)
 {
-	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, vector<Incline>& inclines) const;
+	using tSetBSpos = void(BoundsValues::*)(const TreatedCover&, Inclines& inclines) const;
 	tSetBSpos fcollectInclines = reverse ?
 		&BoundsValues::CollectReverseInclines :
 		&BoundsValues::CollectForwardInclines;
-	vector<Incline> inclines;
-	inclines.reserve(4);
+	Inclines inclines;
+	inclines.reserve(6);
 
 	for (const auto& d : derivs) {		// loop through the derivative regions
-		inclines.clear();
+		inclines.Clear();
 		(d.second.*fcollectInclines)(rCover, inclines);
-		AddBounds(reverse, d.second.GrpNumb(), inclines);
+		AddBounds(reverse, d.second.GrpNumb(), d.second.MaxVal(), inclines);
 	}
 }
 
@@ -1184,6 +1220,13 @@ void BS_map::ExtendNarrowBSs()
 			itStart = it;
 		itEnd = it;
 	}
+}
+
+void BS_map::Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover)
+{
+	SetBounds(R, derivs.StrandData(FWD), rCover.StrandData(FWD));
+	_lastIt = begin();
+	SetBounds(L, derivs.StrandData(RVS), rCover.StrandData(RVS));
 }
 
 void BS_map::Refine()
@@ -1468,12 +1511,12 @@ void BS_map::PrintScoreDistrib(const string& fName) const
 
 void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos) const
 {
-	string format = "%9d % 5d  %c %8d %5.2f %6d\t%s\n";
+	string format = "%9d % 5d  %c %8d %5.2f %6.1f\t%s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
 	FormWriter file(fName.c_str());
-	file.Write("  pos     numb bnd  ref_pos score weight\tlocus\n");
+	file.Write("  pos     numb bnd  ref_pos score topCover\tlocus\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
 		if (selected && !x.second.Score)	continue;
@@ -1485,7 +1528,7 @@ void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos
 			bound[x.second.Reverse],
 			x.first != x.second.RefPos ? x.second.RefPos : 0,
 			x.second.Score,
-			x.second.Weight,
+			x.second.TopCover,
 			locus.Print(x.first)
 		);
 	}
