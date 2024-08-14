@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 08/13/2024
+Last modified: 08/14/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -11,10 +11,6 @@ Last modified: 08/13/2024
 #include "ChromData.h"
 #include "CrossRgns.h"
 #include "Spline.h"
-//#include <fstream>
-//#include <stdexcept>
-//#include <iterator>
-//#include <stdio.h>
 
 #define MY_DEBUG
 
@@ -97,7 +93,6 @@ static struct Glob {
 	static bool		FragLenUndef;
 	static readlen	ReadLen;	// length of read
 	static fraglen	FragLen;	// average fragment length
-	static fraglen	ROI_ext;	// Regions of interest extension
 
 	static void SetPE(bool isPE) { if ((IsPE = isPE)) FragLenUndef = false; }
 
@@ -223,7 +218,7 @@ public:
 	bool IsWriterSet() const { return _writers != nullptr; }
 
 	// Writes oblique line (positive or negative strand)
-	//	@param reverse: true if tag is reversed (neg strand)
+	//	@param reverse: 0 for forward, 1 for reverse
 	//	@param start: start (zero value) position
 	//	@param itStop: stop (max value) iterator
 	void WriteIncline(BYTE reverse, chrlen start, coviter& itStop);
@@ -261,7 +256,7 @@ public:
 	}
 };
 
-//=== TREATED COVER & COLLECTION
+//=== INCLINE & COLLECTION
 
 // Inclined line represents average derivative of the area of read's coverage growth/decline,
 // as a resul of Linear Regression
@@ -287,21 +282,95 @@ struct Incline
 	void Print() const { printf("%d %d %2.1f, Deriv: %-2.2f\n", Pos, TopPos, TopCover, Deriv); }
 
 private:
+	static OSpecialWriter* LineWriter;	// line writer to save inclines
 	static shared_ptr<FormWriter> OutFile;
 	static chrid cID;
 
 public:
 	static void SetOutFile(chrid cid, const char* fname) { cID = cid;  OutFile.reset(new FormWriter(fname)); }
 
-	void Write();
+	static void SetSpecialWriter(OSpecialWriter& lineWriter) { LineWriter = &lineWriter; }
+
+	// Writes incline to static file
+	//	@param reverse: 0 for forward, 1 for reverse
+	//	@param itStop: read spline stop iterator for the current incline
+	void WriteLine(BYTE reverse, coviter& itStop) const;
+
+	void WriteLocus() const;
 #endif
 };
+
+// Wrapper for vector<Incline> with addition of SpreadTopCover() method
+class Inclines : public vector<Incline>
+{
+	float	_topCover = 0;	// required for SpreadTopCover() only
+	USHORT	_firstInd = 0;	// required for SpreadTopCover() only
+
+public:
+	void Clear() { _topCover = 0; _firstInd = 0; clear(); }
+
+	// Adds incline with duplicate control
+	void Add(const Incline& incline);
+
+	// Sets maximum top-coverage among a group of intersecting inclines
+	//	@param reverse: 0 for forward, 1 for reverse
+	//	@param topCover: top coverage  for the group
+	void SpreadTopCover(BYTE reverse, float topCover);
+};
+
+// Start/end positions and min/max values with storage of previous ones
+class TracedPosVal
+{
+	chrlen	_pos[2], _pos0[2]{ 0,0 };	// current, previous start/end positions
+	float	_val[2], _val0[2]{ 0,0 };	// current, previous min/max values 
+
+public:
+	// Returns current position
+	//	@param edge: 0 - start, 1 - end
+	chrlen	Pos(BYTE edge) const { return _pos[edge]; }
+
+	// Returns current maximum value
+	//	@param reverse:  0 for forward, 1 for reverse
+	float	Val(BYTE reverse) const { return _val[reverse]; }
+
+	// Set start/end positions and values by cover iterator, and merge successive raises
+	//	@param reverse: 0 for forward, 1 for reverse
+	//	@param it: forward/reverse cover iterator
+	template<typename T>
+	void Set(BYTE reverse, T it)
+	{
+		// set positions & values
+		_pos[!reverse] = it->Start();	// start: right for forward, left for reverse
+		_pos[reverse] = it->End();		// end: left for forward, right for reverse
+		it->GetValues(_val);
+		// merge successive raises
+		if (_val0[reverse] && _val[!reverse] / _val0[reverse] >= 0.9)
+			_pos[0] = _pos0[0];
+	}
+
+	// Saves previous positions/values (by swapping)
+	void Retain()
+	{
+		std::swap(_pos, _pos0);
+		std::swap(_val, _val0);
+	}
+};
+
+
+//=== TREATED COVER & COLLECTION
 
 class TreatedCover : public AccumCover
 {
 #ifdef MY_DEBUG
 	static OSpecialWriter* SplineWriter;	// spline writer to save local splines
 #endif
+
+	// Calculates Linear Regression
+	//	@param it: start iterator
+	//	@param itStop: end iterator
+	//	@param op: strand operations
+	//	@param incline[out]: resulting inclined line
+	void LinearRegr(coviter it, const coviter& itStop, const StrandOp& op, Incline& incline) const;
 
 public:
 #ifdef MY_DEBUG
@@ -314,24 +383,18 @@ public:
 	//	@param rng: potential region
 	//chrlen GetRegionCentre(const CoverRegion& rng) const;
 
-	// Calculates Linear Regression
-	//	@param it: start iterator
-	//	@param itStop: end iterator
-	//	@param op: strand operations
-	//	@incline[out]: resulting inclined line
-	void LinearRegr(coviter it, const coviter& itStop, const StrandOp& op, Incline& incline) const;
-
 	// Sets spline of the instance between start-end positions
 	//	@param spliner[in]: spliner that does the work
 	//	@param startPos[in]: start position
 	//	@param endPos[in]: end position
 	//	@param vals[out]: resulting splined values
-	void SetLocalSpline(
-		SSpliner<coval>& spliner,
-		chrlen startPos,
-		chrlen endPos,
-		Values& vals
-	) const;
+	void SetLocalSpline(SSpliner<coval>& spliner, chrlen startPos, chrlen endPos, Values& vals) const;
+
+	// Calculates Linear Regression incline and pushes it to the inclines collection
+	//	@param reverse[in]: 0 for forward, 1 for reverse
+	//	@param posVal[in]: traced positions & values
+	//	@param inclines[out]: resulting inclines collection
+	void PushIncline(BYTE reverse, const TracedPosVal& posVal, Inclines& inclines) const;
 };
 
 // 'CombCover' keeps the chromosome covers and optionally the set of writers these covers to file.
@@ -634,81 +697,14 @@ public:
 	float	MaxValue() const { return _val[1]; }
 };
 
-// Wrapper for vector<Incline> with addition of SpreadTopCover() method
-class Inclines : public vector<Incline>
-{
-	float	_topCover = 0;
-	USHORT	_firstInd = 0;
-
-public:
-	void Clear() { _topCover = 0; _firstInd = 0; clear(); }
-
-	// Sets maximum top-coverage among a group of intersecting inclines
-	//	@param reverse: 0 for forward, 1 for reverse
-	void SpreadTopCover(BYTE reverse);
-};
-
 // BoundValues collection representing 
 // rising (for the right side of the peak) or falling (for the left side of the peak) derivatives
 class BoundsValues : public vector<BoundValues>
 {
 	using citer = vector<BoundValues>::const_iterator;
 
-	// Start/end positions and min/max values with storage of previous ones
-	class TracedPosVal
-	{
-		chrlen	_pos[2], _pos0[2]{ 0,0 };	// current, previous start/end positions
-		float	_val[2], _val0[2]{ 0,0 };	// current, previous min/max values 
-
-	public:
-		// Returns current position
-		//	@param reverse: 0 - start, 1 - end
-		chrlen	Pos(BYTE reverse) const { return _pos[reverse]; }
-
-		// Returns previous position
-		//	@param reverse: 0 - start, 1 - end
-		//chrlen	PrevPos(BYTE reverse) const { return _pos0[reverse]; }
-
-		// Returns current value
-		//	@param lim: 0 - min, 1 - max
-		float	Val(BYTE lim) const { return _val[lim]; }
-
-		// Set start/end positions and values by cover iterator, and merge successive raises
-		//	@param reverse: 0 for forward, 1 for reverse
-		//	@param it: forward/reverse cover iterator
-		template<typename T>
-		void Set(BYTE reverse, T it)
-		{
-			// set positions & values
-			_pos[!reverse] = it->Start();	// start: right for forward, left for reverse
-			_pos[reverse] = it->End();		// end: left for forward, right for reverse
-			it->GetValues(_val);
-			// merge successive raises
-			if (_val0[reverse] && _val[!reverse] / _val0[reverse] >= 0.9)
-				_pos[0] = _pos0[0];
-		}
-
-		// Saves previous positions/values (by swapping)
-		void Retain()
-		{
-			std::swap(_pos, _pos0);
-			std::swap(_val, _val0);
-		}
-	};
-
-#ifdef MY_DEBUG
-	static OSpecialWriter* LineWriter;	// line writer to save inclines
-
 	float _maxVal = 0;
-#endif
 	chrlen _grpNumb;	// group number
-
-	void PushIncline(
-		BYTE reverse,
-		const TracedPosVal& posVal,
-		const TreatedCover& rCover,
-		Inclines& inclines
-	) const;
 
 	// Adds significant derivative values
 	//	@param spline: spline on the basis of which derivatives are calculated
@@ -730,19 +726,9 @@ class BoundsValues : public vector<BoundValues>
 		Values& derivs
 	);
 
-	// Adds inclined line
-	//	@param reverse[in]: 0 for forward (right bounds), 1 for reverse (left bounds)
-	//	@param posVal[in,out]: traced position-value
-	//	@param rCover[in]: read coverage
-	//	@param inclines[out]: filled inclined lines collection
-	void AddIncline(BYTE reverse, TracedPosVal& posVal, const TreatedCover& rCover, Inclines& inclines) const;
-
 public:
-#ifdef MY_DEBUG
-	static void SetSpecialWriter(OSpecialWriter& lineWriter) { LineWriter = &lineWriter; }
-
 	float	MaxVal()	const { return _maxVal; }
-#endif
+	
 	// Returns group number
 	chrlen	GrpNumb()	const { return _grpNumb; }
 
@@ -813,7 +799,7 @@ public:
 const BYTE R = 0;	// right bound, synonym for 'forward'
 const BYTE L = 1;	// left  bound, synonym for 'reverse' 
 
-struct BS_PosVal
+struct BS_bound
 {
 	BYTE		 Reverse;
 	chrlen		 RefPos = 0;	// reference position; by default duplicates the map position, but can be adjusted
@@ -824,14 +810,14 @@ struct BS_PosVal
 	// Constructor
 	//	@param reverse: 0 for forward, 1 for reverse
 	//	@param grpNumb: group number
-	BS_PosVal(BYTE reverse, chrlen grpNumb, float topCover) : Reverse(reverse), GrpNumb(grpNumb), TopCover(topCover) {}
+	BS_bound(BYTE reverse, chrlen grpNumb, float topCover) : Reverse(reverse), GrpNumb(grpNumb), TopCover(topCover) {}
 };
 
-class BS_map : public map<chrlen, BS_PosVal>
+class BS_map : public map<chrlen, BS_bound>
 {
 public:
-	using iter = map<chrlen, BS_PosVal>::iterator;
-	using citer = map<chrlen, BS_PosVal>::const_iterator;
+	using iter = map<chrlen, BS_bound>::iterator;
+	using citer = map<chrlen, BS_bound>::const_iterator;
 
 private:
 	iter _lastIt;	// last inserted iterator (for the left bounds only)
