@@ -1020,8 +1020,6 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline)
 
 void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, float topCover, Inclines& inclines)
 {
-	if (!inclines.size())	return;
-
 	// sort inclines by ascending (for forward) / descending (for reverde) reference positions
 	sort(inclines.begin(), inclines.end(),
 		[&reverse](const Incline& i1, const Incline& i2) {
@@ -1063,7 +1061,8 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 	for (const auto& d : derivs) {		// loop through the derivative regions
 		inclines.Clear();
 		(d.second.*fcollectInclines)(rCover, inclines);
-		AddBounds(reverse, d.second.GrpNumb(), d.second.MaxVal(), inclines);
+		if (inclines.size())
+			AddBounds(reverse, d.second.GrpNumb(), d.second.MaxVal(), inclines);
 	}
 }
 
