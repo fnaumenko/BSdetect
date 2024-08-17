@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 08/14/2024
+Last modified: 08/17/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -820,7 +820,16 @@ public:
 	using citer = map<chrlen, BS_bound>::const_iterator;
 
 private:
-	iter _lastIt;	// last inserted iterator (for the left bounds only)
+	struct Cand
+	{
+		iter lastIt;
+		float relScore;
+
+		Cand(iter it, float score) : lastIt(it), relScore(score) {}
+	};
+	using Cands = vector<Cand>;
+
+	iter _lastIt;	// last inserted iterator (used in AddPos(), for the left bounds only)
 
 	static void SetInvalid(iter it) { it->second.Score = 0; }
 
@@ -862,6 +871,8 @@ private:
 	// Extends too narrow BSs to the minimum acceptable width by adjusting reference position
 	void ExtendNarrowBSs();
 
+	void RefineRgn(Cands& cands, citer endIt);
+
 	// Sets BSs scores within the group according to fragment coverage spline
 	//	@param start: first valid iterator in the group
 	//	@param end: next of the last valid iterator in the group
@@ -882,6 +893,8 @@ public:
 	// Brings the instance to canonical order of placing BS bounds;
 	// may adjust reference position
 	void Refine();
+
+	void Refine1();
 
 	// Sets score for each binding sites and normalizes it
 	//	@param fragCovers: fragment total coverage

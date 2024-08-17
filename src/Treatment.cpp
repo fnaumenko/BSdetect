@@ -813,7 +813,7 @@ void Inclines::SpreadTopCover(BYTE reverse, float topCover)
 		lastItem.TopCover = topCover;
 		if (sz > 1) {
 			const auto lastInd = USHORT(sz - 1);
-			if (StrandOps[reverse].Less(lastItem.Pos, at(lastInd - 1).TopPos)) {
+			if (StrandOps[reverse].EqLess(lastItem.Pos, at(lastInd - 1).TopPos)) {
 				for (auto i = _firstInd; i < lastInd; i++)
 					at(i).TopCover = _topCover;
 				_topCover = topCover;
@@ -987,6 +987,8 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 #define LEN(itStart,itEnd)	short(POS(itEnd) - POS(itStart))
 #define	SCORE(it)	(it)->second.Score
 #define	GrpNUMB(it)	(it)->second.GrpNumb
+
+#define	TopCOVER(it)	(it)->second.TopCover
 
 void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline)
 {
@@ -1286,7 +1288,7 @@ void BS_map::Refine()
 			// 'close' previous region
 			ResetAllExtEntries(it);
 			// reset current region
-			newBS = grpNumb = GrpNUMB(it);
+			newBS = grpNumb = GrpNUMB(it);	// true
 			someBS = extLeftCnt = extRightCnt = 0;
 		}
 
@@ -1307,6 +1309,88 @@ void BS_map::Refine()
 	}
 	// 'close' last region
 	ResetAllExtEntries(end());
+
+	// *** extend narrows
+	ExtendNarrowBSs();
+}
+
+void BS_map::RefineRgn(Cands& cands, citer endIt)
+{
+	// first pass
+	auto it0 = cands.begin();
+	float relScr0 = it0->relScore;
+
+	for (auto it = next(it0); it != cands.end(); it0++, it++) {
+		float relScr = it->relScore;
+		if (it0->lastIt == prev(it->lastIt)) {	// adjacent candidates
+			if (relScr0 < relScr) {
+				it0->relScore = 0; 
+				//printf(">> zero relCsore: %d\n", POS(it0->lastIt));
+			}
+			else { 
+				it->relScore = 0; 
+				//printf(">> zero relCsore: %d\n", POS(it->lastIt));
+			}
+		}
+		else {
+			if (POS(it->lastIt) - POS(it0->lastIt) > Glob::FragLen / 2) {
+				printf(">> %d %d\n", POS(it0->lastIt), POS(it->lastIt));	// next sub group
+			}
+		}
+		relScr0 = relScr;
+	}
+
+	// second pass
+	it0 = cands.begin();
+	for (auto it = next(it0); it != cands.end(); it0++, it++) {
+		if (!it->relScore)	continue;
+		printf(">> BS: %d %d %2.1f\n", POS(it0->lastIt), POS(it->lastIt), it->relScore);
+	}
+}
+
+void BS_map::Refine1()
+{
+	/*
+	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by forward reads
+
+	Options for placing bounds in a region:
+	canonical:					[[L] [R]]
+	adjacent right/left bounds:	[R] [[L] [R]] [L]
+	'negative' BS width:			[R] [L]
+
+	Method brings the instance to canonical form, resetting the score of all adjacent elements to zero,
+	and marking BSs with 'negative' width.
+	*/
+
+	chrlen grpNumb = 1;
+	bool firstInRgn = true;
+	BYTE lastReverse = 0;
+	Cands cands;	cands.reserve(4);
+
+	// *** refine
+	for (auto it = begin(); it != end(); it++) {
+		if (grpNumb != GrpNUMB(it)) {
+			// treat previous region
+			RefineRgn(cands, it);
+			// reset current region
+			firstInRgn = grpNumb = GrpNUMB(it);	// true
+			_lastIt = it;
+			cands.clear();
+		}
+
+		if (firstInRgn)	_lastIt = it;
+		else if (lastReverse != REVERSE(it)) {
+			float topCover0 = TopCOVER(prev(it));
+			float topCover1 = TopCOVER(it);
+			//float relScore = topCover1 > topCover0 ? topCover0 / topCover1 : topCover1 / topCover0;
+			float relScore = (topCover0 + topCover1) / 2;
+			cands.emplace_back(it, relScore);
+		}
+		lastReverse = REVERSE(it);
+		firstInRgn = false;
+	}
+	// treat last region
+	RefineRgn(cands, end());
 
 	// *** extend narrows
 	ExtendNarrowBSs();
