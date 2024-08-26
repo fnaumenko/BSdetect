@@ -1,9 +1,9 @@
-/************************************************************************************
+Ôªø/************************************************************************************
 BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 08/14/2024
+Last modified: 07/29/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -151,16 +151,16 @@ int main(int argc, char* argv[])
 
 void Detector::CallBS(chrid cID)
 {
-	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
-	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
-	DataCoverRegions& regions	= static_cast<DataCoverRegions&>(_regions.ChromData(cID));
-	DataValuesMap& splines		= static_cast<DataValuesMap&>(_splines.ChromData(cID));
+	DataSet<TreatedCover>& fragCovers = _fragCovers.ChromData(cID);
+	DataSet<TreatedCover>& readCovers = _readCovers.ChromData(cID);
+	DataCoverRegions& regions = static_cast<DataCoverRegions&>(_regions.ChromData(cID));
+	DataValuesMap& splines = static_cast<DataValuesMap&>(_splines.ChromData(cID));
 	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
 	BS_map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];
 
 #ifdef MY_DEBUG
-	_lineWriter.SetChromID(cID);	Incline::SetSpecialWriter(_lineWriter);
+	_lineWriter.SetChromID(cID);	BoundsValues::SetSpecialWriter(_lineWriter);
 	_splineWriter.SetChromID(cID);	TreatedCover::SetSpecialWriter(_splineWriter);
 	//Incline::SetOutFile(cID, "incline.txt");
 #endif
@@ -175,15 +175,15 @@ void Detector::CallBS(chrid cID)
 		if (peakDiff > 10) {			// significant difference
 			Verb::PrintMsgVar(Verb::RT, "Rebuild coverages\n");
 			Glob::FragLen -= peakDiff;
-			_frag—overs.Clear();
-			_frag—overs.Fill(_reads);
+			_fragCovers.Clear();
+			_fragCovers.Fill(_reads);
 		}
 		_reads.Clear();
 		regions.Clear();
 		Glob::FragLenUndef = false;
 		timer.Stop();	cout << LF;
 	}
-	//_frag—overs.WriteChrom(cID); 
+	//_fragÔøΩovers.WriteChrom(cID); 
 	//return;
 
 	Verb::PrintMsg(Verb::RT, "Locate binding sites\n");
@@ -197,12 +197,12 @@ void Detector::CallBS(chrid cID)
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
 	splines.NumberGroups();
 	derivs.Set(splines);			_splines.WriteChrom(cID);
-	
-	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
+
+	bss.Set(derivs, readCovers);	_readCovers.WriteChrom(cID); _derivs.WriteChrom(cID);
 	//bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
 	//bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
-	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
+	bss.SetScore(fragCovers);		_fragCovers.WriteChrom(cID);
 #ifdef MY_DEBUG
 	//bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
 	//bss.PrintWidthDistrib(_outFName + ".BSS_width");
@@ -216,8 +216,8 @@ void Detector::CallBS(chrid cID)
 
 float Detector::GetPeakPosDiff(chrid cID)
 {
-	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
-	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
+	DataSet<TreatedCover>& fragCovers = _fragCovers.ChromData(cID);
+	DataSet<TreatedCover>& readCovers = _readCovers.ChromData(cID);
 	DataCoverRegions& regions = static_cast<DataCoverRegions&>(_regions.ChromData(cID));
 	DataValuesMap& splines = static_cast<DataValuesMap&>(_splines.ChromData(cID));
 
@@ -238,7 +238,7 @@ float Detector::GetPeakPosDiff(chrid cID)
 	//Verb::PrintMsg(Verb::DBG);
 	const BYTE step = 30;
 	for (BYTE splineBase = 20; splineBase <= step * 4; splineBase += step) {
-	//for (BYTE splineBase = 80; splineBase <= 80; splineBase += step) {
+		//for (BYTE splineBase = 80; splineBase <= 80; splineBase += step) {
 		splines.BuildSpline(nullptr, regions, splineBase);
 		//_splines.WriteChrom(cID);
 		//return 1;

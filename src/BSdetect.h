@@ -35,8 +35,8 @@ class Detector
 
 	ChromSizes&		 _cSizes;
 	bool			 _saveCover;
-	CombCover		 _frag—overs;		// extended reads cover to find frag Mean
-	CombCover		 _read—overs;
+	CombCover		 _fragCovers;		// extended reads cover to find frag Mean
+	CombCover		 _readCovers;
 	OCoverRegions	 _regions;
 	OValuesMap		 _splines;
 	OBoundsValuesMap _derivs;
@@ -69,8 +69,8 @@ public:
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		, _frag—overs(cSizes, 3-2*Glob::IsPE, saveCover, outFName + FNameFragExt, "fragment coverage")
-		, _read—overs(cSizes, 2, saveCover, outFName + FNameReadExt, "read coverage")
+		, _fragCovers(cSizes, 3-2*Glob::IsPE, saveCover, outFName + FNameFragExt, "fragment coverage")
+		, _readCovers(cSizes, 2, saveCover, outFName + FNameReadExt, "read coverage")
 		, _regions(cSizes, 2-Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
 		//, _regions(cSizes, 2 - Glob::IsPE, true, outFName + ".RGNS", "potential regions")
 		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
@@ -104,8 +104,8 @@ public:
 	)
 		: _cSizes(cSizes)
 		, _saveCover(false)
-		, _frag—overs(cSizes,3-2*Glob::IsPE, false, outFName + FNameFragExt, "fragment coverage")
-		, _read—overs(cSizes,	2,			 false,	outFName + FNameReadExt, "read coverage")
+		, _fragCovers(cSizes,3-2*Glob::IsPE, false, outFName + FNameFragExt, "fragment coverage")
+		, _readCovers(cSizes,	2,			 false,	outFName + FNameReadExt, "read coverage")
 		, _regions	 (cSizes,2-Glob::IsPE,saveInter,outFName + ".RGNS"	, "potential regions")
 		, _splines	 (cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
 		, _derivs	 (cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
@@ -131,21 +131,21 @@ public:
 			tChromsFreq	chrFreq;
 			_timer.Start();
 			// initialize covered data
-			CombCoverReader a(inFName, cSizes, _frag—overs, chrFreq, TOTAL);
+			CombCoverReader a(inFName, cSizes, _fragCovers, chrFreq, TOTAL);
 			if (!Glob::IsPE) {
 				string fCoverPos = baseName + FNameFragExt + sStrandEXT[FWD] + FT::Ext(FT::BGRAPH);
 				string fCoverNeg = baseName + FNameFragExt + sStrandEXT[RVS] + FT::Ext(FT::BGRAPH);
 
-				CombCoverReader b(FS::CheckedFileName(fCoverPos.c_str()), cSizes, _frag—overs, chrFreq, FWD);
-				CombCoverReader c(FS::CheckedFileName(fCoverNeg.c_str()), cSizes, _frag—overs, chrFreq, RVS);
+				CombCoverReader b(FS::CheckedFileName(fCoverPos.c_str()), cSizes, _fragCovers, chrFreq, FWD);
+				CombCoverReader c(FS::CheckedFileName(fCoverNeg.c_str()), cSizes, _fragCovers, chrFreq, RVS);
 			}
 			baseName += FNameReadExt;
 			CombCoverReader b(
 				FS::CheckedFileName((baseName + sStrandEXT[FWD] + FT::Ext(FT::BGRAPH)).c_str()),
-				cSizes, _read—overs, chrFreq, FWD);
+				cSizes, _readCovers, chrFreq, FWD);
 			CombCoverReader c(
 				FS::CheckedFileName((baseName + sStrandEXT[RVS] + FT::Ext(FT::BGRAPH)).c_str()),
-				cSizes, _read—overs, chrFreq, RVS);
+				cSizes, _readCovers, chrFreq, RVS);
 
 			cSizes.TreateAll(false);
 			BYTE dataCnt = Glob::IsPE ? 3 : 5;
@@ -171,14 +171,14 @@ public:
 			const Read read(*_file);
 
 			if (_fIdent(read, frag))
-				_frag—overs.AddFrag(frag);
+				_fragCovers.AddFrag(frag);
 		}
 		else {
-			_frag—overs.AddExtRead(rgn, reverse);
+			_fragCovers.AddExtRead(rgn, reverse);
 			if (Glob::FragLenUndef)
 				_reads.AddRead(rgn, reverse);
 		}
-		_read—overs.AddRead(rgn, reverse);
+		_readCovers.AddRead(rgn, reverse);
 		return true;
 	}
 
@@ -191,8 +191,8 @@ public:
 		Verb::PrintMsgVar(Verb::RT, "%s", Chrom::ShortName(nextcID).c_str(), cnt);
 		if (cnt)		// not the first readed chrom
 			CallBS(cID);
-		_frag—overs.SetChrom(nextcID);
-		_read—overs.SetChrom(nextcID);
+		_fragCovers.SetChrom(nextcID);
+		_readCovers.SetChrom(nextcID);
 	}
 
 	// Closes last chrom

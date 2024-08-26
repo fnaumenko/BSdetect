@@ -1,8 +1,8 @@
-/**********************************************************
+ï»¿/**********************************************************
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 08/17/2024
+Last modified: 08/06/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -11,6 +11,10 @@ Last modified: 08/17/2024
 #include "ChromData.h"
 #include "CrossRgns.h"
 #include "Spline.h"
+//#include <fstream>
+//#include <stdexcept>
+//#include <iterator>
+//#include <stdio.h>
 
 #define MY_DEBUG
 
@@ -47,7 +51,7 @@ public:
 	//	@param format: format string
 	//	@param args: printing arguments
 	template<typename... Args>
-	static void PrintMsgVar(eVerb level, const char* format, Args ... args) { 
+	static void PrintMsgVar(eVerb level, const char* format, Args ... args) {
 		if (Level(level)) printf(format, args...);
 	}
 
@@ -64,15 +68,15 @@ private:
 struct StrandOp {
 	int8_t Factor;						// 1 for forward reads, -1 for reversed ones
 	void (*Next)(coviter&);				// decrement/increment iterator (for forward/reversed)
-	coviter (*RetNext)(coviter&);		// decrement/increment iterator (for forward/reversed)
-	coviter (*GetPrev)(const coviter&);	// returns prev/this iterator (for forward/reversed)
+	coviter(*RetNext)(coviter&);		// decrement/increment iterator (for forward/reversed)
+	coviter(*GetPrev)(const coviter&);	// returns prev/this iterator (for forward/reversed)
 	bool (*EqLess)(chrlen, chrlen);
 	bool (*Less)(chrlen, chrlen);
 };
 
 // strand-dependent operations: 0 - forward, 1 - reversed
 static const StrandOp StrandOps[2]{
-	{-1	
+	{-1
 	,[](coviter& it) { it--; }
 	,[](coviter& it) { return --it; }
 	,[](const coviter& it) { return prev(it); }
@@ -93,6 +97,7 @@ static struct Glob {
 	static bool		FragLenUndef;
 	static readlen	ReadLen;	// length of read
 	static fraglen	FragLen;	// average fragment length
+	static fraglen	ROI_ext;	// Regions of interest extension
 
 	static void SetPE(bool isPE) { if ((IsPE = isPE)) FragLenUndef = false; }
 
@@ -110,7 +115,7 @@ Group is a set of splines/derivatives/inclines within one potential region.
 Groups are numbered sequentially starting from 1, their numbering may not coincide with the numbering of potential regions (which can be "empty")
 */
 
-// Sequential float values (for spline and deriv)
+// Sequential float values
 class Values : public vector<float>
 {
 	float _maxVal;
@@ -218,7 +223,7 @@ public:
 	bool IsWriterSet() const { return _writers != nullptr; }
 
 	// Writes oblique line (positive or negative strand)
-	//	@param reverse: 0 for forward, 1 for reverse
+	//	@param reverse: true if tag is reversed (neg strand)
 	//	@param start: start (zero value) position
 	//	@param itStop: stop (max value) iterator
 	void WriteIncline(BYTE reverse, chrlen start, coviter& itStop);
@@ -256,7 +261,7 @@ public:
 	}
 };
 
-//=== INCLINE & COLLECTION
+//=== TREATED COVER & COLLECTION
 
 // Inclined line represents average derivative of the area of read's coverage growth/decline,
 // as a resul of Linear Regression
@@ -264,113 +269,38 @@ struct Incline
 {
 	chrlen	Pos;		// position of the incline on the x-axis (chromosome's position)
 	chrlen	TopPos;		// position of the top point of the incline
-	float	TopCover;
 	float	Deriv;		// derivative (tangent of the angle of incline)
 
 	bool Valid() const {
 		return
 			Pos					// zero Pos is the result of a failed regression calculation
 			&& Deriv < 1		// 1 (vertical line) is useless
-			&& Deriv >= 0.01;	// near to gorizontal line is useless
+			&& Deriv >= 0.01;	// too small angle is useless
 	}
 
-	void Clear() { Deriv = 0, Pos = 0; }
+	void Clear() { Deriv = 0; Pos = 0; }
 
 	bool operator != (const Incline& incl) const { return Pos != incl.Pos || TopPos != incl.TopPos; }
 
 #ifdef MY_DEBUG
-	void Print() const { printf("%d %d %2.1f, Deriv: %-2.2f\n", Pos, TopPos, TopCover, Deriv); }
+	void Print() const { printf("%d %d, Deriv: %-2.2f\n", Pos, TopPos, Deriv); }
 
 private:
-	static OSpecialWriter* LineWriter;	// line writer to save inclines
 	static shared_ptr<FormWriter> OutFile;
 	static chrid cID;
 
 public:
 	static void SetOutFile(chrid cid, const char* fname) { cID = cid;  OutFile.reset(new FormWriter(fname)); }
 
-	static void SetSpecialWriter(OSpecialWriter& lineWriter) { LineWriter = &lineWriter; }
-
-	// Writes incline to static file
-	//	@param reverse: 0 for forward, 1 for reverse
-	//	@param itStop: read spline stop iterator for the current incline
-	void WriteLine(BYTE reverse, coviter& itStop) const;
-
-	void WriteLocus() const;
+	void Write();
 #endif
 };
-
-// Wrapper for vector<Incline> with addition of SpreadTopCover() method
-class Inclines : public vector<Incline>
-{
-	float	_topCover = 0;	// required for SpreadTopCover() only
-	USHORT	_firstInd = 0;	// required for SpreadTopCover() only
-
-public:
-	void Clear() { _topCover = 0; _firstInd = 0; clear(); }
-
-	// Adds incline with duplicate control
-	void Add(const Incline& incline);
-
-	// Sets maximum top-coverage among a group of intersecting inclines
-	//	@param reverse: 0 for forward, 1 for reverse
-	//	@param topCover: top coverage  for the group
-	void SpreadTopCover(BYTE reverse, float topCover);
-};
-
-// Start/end positions and min/max values with storage of previous ones
-class TracedPosVal
-{
-	chrlen	_pos[2], _pos0[2]{ 0,0 };	// current, previous start/end positions
-	float	_val[2], _val0[2]{ 0,0 };	// current, previous min/max values 
-
-public:
-	// Returns current position
-	//	@param edge: 0 - start, 1 - end
-	chrlen	Pos(BYTE edge) const { return _pos[edge]; }
-
-	// Returns current maximum value
-	//	@param reverse:  0 for forward, 1 for reverse
-	float	Val(BYTE reverse) const { return _val[reverse]; }
-
-	// Set start/end positions and values by cover iterator, and merge successive raises
-	//	@param reverse: 0 for forward, 1 for reverse
-	//	@param it: forward/reverse cover iterator
-	template<typename T>
-	void Set(BYTE reverse, T it)
-	{
-		// set positions & values
-		_pos[!reverse] = it->Start();	// start: right for forward, left for reverse
-		_pos[reverse] = it->End();		// end: left for forward, right for reverse
-		it->GetValues(_val);
-		// merge successive raises
-		if (_val0[reverse] && _val[!reverse] / _val0[reverse] >= 0.9)
-			_pos[0] = _pos0[0];
-	}
-
-	// Saves previous positions/values (by swapping)
-	void Retain()
-	{
-		std::swap(_pos, _pos0);
-		std::swap(_val, _val0);
-	}
-};
-
-
-//=== TREATED COVER & COLLECTION
 
 class TreatedCover : public AccumCover
 {
 #ifdef MY_DEBUG
 	static OSpecialWriter* SplineWriter;	// spline writer to save local splines
 #endif
-
-	// Calculates Linear Regression
-	//	@param it: start iterator
-	//	@param itStop: end iterator
-	//	@param op: strand operations
-	//	@param incline[out]: resulting inclined line
-	void LinearRegr(coviter it, const coviter& itStop, const StrandOp& op, Incline& incline) const;
 
 public:
 #ifdef MY_DEBUG
@@ -383,18 +313,24 @@ public:
 	//	@param rng: potential region
 	//chrlen GetRegionCentre(const CoverRegion& rng) const;
 
+	// Calculates Linear Regression
+	//	@param it: start iterator
+	//	@param itStop: end iterator
+	//	@param op: strand operations
+	//	@incline[out]: resulting inclined line
+	void LinearRegr(coviter it, const coviter& itStop, const StrandOp& op, Incline& incline) const;
+
 	// Sets spline of the instance between start-end positions
 	//	@param spliner[in]: spliner that does the work
 	//	@param startPos[in]: start position
 	//	@param endPos[in]: end position
 	//	@param vals[out]: resulting splined values
-	void SetLocalSpline(SSpliner<coval>& spliner, chrlen startPos, chrlen endPos, Values& vals) const;
-
-	// Calculates Linear Regression incline and pushes it to the inclines collection
-	//	@param reverse[in]: 0 for forward, 1 for reverse
-	//	@param posVal[in]: traced positions & values
-	//	@param inclines[out]: resulting inclines collection
-	void PushIncline(BYTE reverse, const TracedPosVal& posVal, Inclines& inclines) const;
+	void SetLocalSpline(
+		SSpliner<coval>& spliner,
+		chrlen startPos,
+		chrlen endPos,
+		Values& vals
+	) const;
 };
 
 // 'CombCover' keeps the chromosome covers and optionally the set of writers these covers to file.
@@ -439,7 +375,7 @@ using tChromsFreq = map<chrid, BYTE>;
 // Wrapper for initializing a coverage from a file
 class CombCoverReader
 {
-	CombCover&	 _cover;
+	CombCover& _cover;
 	tChromsFreq& _chrFreq;
 	eStrand		 _strand;
 	UniBedReader _file;
@@ -487,7 +423,7 @@ public:
 	//	@param cLen: chrom length
 	//	@param cnt: last chrom items count
 	//	@param tCnt: total items count
-	void operator()(chrid cID, chrlen cLen, size_t cnt, size_t)	{}
+	void operator()(chrid cID, chrlen cLen, size_t cnt, size_t) {}
 };
 
 //=== COVER REGION & COLLECTION
@@ -544,13 +480,13 @@ class CoverRegions : public vector<CoverRegion>
 
 public:
 	// methods used in DiscardNonOverlaps()
-	static chrlen	Start	(cIter it)	{ return it->Start(); }
-	static chrlen	End		(cIter it)	{ return it->End(); }
-	static chrlen	Length	(cIter it)	{ return it->Length(); }
-	static bool		IsWeak	(cIter it)	{ return it->value <= CUTOFF_STRAND_EXT_RGN; }
-	static void		Accept	(const iterator it[2]) {}			// stub
-	static void		Discard	(Iter it)	{ it->valid = false; }
-	static bool		Accepted(cIter it)	{ return it->valid; }
+	static chrlen	Start(cIter it) { return it->Start(); }
+	static chrlen	End(cIter it) { return it->End(); }
+	static chrlen	Length(cIter it) { return it->Length(); }
+	static bool		IsWeak(cIter it) { return it->value <= CUTOFF_STRAND_EXT_RGN; }
+	static void		Accept(const iterator it[2]) {}			// stub
+	static void		Discard(Iter it) { it->valid = false; }
+	static bool		Accepted(cIter it) { return it->valid; }
 };
 
 class DataCoverRegions : public DataSet<CoverRegions>
@@ -614,13 +550,13 @@ class ValuesMap : public tValuesMap
 
 public:
 	// methods used in DiscardNonOverlaps()
-	static chrlen	Start	(cIter it)	{ return it->first; }
-	static chrlen	End		(cIter it)	{ return it->first + it->second.Length(); }
-	static chrlen	Length	(cIter it)	{ return it->second.Length(); }
-	static bool		IsWeak	(cIter)		{ return false; }	// stub
-	static void		Accept	(const iterator it[2]) {}		// stub
-	static void		Discard	(Iter it)	{ it->second.Discard(); }
-	static bool		Accepted(cIter it)	{ return it->second.MaxVal(); }
+	static chrlen	Start(cIter it) { return it->first; }
+	static chrlen	End(cIter it) { return it->first + it->second.Length(); }
+	static chrlen	Length(cIter it) { return it->second.Length(); }
+	static bool		IsWeak(cIter) { return false; }	// stub
+	static void		Accept(const iterator it[2]) {}		// stub
+	static void		Discard(Iter it) { it->second.Discard(); }
+	static bool		Accepted(cIter it) { return it->second.MaxVal(); }
 
 	chrlen	Start() const { return Start(begin()); }
 	chrlen	End()	const { return End(begin()); }
@@ -676,11 +612,10 @@ public:
 
 //=== DERIVATIVES & COLLECTION
 
-// Ñollection of float values with its associated position and minimum/maximum value
+// ï¿½ollection of float values with its associated position and minimum/maximum value
 class BoundValues : public Values
 {
 	chrlen	_pos;		// region start position
-	//float	_topCover;
 	float	_val[2];	// region min, max values
 public:
 
@@ -694,17 +629,72 @@ public:
 	// Copies min, max values to the external pair
 	void	GetValues(float(&val)[2]) const { memcpy(val, _val, 2 * sizeof(float)); }
 
-	float	MaxValue() const { return _val[1]; }
+	float	ValRatio() const { return _val[0] / _val[1]; }
 };
 
 // BoundValues collection representing 
 // rising (for the right side of the peak) or falling (for the left side of the peak) derivatives
 class BoundsValues : public vector<BoundValues>
 {
+#ifdef MY_DEBUG
+	static OSpecialWriter* LineWriter;	// line writer to save inclined
+#endif
 	using citer = vector<BoundValues>::const_iterator;
 
+	// Start/end positions and min/max values with storage of previous ones
+	class TracedPosVal
+	{
+		chrlen	_pos[2], _pos0[2]{ 0,0 };	// current, previous start/end positions
+		float	_val[2], _val0[2]{ 0,0 };	// current, previous min/max values 
+
+	public:
+		// Returns current position
+		//	@param reverse: 0 - start, 1 - end
+		chrlen	Pos(BYTE reverse) const { return _pos[reverse]; }
+
+		// Returns previous position
+		//	@param reverse: 0 - start, 1 - end
+		chrlen	PrevPos(BYTE reverse) const { return _pos0[reverse]; }
+
+		// Returns current value
+		//	@param lim: 0 - min, 1 - max
+		float	Val(BYTE lim) const { return _val[lim]; }
+
+		// Set start/end positions and values by cover iterator, and merge successive raises
+		//	@param reverse: 0 for forward, 1 for reverse
+		//	@param it: forward/reverse cover iterator
+		template<typename T>
+		void Set(BYTE reverse, T it)
+		{
+			// set positions & values
+			_pos[!reverse] = it->Start();	// start: right for forward, left for reverse
+			_pos[reverse] = it->End();		// end: left for forward, right for reverse
+			it->GetValues(_val);
+			// merge successive raises
+			if (_val0[reverse] && _val[!reverse] / _val0[reverse] >= 0.9)
+				_pos[0] = _pos0[0];
+		}
+
+		// Saves previous positions/values (by swapping)
+		void Retain()
+		{
+			std::swap(_pos, _pos0);
+			std::swap(_val, _val0);
+		}
+	};
+
+#ifdef MY_DEBUG
 	float _maxVal = 0;
+#endif
 	chrlen _grpNumb;	// group number
+
+	void PushIncline(
+		chrlen grpNumb,
+		BYTE reverse,
+		const TracedPosVal& posVal,
+		const TreatedCover& cover,
+		vector<Incline>& inclines
+	) const;
 
 	// Adds significant derivative values
 	//	@param spline: spline on the basis of which derivatives are calculated
@@ -727,8 +717,11 @@ class BoundsValues : public vector<BoundValues>
 	);
 
 public:
+#ifdef MY_DEBUG
+	static void SetSpecialWriter(OSpecialWriter& lineWriter) { LineWriter = &lineWriter; }
+
 	float	MaxVal()	const { return _maxVal; }
-	
+#endif
 	// Returns group number
 	chrlen	GrpNumb()	const { return _grpNumb; }
 
@@ -739,12 +732,12 @@ public:
 	// Collects forward inclined lines
 	//	@param rCover[in]: read coverage
 	//	@param inclines[out]: filled collection of forward inclined lines
-	void CollectForwardInclines(const TreatedCover& rCover, Inclines& inclines) const;
+	void CollectForwardInclines(const TreatedCover& cover, vector<Incline>& inclines) const;
 
 	// Collects reversed inclined lines
 	//	@param rCover[in]: read coverage
 	//	@param inclines[out]: filled collection of reversed inclined lines
-	void CollectReverseInclines(const TreatedCover& rCover, Inclines& inclines) const;
+	void CollectReverseInclines(const TreatedCover& cover, vector<Incline>& inclines) const;
 
 	// Adds derivative values
 	//	@param spline: spline on the basis of which derivatives are calculated
@@ -799,51 +792,41 @@ public:
 const BYTE R = 0;	// right bound, synonym for 'forward'
 const BYTE L = 1;	// left  bound, synonym for 'reverse' 
 
-struct BS_bound
+struct BS_PosVal
 {
 	BYTE		 Reverse;
 	chrlen		 RefPos = 0;	// reference position; by default duplicates the map position, but can be adjusted
 	const chrlen GrpNumb;		// group number
-	const float	 TopCover;
-	float		 Score  = 1;
+	float		 Score = 1;
 
 	// Constructor
 	//	@param reverse: 0 for forward, 1 for reverse
 	//	@param grpNumb: group number
-	BS_bound(BYTE reverse, chrlen grpNumb, float topCover) : Reverse(reverse), GrpNumb(grpNumb), TopCover(topCover) {}
+	BS_PosVal(BYTE reverse, chrlen grpNumb) : Reverse(reverse), GrpNumb(grpNumb) {}
 };
 
-class BS_map : public map<chrlen, BS_bound>
+class BS_map : public map<chrlen, BS_PosVal>
 {
 public:
-	using iter = map<chrlen, BS_bound>::iterator;
-	using citer = map<chrlen, BS_bound>::const_iterator;
+	using iter = map<chrlen, BS_PosVal>::iterator;
+	using citer = map<chrlen, BS_PosVal>::const_iterator;
 
 private:
-	struct Cand
-	{
-		iter lastIt;
-		float relScore;
-
-		Cand(iter it, float score) : lastIt(it), relScore(score) {}
-	};
-	using Cands = vector<Cand>;
-
-	iter _lastIt;	// last inserted iterator (used in AddPos(), for the left bounds only)
+	iter _lastIt;	// last inserted iterator (for the left bounds only)
 
 	static void SetInvalid(iter it) { it->second.Score = 0; }
 
 	// Inserts BS position (bound)
 	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
-	//	@param incline: inclined line
-	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline);
+	//	@param incl: inclined line
+	void AddPos(BYTE reverse, chrlen grpNumb, const Incline& incl);
 
 	// Inserts group of BS positions (left/right bounds)
 	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
 	//	@param inclines: forward/reversed (right/left) inclined lines
-	void AddBounds(BYTE reverse, chrlen grpNumb, float topCover, Inclines& inclines);
+	void AddBounds(BYTE reverse, chrlen grpNumb, vector<Incline>& inclines);
 
 	// Fills the instance with recognized left/right BS positions (bounds)
 	//	@param reverse[in]: 0 for forward (right bounds), 1 for reverse (left bounds)
@@ -871,8 +854,6 @@ private:
 	// Extends too narrow BSs to the minimum acceptable width by adjusting reference position
 	void ExtendNarrowBSs();
 
-	void RefineRgn(Cands& cands, citer endIt);
-
 	// Sets BSs scores within the group according to fragment coverage spline
 	//	@param start: first valid iterator in the group
 	//	@param end: next of the last valid iterator in the group
@@ -882,19 +863,22 @@ private:
 
 public:
 	// Returns true if boundary is valid
-	static bool IsValid(iter it)	{ return it->second.Score; }
-	static bool IsValid(citer it)	{ return it->second.Score; }
+	static bool IsValid(iter it) { return it->second.Score; }
+	static bool IsValid(citer it) { return it->second.Score; }
 
 	// Fills the instance with recognized binding sites
 	//	@param derivs: derivatives
 	//	@param rCover: read coverage
-	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover);
+	void Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover)
+	{
+		SetBounds(R, derivs.StrandData(FWD), rCover.StrandData(FWD));
+		_lastIt = begin();
+		SetBounds(L, derivs.StrandData(RVS), rCover.StrandData(RVS));
+	}
 
 	// Brings the instance to canonical order of placing BS bounds;
 	// may adjust reference position
 	void Refine();
-
-	void Refine1();
 
 	// Sets score for each binding sites and normalizes it
 	//	@param fragCovers: fragment total coverage
@@ -939,7 +923,7 @@ private:
 	//	@param fName: name of file to print
 	//	@param title: specific word to print
 	//	@param func: specific function
-	void PrintDistrib(const string& fName, const char* title, function<USHORT(const citer&, const citer&,float&)> func) const;
+	void PrintDistrib(const string& fName, const char* title, function<USHORT(const citer&, const citer&, float&)> func) const;
 
 public:
 	// Prints BS width distribution
@@ -951,7 +935,6 @@ public:
 	void PrintScoreDistrib(const string& fName) const;
 
 	// Prints BS positions
-	//	@param cID: chrom ID
 	//	@param fName: name of file to print
 	//	@param selected: if true then prints position with unzero score 
 	//	@param stopPos: max printed position or all by default 
@@ -964,8 +947,8 @@ class BedWriter : public RegionWriter
 {
 	static bool rankScore;	// true if scores in the main bed should be normalized relative to 1000
 
-	void LineAddIntScore	(float score, bool delim) { LineAddInt(int(round(score * 1000)), delim); }
-	void LineAddFloatScore	(float score, bool delim) { LineAddFloat(score, delim); }
+	void LineAddIntScore(float score, bool delim) { LineAddInt(int(round(score * 1000)), delim); }
+	void LineAddFloatScore(float score, bool delim) { LineAddFloat(score, delim); }
 
 	typedef void (BedWriter::* tAddScore)(float, bool);
 	static tAddScore fLineAddScore;
@@ -1015,8 +998,8 @@ class BedWriters
 public:
 	BedWriters(eStrand strand, const TrackFields& fields, const string* commLine = nullptr)
 		: _main(strand, TrackFields(fields, false, BedWriter::RankScore(), "Black"))
-		, _ext (strand, TrackFields(fields, "_ext", "extended called binding sites", true, false, "Black"))
-		, _roi (strand, TrackFields(fields, ".ROI", "IGV Region Navigator list", false, false))
+		, _ext(strand, TrackFields(fields, "_ext", "extended called binding sites", true, false, "Black"))
+		, _roi(strand, TrackFields(fields, ".ROI", "IGV Region Navigator list", false, false))
 	{
 		_main.SetFloatFractDigits(3);
 	}
