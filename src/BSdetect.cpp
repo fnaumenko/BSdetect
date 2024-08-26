@@ -61,9 +61,27 @@ const Options::Usage Options::Usages[] = {	// content of 'Usage' variants in hel
 };
 const BYTE Options::UsageCount = ArrCnt(Options::Usages);
 
+//int foo1(int a, int b)
+//{
+//	auto x = (char*)a;
+//	auto y = x[b];
+//	auto c = int(y);
+//	return c;
+//	return (int)&(((char*)a)[b]);
+//}
+//
+//int foo(int a, int b)
+//{
+//	int sum = a ^ b;
+//	int carry = (a & b) << 1;
+//	return carry ? foo(sum, carry) : sum;
+//}
 /*****************************************/
 int main(int argc, char* argv[])
 {
+	//cout << sizeof(chrlen) << TAB << sizeof(float) << LF;
+	//cout << sizeof(BS_bound) << LF;
+	//return 0;
 	int fileInd = Options::Parse(argc, argv, ProgParam);
 	if (fileInd < 0)	return 1;		// wrong option or tip output
 	int ret = 0;						// main() return code
@@ -151,8 +169,8 @@ int main(int argc, char* argv[])
 
 void Detector::CallBS(chrid cID)
 {
-	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
-	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
+	DataSet<TreatedCover>& fragCovers = _fragCovers.ChromData(cID);
+	DataSet<TreatedCover>& readCovers = _readCovers.ChromData(cID);
 	DataCoverRegions& regions	= static_cast<DataCoverRegions&>(_regions.ChromData(cID));
 	DataValuesMap& splines		= static_cast<DataValuesMap&>(_splines.ChromData(cID));
 	DataBoundsValuesMap& derivs = static_cast<DataBoundsValuesMap&>(_derivs.ChromData(cID));
@@ -175,8 +193,8 @@ void Detector::CallBS(chrid cID)
 		if (peakDiff > 10) {			// significant difference
 			Verb::PrintMsgVar(Verb::RT, "Rebuild coverages\n");
 			Glob::FragLen -= peakDiff;
-			_frag—overs.Clear();
-			_frag—overs.Fill(_reads);
+			_fragCovers.Clear();
+			_fragCovers.Fill(_reads);
 		}
 		_reads.Clear();
 		regions.Clear();
@@ -198,11 +216,12 @@ void Detector::CallBS(chrid cID)
 	splines.NumberGroups();
 	derivs.Set(splines);			_splines.WriteChrom(cID);
 	
-	bss.Set(derivs, readCovers);	_read—overs.WriteChrom(cID); _derivs.WriteChrom(cID);
-	//bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
+	bss.Set(derivs, readCovers);	_readCovers.WriteChrom(cID); _derivs.WriteChrom(cID);
+	bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
-	//bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
-	bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
+	//return;
+	bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
+	//bss.SetScore(fragCovers);		_frag—overs.WriteChrom(cID);
 #ifdef MY_DEBUG
 	//bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
 	//bss.PrintWidthDistrib(_outFName + ".BSS_width");
@@ -216,8 +235,8 @@ void Detector::CallBS(chrid cID)
 
 float Detector::GetPeakPosDiff(chrid cID)
 {
-	DataSet<TreatedCover>& fragCovers = _frag—overs.ChromData(cID);
-	DataSet<TreatedCover>& readCovers = _read—overs.ChromData(cID);
+	DataSet<TreatedCover>& fragCovers = _fragCovers.ChromData(cID);
+	DataSet<TreatedCover>& readCovers = _readCovers.ChromData(cID);
 	DataCoverRegions& regions = static_cast<DataCoverRegions&>(_regions.ChromData(cID));
 	DataValuesMap& splines = static_cast<DataValuesMap&>(_splines.ChromData(cID));
 

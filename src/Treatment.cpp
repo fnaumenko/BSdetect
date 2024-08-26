@@ -812,10 +812,25 @@ void Inclines::SpreadTopCover(BYTE reverse, float topCover)
 		auto& lastItem = back();
 		lastItem.TopCover = topCover;
 		if (sz > 1) {
+			/*
+			we have to use indices instead of iterators
+			because of possible capacity overrun between this method calls,
+			and as a consequence, displacement of the internal array and changing begin()|end() iterators
+			*/
 			const auto lastInd = USHORT(sz - 1);
+			/*
+			if lastItem.Pos and prevItem.TopPos are equal,
+			the inclines are already considered to belong to different bunches
+			*/
 			if (StrandOps[reverse].EqLess(lastItem.Pos, at(lastInd - 1).TopPos)) {
-				for (auto i = _firstInd; i < lastInd; i++)
-					at(i).TopCover = _topCover;
+				// spread TopCover
+				for (auto i = _firstInd; i < lastInd; i++) {
+					auto& incline = at(i);
+					incline.TopCover = _topCover;	// for one of the inclines the value will be rewritten to the same; never mind
+					incline.Bunched = lastInd - _firstInd > 1;
+					//at(i).TopCover = _topCover;	// for one of the inclines the value will be rewritten to the same; never mind
+					//at(i).Bunched = lastInd - _firstInd > 1;
+				}
 				_topCover = topCover;
 				_firstInd = lastInd;
 				return;
@@ -989,6 +1004,9 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 #define	GrpNUMB(it)	(it)->second.GrpNumb
 
 #define	TopCOVER(it)	(it)->second.TopCover
+#define REAL(it)		(it)->second.Real
+
+
 
 void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline)
 {
@@ -1011,11 +1029,11 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline)
 			lastIt--;
 		}
 
-		_lastIt = emplace_hint(lastIt, pos, BS_bound(1, grpNumb, incline.TopCover));
+		_lastIt = emplace_hint(lastIt, pos, BS_bound(1, grpNumb, incline.TopCover, incline.Bunched));
 		POS(_lastIt) = _lastIt->first;
 	}
 	else {
-		auto it = emplace_hint(end(), pos, BS_bound(0, grpNumb, incline.TopCover));
+		auto it = emplace_hint(end(), pos, BS_bound(0, grpNumb, incline.TopCover, incline.Bunched));
 		POS(it) = it->first;
 	}
 }
@@ -1162,7 +1180,7 @@ void BS_map::ExtendNarrowBSsInGroup(iter& start, const iter& stop, bool narrowBS
 			ExtendNarrowBS(bs.first, bs.second);
 }
 
-void BS_map::ExtendNarrowBSs()
+void BS_map::ExtendNarrowBSs0()
 {
 	/*
 	here the groups are 'canonical', e.g. 
@@ -1215,6 +1233,26 @@ void BS_map::ExtendNarrowBSs()
 	}
 }
 
+void BS_map::ExtendNarrowBSs()
+{
+	/*
+	here the groups are 'canonical', e.g.
+	L L L R R L L R L R R
+		|_|     |_| |_|
+	*/
+
+	// draft common bypass
+	for (auto it = begin(); it != end(); it++) {
+		if (REAL(it)) {	// always reversed (left) bound
+			//auto pos = POS(it);
+			auto nextIt = next(it);
+			if (LEN(it, nextIt) < MIN_BS_WIDTH)
+				FitToMinLength(it, nextIt, true);
+			it++;
+		}
+	}
+}
+
 void BS_map::Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>& rCover)
 {
 	SetBounds(R, derivs.StrandData(FWD), rCover.StrandData(FWD));
@@ -1222,7 +1260,7 @@ void BS_map::Set(const DataBoundsValuesMap& derivs, const DataSet<TreatedCover>&
 	SetBounds(L, derivs.StrandData(RVS), rCover.StrandData(RVS));
 }
 
-void BS_map::Refine()
+void BS_map::Refine0()
 {
 	/*
 	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by forward reads
@@ -1231,7 +1269,7 @@ void BS_map::Refine()
 	canonical:					[[L] [R]]
 	adjacent right/left bounds:	[R] [[L] [R]] [L]
 	'negative' BS width:			[R] [L]
-	
+
 	Method brings the instance to canonical form, resetting the score of all adjacent elements to zero,
 	and marking BSs with 'negative' width.
 	*/
@@ -1269,7 +1307,7 @@ void BS_map::Refine()
 		// 2) reset adjacent left bounds
 		if (someBS || !someRights)	// someRights is false when there're only left bounds
 			ResetExtEntries(--it, extLeftCnt);
-		else if(extLeftCnt > 0) {		// ** 'negative' BS width
+		else if (extLeftCnt > 0) {		// ** 'negative' BS width
 			auto itR = ResetExtEntries(--it, --extLeftCnt);	// reset other adjacent entries
 			if (itR != end()) {
 				REVERSE(itR) = false;				// change 'left' bound to 'right
@@ -1311,44 +1349,97 @@ void BS_map::Refine()
 	ResetAllExtEntries(end());
 
 	// *** extend narrows
-	ExtendNarrowBSs();
+	ExtendNarrowBSs0();
 }
 
-void BS_map::RefineRgn(Cands& cands, citer endIt)
+void BS_map::Ñandidates::MarkInSites()
 {
-	// first pass
-	auto it0 = cands.begin();
-	float relScr0 = it0->relScore;
+	auto sz = size();
+	if (!sz) return;
 
-	for (auto it = next(it0); it != cands.end(); it0++, it++) {
-		float relScr = it->relScore;
-		if (it0->lastIt == prev(it->lastIt)) {	// adjacent candidates
-			if (relScr0 < relScr) {
-				it0->relScore = 0; 
-				//printf(">> zero relCsore: %d\n", POS(it0->lastIt));
+
+	auto markInsite = [this](iter& itL, iter& itR, iterator& it) {
+		REAL(itL) = REAL(itR) = true;
+		if (REVERSE(itR)) {
+			bool turnOver = true;
+			if (it->adjLeft) {
+				auto len = LEN(itL, itR);
+				auto len0 = LEN(prev(itL), itL);
+				USHORT ind = it->index;
+				bool checkScore = ind ?
+					it->relScore < 2 * at(--ind).relScore:
+					true;
+
+				if (len > 2 * len0 && checkScore)			// empirical ratio 2
+					turnOver = false;
 			}
-			else { 
-				it->relScore = 0; 
-				//printf(">> zero relCsore: %d\n", POS(it->lastIt));
+			if (turnOver && it->adjRight) {
+				auto len = LEN(itL, itR);
+				auto len1 = LEN(itR, next(itR));
+				USHORT ind = it->index;
+				bool checkScore = ind < size() - 1 ?
+					it->relScore < 2 * at(++ind).relScore :
+					true;
+
+				if (len > 2 * len1 && checkScore)		// empirical ratio 2
+					turnOver = false;
+			}
+			if(turnOver)
+				REVERSE(itR) = false,
+				REVERSE(itL) = true;
+		}
+	};
+
+	if (sz > 1) {
+		// mark adjasted candidates
+		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++) {
+			//float relScr = it->relScore;
+			//auto pos = POS(it0->lastIt);	// for debug
+			if (it0->lastIt == prev(it->lastIt)) {	// adjacent candidates?
+				it0->adjRight = it->adjLeft = true;
 			}
 		}
-		else {
-			if (POS(it->lastIt) - POS(it0->lastIt) > Glob::FragLen / 2) {
-				printf(">> %d %d\n", POS(it0->lastIt), POS(it->lastIt));	// next sub group
-			}
+
+		Ñandidates cands = *this;
+		// sort in descending relScore
+		sort(cands.begin(), cands.end(),
+			[](const Ñandidate& c1, const Ñandidate& c2) { return c1.relScore > c2.relScore; }
+		);
+
+		const fraglen minDistance = Glob::FragLen / 2;
+		auto it = cands.begin();
+		auto& itR = it->lastIt;
+		auto itL = prev(itR);
+		Region rgn0{ POS(itL), POS(itR) };
+		markInsite(itL, itR, it);
+
+		for (it++; it != cands.end(); it++) {
+			auto& itR = it->lastIt;
+			auto itL = prev(itR);
+			Region rgn{ POS(itL), POS(itR) };
+
+			if (rgn.ToTheLeft(rgn0, minDistance) || rgn.ToTheRight(rgn0, minDistance))
+				markInsite(itL, itR, it);
+
+			rgn = rgn0;
 		}
-		relScr0 = relScr;
 	}
-
-	// second pass
-	it0 = cands.begin();
-	for (auto it = next(it0); it != cands.end(); it0++, it++) {
-		if (!it->relScore)	continue;
-		printf(">> BS: %d %d %2.1f\n", POS(it0->lastIt), POS(it->lastIt), it->relScore);
+	else {
+		auto& bsIt = front().lastIt;
+		REAL(prev(bsIt)) = REAL(bsIt) = true;
+		if (REVERSE(bsIt)) {
+			REVERSE(bsIt) = false;
+			REVERSE(prev(bsIt)) = true;
+		}
 	}
 }
 
-void BS_map::Refine1()
+void BS_map::RefineRgn(Ñandidates& cands, citer endIt)
+{
+	cands.MarkInSites();
+}
+
+void BS_map::Refine()
 {
 	/*
 	BS Left entry (bound): is formed by reverse reads; BS Right entry (bound): is formed by forward reads
@@ -1365,26 +1456,31 @@ void BS_map::Refine1()
 	chrlen grpNumb = 1;
 	bool firstInRgn = true;
 	BYTE lastReverse = 0;
-	Cands cands;	cands.reserve(4);
+	USHORT ind = 0;
+	Ñandidates cands;	cands.reserve(4);
 
 	// *** refine
 	for (auto it = begin(); it != end(); it++) {
 		if (grpNumb != GrpNUMB(it)) {
 			// treat previous region
+			auto pos = POS(it);
 			RefineRgn(cands, it);
 			// reset current region
 			firstInRgn = grpNumb = GrpNUMB(it);	// true
 			_lastIt = it;
 			cands.clear();
+			ind = 0;
 		}
 
 		if (firstInRgn)	_lastIt = it;
 		else if (lastReverse != REVERSE(it)) {
+			auto pos = POS(it);
+			auto it0 = prev(it);
 			float topCover0 = TopCOVER(prev(it));
 			float topCover1 = TopCOVER(it);
 			//float relScore = topCover1 > topCover0 ? topCover0 / topCover1 : topCover1 / topCover0;
 			float relScore = (topCover0 + topCover1) / 2;
-			cands.emplace_back(it, relScore);
+			cands.emplace_back(ind++, it, relScore);
 		}
 		lastReverse = REVERSE(it);
 		firstInRgn = false;
@@ -1586,12 +1682,12 @@ void BS_map::PrintScoreDistrib(const string& fName) const
 
 void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos) const
 {
-	string format = "%9d % 5d  %c %8d %5.2f %6.1f\t%s\n";
+	string format = "%9d % 5d  %c %8d %5.2f %6.1f%5d%4d\t%s\n";
 	const char bound[]{ 'R','L' };
 	IGVlocus locus(cID);
 
 	FormWriter file(fName.c_str());
-	file.Write("  pos     numb bnd  ref_pos score topCover\tlocus\n");
+	file.Write("  pos     numb bnd  ref_pos score topCvr real bun\tlocus\n");
 	for (const auto& x : *this) {
 		if (stopPos && x.first > stopPos)	break;
 		if (selected && !x.second.Score)	continue;
@@ -1604,6 +1700,8 @@ void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos
 			x.first != x.second.RefPos ? x.second.RefPos : 0,
 			x.second.Score,
 			x.second.TopCover,
+			x.second.Real,
+			x.second.Bunched,
 			locus.Print(x.first)
 		);
 	}

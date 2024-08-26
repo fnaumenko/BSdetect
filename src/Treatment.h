@@ -262,6 +262,7 @@ public:
 // as a resul of Linear Regression
 struct Incline
 {
+	bool		 Bunched = false;
 	chrlen	Pos;		// position of the incline on the x-axis (chromosome's position)
 	chrlen	TopPos;		// position of the top point of the incline
 	float	TopCover;
@@ -802,6 +803,8 @@ const BYTE L = 1;	// left  bound, synonym for 'reverse'
 struct BS_bound
 {
 	BYTE		 Reverse;
+	bool		 Bunched = false;
+	bool		 Real = false;	// BS 'real' bound
 	chrlen		 RefPos = 0;	// reference position; by default duplicates the map position, but can be adjusted
 	const chrlen GrpNumb;		// group number
 	const float	 TopCover;
@@ -810,7 +813,8 @@ struct BS_bound
 	// Constructor
 	//	@param reverse: 0 for forward, 1 for reverse
 	//	@param grpNumb: group number
-	BS_bound(BYTE reverse, chrlen grpNumb, float topCover) : Reverse(reverse), GrpNumb(grpNumb), TopCover(topCover) {}
+	BS_bound(BYTE reverse, chrlen grpNumb, float topCover, bool bunched) 
+		: Reverse(reverse), GrpNumb(grpNumb), TopCover(topCover), Bunched(bunched) {}
 };
 
 class BS_map : public map<chrlen, BS_bound>
@@ -820,14 +824,22 @@ public:
 	using citer = map<chrlen, BS_bound>::const_iterator;
 
 private:
-	struct Cand
+	struct Ñandidate
 	{
 		iter lastIt;
 		float relScore;
+		bool	adjLeft = false;
+		bool	adjRight = false;
+		USHORT	index;
 
-		Cand(iter it, float score) : lastIt(it), relScore(score) {}
+		Ñandidate(USHORT ind, iter it, float score) : index(ind), lastIt(it), relScore(score) {}
 	};
-	using Cands = vector<Cand>;
+	//using Ñandidates = vector<Ñandidate>;
+	class Ñandidates : public vector<Ñandidate>
+	{
+	public:
+		void MarkInSites();
+	};
 
 	iter _lastIt;	// last inserted iterator (used in AddPos(), for the left bounds only)
 
@@ -869,9 +881,10 @@ private:
 	void ExtendNarrowBSsInGroup(iter& start, const iter& end, bool narrowBS, bool closeProx);
 
 	// Extends too narrow BSs to the minimum acceptable width by adjusting reference position
+	void ExtendNarrowBSs0();
 	void ExtendNarrowBSs();
 
-	void RefineRgn(Cands& cands, citer endIt);
+	void RefineRgn(Ñandidates& cands, citer endIt);
 
 	// Sets BSs scores within the group according to fragment coverage spline
 	//	@param start: first valid iterator in the group
@@ -882,8 +895,11 @@ private:
 
 public:
 	// Returns true if boundary is valid
-	static bool IsValid(iter it)	{ return it->second.Score; }
-	static bool IsValid(citer it)	{ return it->second.Score; }
+	static bool IsValid0(iter it)	{ return it->second.Score; }
+	static bool IsValid0(citer it)	{ return it->second.Score; }
+
+	static bool IsValid(iter it) { return it->second.Bunched || it->second.Real; }
+	static bool IsValid(citer it) { return it->second.Bunched || it->second.Real; }
 
 	// Fills the instance with recognized binding sites
 	//	@param derivs: derivatives
@@ -892,9 +908,11 @@ public:
 
 	// Brings the instance to canonical order of placing BS bounds;
 	// may adjust reference position
-	void Refine();
+	void Refine0();
 
-	void Refine1();
+	// Brings the instance to canonical order of placing BS bounds;
+	// may adjust reference position
+	void Refine();
 
 	// Sets score for each binding sites and normalizes it
 	//	@param fragCovers: fragment total coverage
@@ -929,6 +947,7 @@ public:
 	void DoBasic(F&& lambda) const
 	{
 		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++)
+			//if (IsValid(it) && !REVERSE(it) && REVERSE(it0))
 			if (IsValid(it) && !REVERSE(it) && REVERSE(it0))
 				lambda(it0, it);
 	}
