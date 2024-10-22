@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 08/14/2024
+Last modified: 10/22/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -61,21 +61,7 @@ const Options::Usage Options::Usages[] = {	// content of 'Usage' variants in hel
 };
 const BYTE Options::UsageCount = ArrCnt(Options::Usages);
 
-//int foo1(int a, int b)
-//{
-//	auto x = (char*)a;
-//	auto y = x[b];
-//	auto c = int(y);
-//	return c;
-//	return (int)&(((char*)a)[b]);
-//}
-//
-//int foo(int a, int b)
-//{
-//	int sum = a ^ b;
-//	int carry = (a & b) << 1;
-//	return carry ? foo(sum, carry) : sum;
-//}
+
 /*****************************************/
 int main(int argc, char* argv[])
 {
@@ -177,6 +163,14 @@ void Detector::CallBS(chrid cID)
 	BS_map& bss = *_bss.ChromData(cID).Data();
 	const chrlen cLen = _cSizes[cID];
 
+#ifdef TIMING
+	_timer.Start();
+	_fragCovers.Fill(_reads);
+	_timer.Stop("Filling map: ");	cout << LF;
+	_fragCovers.WriteChrom(cID);
+	return;
+#endif
+
 #ifdef MY_DEBUG
 	_lineWriter.SetChromID(cID);	Incline::SetSpecialWriter(_lineWriter);
 	_splineWriter.SetChromID(cID);	TreatedCover::SetSpecialWriter(_splineWriter);
@@ -201,8 +195,8 @@ void Detector::CallBS(chrid cID)
 		Glob::FragLenUndef = false;
 		timer.Stop();	cout << LF;
 	}
-	//_fragÑovers.WriteChrom(cID); 
-	//return;
+	_fragCovers.WriteChrom(cID);
+	return;
 
 	Verb::PrintMsg(Verb::RT, "Locate binding sites\n");
 	if (regions.SetPotentialRegions(fragCovers, cLen, 3))
@@ -214,14 +208,17 @@ void Detector::CallBS(chrid cID)
 	splines.DiscardNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
 	splines.NumberGroups();
-	derivs.Set(splines);			_splines.WriteChrom(cID);
-	
+	derivs.Set(splines);
+	_splines.WriteChrom(cID);
+	//derivs.Print(5002900);
+	//return;
 	bss.Set(derivs, readCovers);	_readCovers.WriteChrom(cID); _derivs.WriteChrom(cID);
 	bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
 	//return;
 	bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
-	//bss.SetScore(fragCovers);		_fragÑovers.WriteChrom(cID);
+	//bss.SetScore(fragCovers);		
+	_fragCovers.WriteChrom(cID);
 #ifdef MY_DEBUG
 	//bss.Print(cID, _outFName + ".BSS_dump2.txt", false);
 	//bss.PrintWidthDistrib(_outFName + ".BSS_width");

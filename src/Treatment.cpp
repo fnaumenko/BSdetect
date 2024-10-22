@@ -272,7 +272,7 @@ void CombCover::Fill(const Reads& reads)
 
 bool CoverRegions::DiscardOverlapChain(Iter it[2], cIter itEnd[2])
 {
-	BYTE s = End(it[0]) > End(it[1]);	// index of the left ended region: 0 - direct, 1 - reverse
+	BYTE s = End(it[R]) > End(it[L]);	// index of the left ended region: R - forward, L - reverse
 
 	if (Start(it[!s]) > End(it[s]))	{ it[s]++;	return false; }
 	if (++it[s] == itEnd[s])					return true;
@@ -691,8 +691,8 @@ void ValuesMap::NumberGroups()
 {
 	// minimum overlap length: 10 - empirical addition
 	const fraglen minOverlap = SSpliner<coval>::SilentLength(CurveTYPE, ReadSplineBASE) + 10;
-	ValuesMap::Iter it[2]	{ this[0].begin(),	this[1].begin() };
-	ValuesMap::Iter itEnd[2]{ this[0].end(),	this[1].end()	};
+	ValuesMap::Iter it[2]	{ this[R].begin(),	this[L].begin() };
+	ValuesMap::Iter itEnd[2]{ this[R].end(),	this[L].end()	};
 	chrlen numb = 1;
 
 	auto isOverlap = [&](BYTE s) {
@@ -706,16 +706,16 @@ void ValuesMap::NumberGroups()
 		return true;			// overlapping
 	};
 
-	while (it[0] != itEnd[0] && it[1] != itEnd[1]) {
-		if (!it[0]->second.MaxVal()) { it[0]++; continue; }
-		if (!it[1]->second.MaxVal()) { it[1]++; continue; }
+	while (it[R] != itEnd[R] && it[L] != itEnd[L]) {
+		if (!it[R]->second.MaxVal()) { it[R]++; continue; }
+		if (!it[L]->second.MaxVal()) { it[L]++; continue; }
 
-		it[0]->second.GrpNumb = it[1]->second.GrpNumb = numb;
+		it[R]->second.GrpNumb = it[L]->second.GrpNumb = numb;
 		for (bool overlap = true; overlap; )
 			if (!(overlap = isOverlap(0)))
 				overlap = isOverlap(1);
 		numb++;
-		it[0]++, it[1]++;
+		it[R]++, it[L]++;
 	}
 }
 
@@ -828,8 +828,6 @@ void Inclines::SpreadTopCover(BYTE reverse, float topCover)
 					auto& incline = at(i);
 					incline.TopCover = _topCover;	// for one of the inclines the value will be rewritten to the same; never mind
 					incline.Bunched = lastInd - _firstInd > 1;
-					//at(i).TopCover = _topCover;	// for one of the inclines the value will be rewritten to the same; never mind
-					//at(i).Bunched = lastInd - _firstInd > 1;
 				}
 				_topCover = topCover;
 				_firstInd = lastInd;
@@ -850,6 +848,7 @@ void BoundsValues::CollectForwardInclines(const TreatedCover& rCover, Inclines& 
 
 	for (auto it = rbegin(); it != rend(); it++) {	// loop through one derivative region
 		posVal.Set(R, it);
+		cout << this->TopCover() << TAB << posVal.Val(R) << LF;
 		rCover.PushIncline(R, posVal, inclines);
 		posVal.Retain();
 	}
@@ -869,11 +868,13 @@ void BoundsValues::CollectReverseInclines(const TreatedCover& rCover, Inclines& 
 void BoundsValues::AddSignifValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv)
 {
 	if (_maxVal < deriv.MaxVal())	_maxVal = deriv.MaxVal();
-	_grpNumb = spline.second.GrpNumb;
+	auto& vals = spline.second;
+	_grpNumb = vals.GrpNumb;
+	_topCover = vals.MaxVal();
 	emplace_back(
 		spline.first + relPos,
-		spline.second.Value(relPos),
-		spline.second.Value(relPos + deriv.Length()),
+		vals.Value(relPos),
+		vals.Value(relPos + deriv.Length()),
 		deriv
 	);
 }
@@ -932,6 +933,12 @@ void BoundsValues::AddValues(const tValuesMap::value_type& spline, chrlen relPos
 		SepSignifValues(negligRgns, 0, spline, relPos, deriv);
 	else
 		AddSignifValues(spline, relPos, deriv);
+
+	// set relative top values
+	for (auto& deriv : *this) {
+		//deriv.SetRelValue(_maxVal);
+		//cout << _grpNumb << TAB << deriv._pos << TAB<< _maxVal << TAB << deriv.MaxVal() << TAB << deriv.RelValue() << LF;
+	}
 }
 
 
@@ -990,7 +997,7 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 			break;
 		printf("%d: %2.2f\n", rvss.first, rvss.second.MaxVal());
 		for (const auto& rvs : rvss.second)
-			printf("  %2.2f:\t%d %d\t%d\n", rvs.MaxVal(), rvs.GrpNumb, rvs.Start(), rvs.Length());
+			printf("  %2.2f  %2.2f:\t%d %d\t%d\n", rvs.MaxVal(), rvs.RelValue(), rvs.GrpNumb, rvs.Start(), rvs.Length());
 	}
 }
 #endif
@@ -1029,16 +1036,16 @@ void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline)
 			lastIt--;
 		}
 
-		_lastIt = emplace_hint(lastIt, pos, BS_bound(1, grpNumb, incline.TopCover, incline.Bunched));
+		_lastIt = emplace_hint(lastIt, pos, move(BS_bound(1, grpNumb, incline)));
 		POS(_lastIt) = _lastIt->first;
 	}
 	else {
-		auto it = emplace_hint(end(), pos, BS_bound(0, grpNumb, incline.TopCover, incline.Bunched));
+		auto it = emplace_hint(end(), pos, move(BS_bound(0, grpNumb, incline)));
 		POS(it) = it->first;
 	}
 }
 
-void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, float topCover, Inclines& inclines)
+void BS_map::AddBounds(BYTE reverse, chrlen grpNumb, /*float topCover,*/ Inclines& inclines)
 {
 	// sort inclines by ascending (for forward) / descending (for reverde) reference positions
 	sort(inclines.begin(), inclines.end(),
@@ -1081,8 +1088,10 @@ void BS_map::SetBounds(BYTE reverse, const BoundsValuesMap& derivs, const Treate
 	for (const auto& d : derivs) {		// loop through the derivative regions
 		inclines.Clear();
 		(d.second.*fcollectInclines)(rCover, inclines);
-		if (inclines.size())
-			AddBounds(reverse, d.second.GrpNumb(), d.second.MaxVal(), inclines);
+		if (inclines.size()) {
+			inclines.SetTopCover(d.second.TopCover());
+			AddBounds(reverse, d.second.GrpNumb(),/* d.second.MaxVal(),*/ inclines);
+		}
 	}
 }
 
@@ -1241,7 +1250,6 @@ void BS_map::ExtendNarrowBSs()
 		|_|     |_| |_|
 	*/
 
-	// draft common bypass
 	for (auto it = begin(); it != end(); it++) {
 		if (REAL(it)) {	// always reversed (left) bound
 			//auto pos = POS(it);
@@ -1352,13 +1360,12 @@ void BS_map::Refine0()
 	ExtendNarrowBSs0();
 }
 
-void BS_map::Ñandidates::MarkInSites()
+void BS_map::Ñandidates::SetReal()
 {
 	auto sz = size();
 	if (!sz) return;
 
-
-	auto markInsite = [this](iter& itL, iter& itR, iterator& it) {
+	auto setReal0 = [this](iter& itL, iter& itR, iterator& it) {
 		REAL(itL) = REAL(itR) = true;
 		if (REVERSE(itR)) {
 			bool turnOver = true;
@@ -1367,7 +1374,7 @@ void BS_map::Ñandidates::MarkInSites()
 				auto len0 = LEN(prev(itL), itL);
 				USHORT ind = it->index;
 				bool checkScore = ind ?
-					it->relScore < 2 * at(--ind).relScore:
+					it->avrCover < 2 * at(--ind).avrCover:
 					true;
 
 				if (len > 2 * len0 && checkScore)			// empirical ratio 2
@@ -1378,7 +1385,7 @@ void BS_map::Ñandidates::MarkInSites()
 				auto len1 = LEN(itR, next(itR));
 				USHORT ind = it->index;
 				bool checkScore = ind < size() - 1 ?
-					it->relScore < 2 * at(++ind).relScore :
+					it->avrCover < 2 * at(++ind).avrCover :
 					true;
 
 				if (len > 2 * len1 && checkScore)		// empirical ratio 2
@@ -1390,20 +1397,80 @@ void BS_map::Ñandidates::MarkInSites()
 		}
 	};
 
+	auto setRealWithCheckBounds = [this](iter& itL, iter& itR, iterator& it) {
+		REAL(itL) = REAL(itR) = true;
+		{
+			int ind = it->index;
+			for (auto itLL = prev(itL); ind >= 0; ind--, itLL--)
+				if (!REVERSE(itLL)) {
+					itLL->second.Related = false;
+					//break;
+				}
+		}
+		{
+			int ind = it->index;
+			for (auto itRR = next(itR); ind < size(); ind++, itRR++)
+				if (REVERSE(itRR)) {
+					itRR->second.Related = false;
+					//break;
+				}
+		}
+	};
+
+	auto setReal = [=](iter& itL, iter& itR, iterator& it) {
+
+		if (REVERSE(itR)) {
+			bool turnOver = true;
+			if (it->adjLeft) {
+				USHORT ind = it->index;
+				if (ind == 0 || it->relCover < 2 * at(--ind).relCover)
+					turnOver = false;
+			}
+			if (turnOver && it->adjRight) {
+				USHORT ind = it->index;
+				if (ind == size() - 1 || it->relCover < 2 * at(++ind).relCover)
+					turnOver = false;
+			}
+			if (turnOver) {
+				REVERSE(itR) = false;
+				REVERSE(itL) = true;
+				setRealWithCheckBounds(itL, itR, it);
+				//REAL(itL) = REAL(itR) = true;
+			}
+			else {
+				//REAL(itL) = true;
+				//REAL(itLL) = true;
+				auto itLL = prev(itL);
+				setRealWithCheckBounds(itLL, itL, it);
+			}
+		}
+		else
+			//REAL(itL) = REAL(itR) = true;
+			setRealWithCheckBounds(itL, itR, it);
+	};
+
 	if (sz > 1) {
 		// mark adjasted candidates
 		for (auto it0 = begin(), it = next(it0); it != end(); it0++, it++) {
-			//float relScr = it->relScore;
-			//auto pos = POS(it0->lastIt);	// for debug
+			auto pos = POS(it0->lastIt);	// for debug
 			if (it0->lastIt == prev(it->lastIt)) {	// adjacent candidates?
 				it0->adjRight = it->adjLeft = true;
 			}
 		}
+		for (auto it = begin(); it != end(); it++) {
+			if (it->adjLeft || it->adjRight) {
+				auto& itR = it->lastIt;
+				auto itL = prev(itR);
+				auto len = LEN(itL, itR);
+				it->relCover = it->avrCover / len;
+			}
+		}
 
 		Ñandidates cands = *this;
-		// sort in descending relScore
+		// sort in descending avrCover
 		sort(cands.begin(), cands.end(),
-			[](const Ñandidate& c1, const Ñandidate& c2) { return c1.relScore > c2.relScore; }
+			//[](const Ñandidate& c1, const Ñandidate& c2) { return c1.avrCover > c2.avrCover; }
+			[](const Ñandidate& c1, const Ñandidate& c2) { return c1.relCover > c2.relCover; }
 		);
 
 		const fraglen minDistance = Glob::FragLen / 2;
@@ -1411,7 +1478,7 @@ void BS_map::Ñandidates::MarkInSites()
 		auto& itR = it->lastIt;
 		auto itL = prev(itR);
 		Region rgn0{ POS(itL), POS(itR) };
-		markInsite(itL, itR, it);
+ 		setReal(itL, itR, it);
 
 		for (it++; it != cands.end(); it++) {
 			auto& itR = it->lastIt;
@@ -1419,24 +1486,27 @@ void BS_map::Ñandidates::MarkInSites()
 			Region rgn{ POS(itL), POS(itR) };
 
 			if (rgn.ToTheLeft(rgn0, minDistance) || rgn.ToTheRight(rgn0, minDistance))
-				markInsite(itL, itR, it);
+				setReal(itL, itR, it);
 
 			rgn = rgn0;
 		}
 	}
 	else {
-		auto& bsIt = front().lastIt;
-		REAL(prev(bsIt)) = REAL(bsIt) = true;
-		if (REVERSE(bsIt)) {
-			REVERSE(bsIt) = false;
-			REVERSE(prev(bsIt)) = true;
+		auto it = begin();
+		auto& itR = it->lastIt;
+		auto itL = prev(itR);
+		REAL(itL) = REAL(itR) = true;
+		if (REVERSE(itR)) {
+			REVERSE(itR) = false;
+			REVERSE(itL) = true;
 		}
+		//setRealWithCheckBounds(itL, itR, ++it);
 	}
 }
 
 void BS_map::RefineRgn(Ñandidates& cands, citer endIt)
 {
-	cands.MarkInSites();
+	cands.SetReal();
 }
 
 void BS_map::Refine()
@@ -1478,9 +1548,9 @@ void BS_map::Refine()
 			auto it0 = prev(it);
 			float topCover0 = TopCOVER(prev(it));
 			float topCover1 = TopCOVER(it);
-			//float relScore = topCover1 > topCover0 ? topCover0 / topCover1 : topCover1 / topCover0;
-			float relScore = (topCover0 + topCover1) / 2;
-			cands.emplace_back(ind++, it, relScore);
+			//float avrCover = topCover1 > topCover0 ? topCover0 / topCover1 : topCover1 / topCover0;
+			float avrCover = (topCover0 + topCover1) / 2;
+			cands.emplace_back(ind++, it, avrCover);
 		}
 		lastReverse = REVERSE(it);
 		firstInRgn = false;
@@ -1701,7 +1771,7 @@ void BS_map::Print(chrid cID, const string& fName, bool selected, chrlen stopPos
 			x.second.Score,
 			x.second.TopCover,
 			x.second.Real,
-			x.second.Bunched,
+			x.second.Related,
 			locus.Print(x.first)
 		);
 	}

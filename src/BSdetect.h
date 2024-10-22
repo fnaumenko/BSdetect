@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 07/29/2024
+Last modified: 10/22/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -26,6 +26,8 @@ enum optValue {		// options id
 	oVERSION,
 	oHELP,
 };
+
+//#define TIMING
 
 // BS detector
 class Detector
@@ -86,7 +88,13 @@ public:
 		if (Verb::Level(Verb::RT))
 			printf("%s-end sequence\n", Glob::IsPE ? "paired" : "single");
 		_file = &file;
+#ifdef TIMING
+		auto capacity = file.EstItemCount();		// testing is performed on single-chromosomal data 
+		_reads.Reserve(capacity);
+		cout << "capacity: " << capacity << LF;
+#else
 		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
+#endif
 		file.Pass(*this);
 		_file = nullptr;
 	}
@@ -165,7 +173,9 @@ public:
 	bool operator()() {
 		auto& rgn = _file->ItemRegion();
 		bool reverse = !_file->ItemStrand();
-
+#ifdef TIMING
+		_reads.AddRead(rgn, reverse);
+#else
 		if (Glob::IsPE) {
 			Region frag;
 			const Read read(*_file);
@@ -179,6 +189,7 @@ public:
 				_reads.AddRead(rgn, reverse);
 		}
 		_readCovers.AddRead(rgn, reverse);
+#endif
 		return true;
 	}
 

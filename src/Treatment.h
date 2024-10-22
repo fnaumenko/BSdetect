@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 08/17/2024
+Last modified: 10/22/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -110,7 +110,7 @@ Group is a set of splines/derivatives/inclines within one potential region.
 Groups are numbered sequentially starting from 1, their numbering may not coincide with the numbering of potential regions (which can be "empty")
 */
 
-// Sequential float values (for spline and deriv)
+// Sequential float values (for SPLINE and derivators)
 class Values : public vector<float>
 {
 	float _maxVal;
@@ -262,10 +262,11 @@ public:
 // as a resul of Linear Regression
 struct Incline
 {
-	bool		 Bunched = false;
+	bool	Bunched = false;
 	chrlen	Pos;		// position of the incline on the x-axis (chromosome's position)
 	chrlen	TopPos;		// position of the top point of the incline
 	float	TopCover;
+	float	RelCover;
 	float	Deriv;		// derivative (tangent of the angle of incline)
 
 	bool Valid() const {
@@ -310,6 +311,8 @@ class Inclines : public vector<Incline>
 public:
 	void Clear() { _topCover = 0; _firstInd = 0; clear(); }
 
+	void SetTopCover(float topCover) {	_topCover = topCover; }
+
 	// Adds incline with duplicate control
 	void Add(const Incline& incline);
 
@@ -323,7 +326,7 @@ public:
 class TracedPosVal
 {
 	chrlen	_pos[2], _pos0[2]{ 0,0 };	// current, previous start/end positions
-	float	_val[2], _val0[2]{ 0,0 };	// current, previous min/max values 
+	float	_val[2], _val0[2]{ 0,0 };	// current, previous forward/reverse values 
 
 public:
 	// Returns current position
@@ -677,12 +680,13 @@ public:
 
 //=== DERIVATIVES & COLLECTION
 
-// Ñollection of float values with its associated position and minimum/maximum value
+// Ñollection of float values with its associated position and minimum/maximum value: derivators
 class BoundValues : public Values
 {
+public:
 	chrlen	_pos;		// region start position
-	//float	_topCover;
-	float	_val[2];	// region min, max values
+	float	_val[2];	// region min, max read coverage values
+	float	_relVal = 0;	// top value of the derivative relative to the maximum in the region
 public:
 
 	BoundValues(chrlen startPos, float valMin, float valMax, Values& vals)
@@ -695,7 +699,11 @@ public:
 	// Copies min, max values to the external pair
 	void	GetValues(float(&val)[2]) const { memcpy(val, _val, 2 * sizeof(float)); }
 
-	float	MaxValue() const { return _val[1]; }
+	//float	TopValue() const { return _val[1]; }
+
+	void SetRelValue(float maxVal) { _relVal = MaxVal() / maxVal; }
+
+	float RelValue() const { return _relVal; }
 };
 
 // BoundValues collection representing 
@@ -705,13 +713,14 @@ class BoundsValues : public vector<BoundValues>
 	using citer = vector<BoundValues>::const_iterator;
 
 	float _maxVal = 0;
-	chrlen _grpNumb;	// group number
+	float _topCover = 0;	// max splined read cover value within the group
+	chrlen _grpNumb;		// group number
 
 	// Adds significant derivative values
 	//	@param spline: spline on the basis of which derivatives are calculated
 	//	@param relPos: spline relative position
-	//	@param derivs: derivative values (will be moved)
-	void AddSignifValues(const tValuesMap::value_type& spline, chrlen relPos, Values& derivs);
+	//	@param deriv: derivative values (will be moved)
+	void AddSignifValues(const tValuesMap::value_type& spline, chrlen relPos, Values& deriv);
 
 	// Separates and adds significant derivative values
 	//	@param rgns: insignificant regions within derivs (relative positions)
@@ -730,6 +739,8 @@ class BoundsValues : public vector<BoundValues>
 public:
 	float	MaxVal()	const { return _maxVal; }
 	
+	float	TopCover()	const { return _topCover; }
+
 	// Returns group number
 	chrlen	GrpNumb()	const { return _grpNumb; }
 
@@ -775,6 +786,9 @@ public:
 #endif
 };
 
+const BYTE R = 0;	// right bound, synonym for 'forward'
+const BYTE L = 1;	// left  bound, synonym for 'reverse' 
+
 class DataBoundsValuesMap : public DataSet<BoundsValuesMap>
 {
 public:
@@ -782,8 +796,8 @@ public:
 	//	@param splines: Read coverage splines
 	void Set(const DataValuesMap& splines)
 	{
-		StrandData(FWD).BuildDerivs(StrandOps[0].Factor, splines.StrandData(FWD));
-		StrandData(RVS).BuildDerivs(StrandOps[1].Factor, splines.StrandData(RVS));
+		StrandData(FWD).BuildDerivs(StrandOps[R].Factor, splines.StrandData(FWD));
+		StrandData(RVS).BuildDerivs(StrandOps[L].Factor, splines.StrandData(RVS));
 	}
 
 #ifdef MY_DEBUG
@@ -797,13 +811,10 @@ public:
 
 //=== BINDING SITES DATA 
 
-const BYTE R = 0;	// right bound, synonym for 'forward'
-const BYTE L = 1;	// left  bound, synonym for 'reverse' 
-
 struct BS_bound
 {
 	BYTE		 Reverse;
-	bool		 Bunched = false;
+	bool		 Related = false;	// bound related to the 'real'
 	bool		 Real = false;	// BS 'real' bound
 	chrlen		 RefPos = 0;	// reference position; by default duplicates the map position, but can be adjusted
 	const chrlen GrpNumb;		// group number
@@ -813,8 +824,10 @@ struct BS_bound
 	// Constructor
 	//	@param reverse: 0 for forward, 1 for reverse
 	//	@param grpNumb: group number
-	BS_bound(BYTE reverse, chrlen grpNumb, float topCover, bool bunched) 
-		: Reverse(reverse), GrpNumb(grpNumb), TopCover(topCover), Bunched(bunched) {}
+	//BS_bound(BYTE reverse, chrlen grpNumb, float topCover, bool bunched) 
+	//	: Reverse(reverse), GrpNumb(grpNumb), TopCover(topCover), Related(bunched) {}
+	BS_bound(BYTE reverse, chrlen grpNumb, const Incline& incline)
+		: Reverse(reverse), GrpNumb(grpNumb), TopCover(incline.TopCover), Related(incline.Bunched) {}
 };
 
 class BS_map : public map<chrlen, BS_bound>
@@ -826,19 +839,20 @@ public:
 private:
 	struct Ñandidate
 	{
-		iter lastIt;
-		float relScore;
+		iter	lastIt;
+		float	avrCover;
+		float	relCover = 0;	// average coverage per bias
 		bool	adjLeft = false;
 		bool	adjRight = false;
 		USHORT	index;
 
-		Ñandidate(USHORT ind, iter it, float score) : index(ind), lastIt(it), relScore(score) {}
+		Ñandidate(USHORT ind, iter it, float score) : index(ind), lastIt(it), avrCover(score) {}
 	};
 	//using Ñandidates = vector<Ñandidate>;
 	class Ñandidates : public vector<Ñandidate>
 	{
 	public:
-		void MarkInSites();
+		void SetReal();
 	};
 
 	iter _lastIt;	// last inserted iterator (used in AddPos(), for the left bounds only)
@@ -855,7 +869,7 @@ private:
 	//	@param reverse: 0 for forward (right bounds), 1 for reverse (left bounds)
 	//	@param grpNumb: group number
 	//	@param inclines: forward/reversed (right/left) inclined lines
-	void AddBounds(BYTE reverse, chrlen grpNumb, float topCover, Inclines& inclines);
+	void AddBounds(BYTE reverse, chrlen grpNumb, /*float topCover,*/ Inclines& inclines);
 
 	// Fills the instance with recognized left/right BS positions (bounds)
 	//	@param reverse[in]: 0 for forward (right bounds), 1 for reverse (left bounds)
@@ -898,8 +912,8 @@ public:
 	static bool IsValid0(iter it)	{ return it->second.Score; }
 	static bool IsValid0(citer it)	{ return it->second.Score; }
 
-	static bool IsValid(iter it) { return it->second.Bunched || it->second.Real; }
-	static bool IsValid(citer it) { return it->second.Bunched || it->second.Real; }
+	static bool IsValid(iter it) { return it->second.Related || it->second.Real; }
+	static bool IsValid(citer it) { return it->second.Related || it->second.Real; }
 
 	// Fills the instance with recognized binding sites
 	//	@param derivs: derivatives
