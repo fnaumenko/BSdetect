@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 10/22/2024
+Last modified: 10/26/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -27,7 +27,7 @@ enum optValue {		// options id
 	oHELP,
 };
 
-//#define TIMING
+#define TIMING
 
 // BS detector
 class Detector
@@ -35,9 +35,10 @@ class Detector
 	const string FNameFragExt = "_frag";
 	const string FNameReadExt = "_read";
 
-	ChromSizes&		 _cSizes;
 	bool			 _saveCover;
-	CombCover		 _fragCovers;		// extended reads cover to find frag Mean
+	bool			 _unsortNotSet = true;	// false if unsorting is detected while input reading
+	ChromSizes&		 _cSizes;
+	CombCover		 _fragCovers;			// extended reads cover to find frag Mean
 	CombCover		 _readCovers;
 	OCoverRegions	 _regions;
 	OValuesMap		 _splines;
@@ -49,7 +50,7 @@ class Detector
 #endif
 	OBS_Map			 _bss;
 
-	RBedReader* _file;		// needs only for input reading
+	RBedReader* _file;			// needs only for input reading
 	FragIdent	_fIdent;		// needs only for input reading
 	Reads		_reads;
 	Timer		_timer;
@@ -88,6 +89,7 @@ public:
 		if (Verb::Level(Verb::RT))
 			printf("%s-end sequence\n", Glob::IsPE ? "paired" : "single");
 		_file = &file;
+
 #ifdef TIMING
 		auto capacity = file.EstItemCount();		// testing is performed on single-chromosomal data 
 		_reads.Reserve(capacity);
@@ -169,13 +171,21 @@ public:
 	}
 
 	// treats current item
+	//	@param unsorted: true if unsorting is detected
 	//	@returns: true if item is accepted
-	bool operator()() {
+	bool operator()(bool unsorted) {
 		auto& rgn = _file->ItemRegion();
 		bool reverse = !_file->ItemStrand();
+
+		if (_unsortNotSet && unsorted) {
+			_fragCovers.SetUnsortedInput();
+			_readCovers.SetUnsortedInput();
+			_unsortNotSet = false;
+		}
 #ifdef TIMING
 		_reads.AddRead(rgn, reverse);
-#else
+		return true;
+#endif
 		if (Glob::IsPE) {
 			Region frag;
 			const Read read(*_file);
@@ -189,7 +199,6 @@ public:
 				_reads.AddRead(rgn, reverse);
 		}
 		_readCovers.AddRead(rgn, reverse);
-#endif
 		return true;
 	}
 

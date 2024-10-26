@@ -252,20 +252,29 @@ void TreatedCover::PushIncline(BYTE reverse, const TracedPosVal& posVal, Incline
 
 
 //===== CombCover
+void CombCover::SetUnsortedInput()
+{
+	_data->TotalData().SetUnsortedInput();
+	_data->StrandData(FWD).SetUnsortedInput();
+	_data->StrandData(RVS).SetUnsortedInput();
+}
 
 void CombCover::AddExtRead(const Region& read, bool reverse)
 {
 	Region frag(read, Glob::FragLen, reverse);
 
-	_data->TotalData().AddRegion(frag);			// total frag coverage
-	AddRead(frag, reverse);
+	_data->TotalData().AddRegionByCond(frag);	// total frag coverage
+	AddRead(frag, reverse);						// strand frag coverage
 }
 
-void CombCover::Fill(const Reads& reads)
+void CombCover::FillExtRead(const Reads& reads)
 {
-	for (BYTE s : {0, 1})
+	for (BYTE s : {0, 1}) {
+		if(s)
+			_data->TotalData().SetUnsortedInput();	// set unsorted because it's being refilled
 		for (auto& rd : reads.GetReads(s))
 			AddExtRead(rd, s);
+	}
 }
 
 //===== CoverRegions
@@ -1012,8 +1021,6 @@ void BoundsValuesMap::Print(eStrand strand, chrlen stopPos) const
 
 #define	TopCOVER(it)	(it)->second.TopCover
 #define REAL(it)		(it)->second.Real
-
-
 
 void BS_map::AddPos(BYTE reverse, chrlen grpNumb, const Incline& incline)
 {

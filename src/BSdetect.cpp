@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 10/22/2024
+Last modified: 10/26/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -25,7 +25,6 @@ const string Product::Descr = "binding sites detector";
 const char* ProgParam = "<alignment>";	// program parameter tip
 
 // *** Options definition
-
 enum eOptGroup { gOTHER };						// the only member - no gropus in help
 const char* Options::OptGroups[] = { NULL };	// no gropus in help
 const BYTE Options::GroupCount = ArrCnt(Options::OptGroups);
@@ -46,7 +45,7 @@ Options::Option Options::List[] = {
 	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL, "print each read ambiguity, if they exist" },
 	{ 'R',"rd-len",	tOpt::HIDDEN,	tINT,	gOTHER, 50, 20, 1000, NULL,
 	"fixed length of output read, or mean length of variable reads" },
-	{ 'r',"rank-score",	tOpt::NONE,tENUM,gOTHER, TRUE, 0, 2, (char*)Booleans,
+	{ 'r',"rank-score",tOpt::NONE,tENUM,gOTHER, TRUE, 0, 2, (char*)Booleans,
 	"turn on/off rendering the main result score in greyscale" },
 	{ 'O', sOutput,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF,	0,	0, NULL, "output files common name" },
 	{ 't',	sTime,	tOpt::NONE,	tENUM,	gOTHER,	FALSE,	NO_VAL, 0, NULL, sHelpTime },
@@ -127,10 +126,10 @@ int main(int argc, char* argv[])
 				&cSizes,
 				Options::GetIVal(oDUP_LVL),
 				eOInfo::NM,
-				false	//Verb::Level(Verb::DBG)	// check for sorting
+				false,	// check for sorting
+				true,	// abort invalid
+				true	// first line will be pre-read
 			);
-			//Verb::PrintMsg(Verb::DBG);
-			//file.PrintFirstLF();
 			cout << LF;
 			file.GetNextItem();		// no need to check for empty sequence
 			Glob::SetPE(file.IsPaired());
@@ -165,7 +164,7 @@ void Detector::CallBS(chrid cID)
 
 #ifdef TIMING
 	_timer.Start();
-	_fragCovers.Fill(_reads);
+	_fragCovers.FillExtRead(_reads);
 	_timer.Stop("Filling map: ");	cout << LF;
 	_fragCovers.WriteChrom(cID);
 	return;
@@ -188,7 +187,7 @@ void Detector::CallBS(chrid cID)
 			Verb::PrintMsgVar(Verb::RT, "Rebuild coverages\n");
 			Glob::FragLen -= peakDiff;
 			_fragCovers.Clear();
-			_fragCovers.Fill(_reads);
+			_fragCovers.FillExtRead(_reads);
 		}
 		_reads.Clear();
 		regions.Clear();

@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 10/22/2024
+Last modified: 10/26/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -368,6 +368,8 @@ class TreatedCover : public AccumCover
 #ifdef MY_DEBUG
 	static OSpecialWriter* SplineWriter;	// spline writer to save local splines
 #endif
+	// input alignment sorting flag
+	bool _sortedIput = true;	// by default it's supposed to be sorted, but this may change during the reading process
 
 	// Calculates Linear Regression
 	//	@param it: start iterator
@@ -381,11 +383,17 @@ public:
 	static void SetSpecialWriter(OSpecialWriter& splineWriter) { SplineWriter = &splineWriter; }
 	static bool WriteDelim;
 #endif
+
 	coval GetMaxVal() const;
 
 	// Returns cover mass centre for given region
 	//	@param rng: potential region
 	//chrlen GetRegionCentre(const CoverRegion& rng) const;
+
+	void SetUnsortedInput() { _sortedIput = false; }
+
+	// For current chrom adds region (read or fragment) ин sorted/unsorted condition
+	void AddRegionByCond(const Region& rgn) { AddRegion(rgn, _sortedIput); }
 
 	// Sets spline of the instance between start-end positions
 	//	@param spliner[in]: spliner that does the work
@@ -421,20 +429,24 @@ public:
 
 	//coval GetMaxVal() const { return _data->StrandData(FWD).GetMaxVal(); }
 
-	// For current chrom adds extended SE tag to total coverage, and pure tag to strand coverage
-	//	@param[in] read: added tag
-	//	@param[in] reverse: true if tag is reversed (neg strand)
+	void SetUnsortedInput();
+
+	// For current chrom adds read to strand read coverage
+	//	@param read: added tag
+	//	@param reverse: true if tag is reversed (neg strand)
 	void AddRead(const Region& read, bool reverse)
 	{
-		_data->StrandDataByInd(reverse).AddRegion(read);	// strand read coverage
+		_data->StrandDataByInd(reverse).AddRegionByCond(read);
 	}
 
-	// For current chrom adds extended SE tag to total coverage, and pure tag to strand coverage
-	//	@param[in] read: added tag
-	//	@param[in] reverse: true if tag is reversed (neg strand)
+	// For current chrom adds extended SE tag (fragment) to total frag coverage, and to strand coverage
+	//	@param read: added tag
+	//	@param reverse: true if tag is reversed (neg strand)
 	void AddExtRead(const Region& read, bool reverse);
 
-	void Fill(const Reads& reads);
+	// For current chrom fills frag coverage by extended SE reads (fragments) from read collection
+	//	@param reads: read collection
+	void FillExtRead(const Reads& reads);
 };
 
 // chromosome freaquence counter
@@ -471,7 +483,7 @@ public:
 
 	// treats current item
 	//	@returns: true if item is accepted
-	bool operator()() {
+	bool operator()(bool) {
 		_cover.AddNextRegion(_strand, _file.ItemRegion(), coval(_file.ItemValue()));
 		return true;
 	}
