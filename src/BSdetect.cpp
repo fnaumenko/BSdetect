@@ -126,9 +126,8 @@ int main(int argc, char* argv[])
 				&cSizes,
 				Options::GetIVal(oDUP_LVL),
 				eOInfo::NM,
-				false,	// check for sorting
-				true,	// abort invalid
-				true	// first line will be pre-read
+				true,		// abort invalid
+				true		// first line will be pre-read
 			);
 			cout << LF;
 			file.GetNextItem();		// no need to check for empty sequence

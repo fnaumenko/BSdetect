@@ -475,7 +475,12 @@ public:
 		eStrand strand
 	)
 		: _cover(cover), _chrFreq(chrFreq), _strand(strand)
-		, _file(fName, FT::eType::BGRAPH, &cSizes, 4, 0, eOInfo::LAC, Verb::Level(Verb::DBG), false, true)
+		, _file(fName, FT::eType::BGRAPH, &cSizes,
+			4,						// number of 'score' filed
+			0,						// number of additional duplicates allowed
+			eOInfo::LAC,			// output stat info level
+			Verb::Level(Verb::DBG)	// abort invalid
+		)
 	{
 		Verb::PrintMsg(Verb::DBG);
 		_file.Pass(*this);
