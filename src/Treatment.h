@@ -392,7 +392,7 @@ public:
 
 	void SetUnsortedInput() { _sortedIput = false; }
 
-	// For current chrom adds region (read or fragment) ин sorted/unsorted condition
+	// For current chrom adds region (read or fragment) by sorted/unsorted condition
 	void AddRegionByCond(const Region& rgn) { AddRegion(rgn, _sortedIput); }
 
 	// Sets spline of the instance between start-end positions
