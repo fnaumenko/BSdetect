@@ -120,14 +120,13 @@ int main(int argc, char* argv[])
 		// main mode
 		else
 		{
-			// pre-read first item to check for PE sequence
 			RBedReader file(
 				iName,
 				&cSizes,
 				Options::GetIVal(oDUP_LVL),
 				eOInfo::NM,
 				true,		// abort invalid
-				true		// first line will be pre-read
+				true		// first line will be pre-read to check for PE sequence
 			);
 			cout << LF;
 			file.GetNextItem();		// no need to check for empty sequence

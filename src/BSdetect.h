@@ -50,9 +50,9 @@ class Detector
 #endif
 	OBS_Map			 _bss;
 
-	RBedReader* _file;			// needs only for input reading
-	FragIdent	_fIdent;		// needs only for input reading
-	Reads		_reads;
+	RBedReader* _file;		// needs only for input reading
+	FragIdent	_fIdent;	// needs only for input reading
+	Reads		_reads;		// may be filled for the first chromosome only, if fragment len is not defined
 	Timer		_timer;
 
 	// Calculates the deviation from the default average fragment length
@@ -75,7 +75,6 @@ public:
 		, _fragCovers(cSizes, 3-2*Glob::IsPE, saveCover, outFName + FNameFragExt, "fragment coverage")
 		, _readCovers(cSizes, 2, saveCover, outFName + FNameReadExt, "read coverage")
 		, _regions(cSizes, 2-Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
-		//, _regions(cSizes, 2 - Glob::IsPE, true, outFName + ".RGNS", "potential regions")
 		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
 		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
 #ifdef MY_DEBUG
@@ -83,7 +82,7 @@ public:
 		, _splineWriter(cSizes, 1, saveInter, outFName + ".FR_SPLINE", "fragment coverage spline")
 		, _outFName(outFName)
 #endif
-		, _bss		(cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
+		, _bss(cSizes, 1, true, outFName + ".BSs", "called binding sites")
 		, _fIdent(true)
 	{
 		if (Verb::Level(Verb::RT))
@@ -171,7 +170,7 @@ public:
 	}
 
 	// treats current item
-	//	@param unsorted: true if unsorting is detected
+	//	@param unsorted: true if unsorted input is detected
 	//	@returns: true if item is accepted
 	bool operator()(bool unsorted) {
 		auto& rgn = _file->ItemRegion();
