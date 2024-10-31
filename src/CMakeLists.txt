@@ -52,7 +52,6 @@ set(Source_Files
     ${BASIC_DIR}/Options.cpp
     ${BASIC_DIR}/OrderedData.cpp
     ${BASIC_DIR}/TxtFile.cpp
-    # ${BASIC_DIR}spline.cpp
     BSdetect.cpp
     Treatment.cpp
 )
