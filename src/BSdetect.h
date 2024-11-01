@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 10/26/2024
+Last modified: 11/31/2024
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -19,6 +19,7 @@ enum optValue {		// options id
 	oSAVE_INTER,
 	oALARM,
 	oREAD_LEN,
+	oSINGLE_CHROM,
 	oRANK_SCORE,
 	oOUTFILE,
 	oTIME,
@@ -27,7 +28,7 @@ enum optValue {		// options id
 	oHELP,
 };
 
-#define TIMING
+//#define TIMING
 
 // BS detector
 class Detector
@@ -89,13 +90,15 @@ public:
 			printf("%s-end sequence\n", Glob::IsPE ? "paired" : "single");
 		_file = &file;
 
-#ifdef TIMING
-		auto capacity = file.EstItemCount();		// testing is performed on single-chromosomal data 
-		_reads.Reserve(capacity);
-		cout << "capacity: " << capacity << LF;
-#else
-		_reads.Reserve(file.EstItemCount() / 10);	// about the size of first chrom in common case
+#ifndef TIMING
+		if (Glob::FragLenUndef)		// no need for _reads if fragment is defined by user
 #endif
+		{
+			auto capacity = file.EstItemCount();
+			if (!Options::GetBVal(oSINGLE_CHROM))
+				capacity /= 10;		// about the size of first chrom in multi-chrom case
+			_reads.Reserve(capacity);
+		}
 		file.Pass(*this);
 		_file = nullptr;
 	}
@@ -176,7 +179,7 @@ public:
 		auto& rgn = _file->ItemRegion();
 		bool reverse = !_file->ItemStrand();
 
-		if (_unsortNotSet && unsorted) {
+		if (unsorted && _unsortNotSet) {
 			_fragCovers.SetUnsortedInput();
 			_readCovers.SetUnsortedInput();
 			_unsortNotSet = false;

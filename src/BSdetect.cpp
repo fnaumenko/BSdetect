@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 10/26/2024
+Last modified: 11/31/2024
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -45,6 +45,7 @@ Options::Option Options::List[] = {
 	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL, "print each read ambiguity, if they exist" },
 	{ 'R',"rd-len",	tOpt::HIDDEN,	tINT,	gOTHER, 50, 20, 1000, NULL,
 	"fixed length of output read, or mean length of variable reads" },
+	{ 'S',"single-chr",tOpt::HIDDEN,tENUM,gOTHER,FALSE,	NO_VAL, 0, NULL, "set single chromosome"},
 	{ 'r',"rank-score",tOpt::NONE,tENUM,gOTHER, TRUE, 0, 2, (char*)Booleans,
 	"turn on/off rendering the main result score in greyscale" },
 	{ 'O', sOutput,	tOpt::NONE,	tNAME,	gOTHER,	NO_DEF,	0,	0, NULL, "output files common name" },
@@ -60,12 +61,9 @@ const Options::Usage Options::Usages[] = {	// content of 'Usage' variants in hel
 };
 const BYTE Options::UsageCount = ArrCnt(Options::Usages);
 
-
 /*****************************************/
 int main(int argc, char* argv[])
 {
-	//cout << sizeof(chrlen) << TAB << sizeof(float) << LF;
-	//cout << sizeof(BS_bound) << LF;
 	//return 0;
 	int fileInd = Options::Parse(argc, argv, ProgParam);
 	if (fileInd < 0)	return 1;		// wrong option or tip output
@@ -90,8 +88,13 @@ int main(int argc, char* argv[])
 		auto ftype = FT::GetType(iName);
 		if (!gName && ftype != FT::BAM)
 			Err(Options::OptionToStr(oGEN) + " is required while input file is not BAM", iName).Throw();
-
+		//{
+		//	TabReader tfile("\\Documents\\Prof\\Bioinfo\\Data\\test\\cmd_fastqn.txt");
+		//	tfile.Print();	cout << LF;
+		//}
 		ChromSizes cSizes(gName, true);
+		//cSizes.Print();
+		//return 0;
 
 		// pre-covered data mode
 		if (ftype == FT::BGRAPH)

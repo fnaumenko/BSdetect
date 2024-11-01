@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 10/26/2024
+Last modified: 11/31/2024
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -96,6 +96,7 @@ static struct Glob {
 
 	static void SetPE(bool isPE) { if ((IsPE = isPE)) FragLenUndef = false; }
 
+	// Sets fragment length by user
 	static void SetFragLen(int fragLen)
 	{
 		if (fragLen) {
@@ -252,8 +253,13 @@ public:
 	void AddRead(const Region& rgn, bool reverse) { _reads[reverse].push_back(rgn); }
 
 	void Clear() {
-		for (BYTE s : {0, 1}) { _reads[s].clear(); _reads[s].shrink_to_fit(); }
+		for (BYTE s : {0, 1}) { 
+			_reads[s].clear();
+			vector<Region>().swap(_reads[s]);	// guarantees forced reallocation
+		}
 	}
+
+	//size_t Capacity() const { return _reads[0].capacity(); }
 };
 
 //=== INCLINE & COLLECTION
