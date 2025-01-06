@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 11/31/2024
+Last modified: 01/06/2025
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -93,6 +93,10 @@ static struct Glob {
 	static bool		FragLenUndef;
 	static readlen	ReadLen;	// length of read
 	static fraglen	FragLen;	// average fragment length
+#ifdef MY_DEBUG
+	static chrid	CurrChrom;	// suppose single thread only!
+#endif
+	static BYTE	BinWidth;
 
 	static void SetPE(bool isPE) { if ((IsPE = isPE)) FragLenUndef = false; }
 
@@ -202,8 +206,6 @@ public:
 // Ordered SpecialWriter
 class OSpecialWriter : OrderedData<int, SpecialWriter>
 {
-	chrid _cID = Chrom::UnID;
-
 public:
 	// Primer constructor
 	//	@param cSizes: chrom sizes
@@ -214,7 +216,7 @@ public:
 	OSpecialWriter(const ChromSizes& cSizes, BYTE dim, bool write, const string& name, const char* descr, eShade shade = LIGHT)
 		: OrderedData<int, SpecialWriter>(cSizes, dim, write, name, descr, nullptr, shade) {}
 
-	void SetChromID(chrid cID) { _cID = cID; }
+	//void SetChromID(chrid cID) { _cID = cID; }
 
 	bool IsWriterSet() const { return _writers != nullptr; }
 
@@ -229,7 +231,7 @@ public:
 	//	@param vals: values to write
 	void WriteChromData(chrlen start, const Values& vals)
 	{
-		(_writers->_files)[TOTAL]->WriteChromData(_cID, start, vals);
+		(_writers->_files)[TOTAL]->WriteChromData(Glob::CurrChrom, start, vals);
 	}
 };
 
@@ -542,27 +544,13 @@ class CoverRegions : public vector<CoverRegion>
 
 	friend class DataCoverRegions;
 
-	// Recursively discards multiple overlapping strand regions
-	//	@param it: pair of current compared region iterators
-	//	@param itEnd: pair of end iterators
-	static bool DiscardOverlapChain(Iter it[2], cIter itEnd[2]);
-
-	// Discards multiple overlapping (not 'one-to-one') strand regions
-	//	@param rgns: direct/reverse compared regions
-	static void DiscardMultiOverlapRegions(CoverRegions rgns[2]);
-
 	// Fills the instance by potential regions on extended read coverage
 	//	@param cover: fragment coverage
 	//	@param capacity: capacity to reserve the instance
 	//	@param cutoff: fragment coverage cut off value
-	void SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff);
+	//void SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff);
 
 #ifdef MY_DEBUG
-	// Checks for only single ('one-to-one') overlapping strand regions and prints false cases
-	//	@param rgns: direct/reverse compared regions
-	//	@param minOverlapLen: minimum allowed intersection length 
-	static void CheckSingleOverlapping(const CoverRegions rgns[2], fraglen minOverlapLen);
-
 	// Prints frequency distribution of potentail regions value ('score')
 	//	@param fname: name of file to print
 	//	@param all: if true then print all regions, otherwise only invalid ones
@@ -570,7 +558,9 @@ class CoverRegions : public vector<CoverRegion>
 #endif
 
 public:
-	// methods used in DiscardNonOverlaps()
+	void SetPotentialRegions(const TreatedCover& cover, chrlen capacity, coval cutoff);
+
+	// polymorphic methods for working with a class as collection of regions
 	static chrlen	Start	(cIter it)	{ return it->Start(); }
 	static chrlen	End		(cIter it)	{ return it->End(); }
 	static chrlen	Length	(cIter it)	{ return it->Length(); }
@@ -578,6 +568,12 @@ public:
 	static void		Accept	(const iterator it[2]) {}			// stub
 	static void		Discard	(Iter it)	{ it->valid = false; }
 	static bool		Accepted(cIter it)	{ return it->valid; }
+
+	// Fills the instance by the regions regions of the highest peaks of total fragment coverage (to determine the mean fragment length)
+	//	@param fragCover: fragment coverage
+	//	@param cutoff: fragment coverage cut off value
+	//	@returns: true in case of empty instance (and print message), false otherwise
+	bool SetTopPeakRegions(const DataSet<TreatedCover>& fragCover, coval cutoff);
 };
 
 class DataCoverRegions : public DataSet<CoverRegions>
@@ -590,6 +586,7 @@ public:
 	//	@param noMultiOverl: if true then eliminate multi overlaps regions as well
 	//	@returns: true in case of empty instance (and print message), false otherwise
 	bool SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl = false);
+
 
 	// Returns mean fragment length based on cover regions mass centre comparison
 	//	@param cover: fragment coverage
@@ -629,10 +626,10 @@ class ValuesMap : public tValuesMap
 #endif
 
 	// Filters and fill spline curve by read cover within potential region
-	//	@param rCover: raw read coverage or nullptr in case of frag coverage
+	//	@param rCover: raw read coverage
 	//	@param rgn: potential region
 	//	@param splineBase: half-length of spliner moving window
-	void BuildRegionSpline(bool reverse, const TreatedCover* rCover, const CoverRegion& rgn, fraglen splineBase);
+	void BuildRegionSpline(bool reverse, const TreatedCover& rCover, const CoverRegion& rgn, fraglen splineBase);
 
 	// Adds values with given position
 	//	@param pos: starting position of values
@@ -656,10 +653,10 @@ public:
 	float MaxVal() const { return _maxVal; }
 
 	// Filters and fill spline curve by read cover within potential regions
-	//	@param rCover: raw read coverage or nullptr in case of frag coverage
+	//	@param rCover: raw read coverage
 	//	@param rgns: potential regions
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(bool reverse, const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase);
+	void BuildSpline(bool reverse, const TreatedCover& rCover, const CoverRegions& rgns, fraglen splineBase);
 
 	// Resets non overlapping spline value
 	void DiscardNonOverlaps();
@@ -675,14 +672,25 @@ public:
 class DataValuesMap : public DataSet<ValuesMap>
 {
 public:
-	// Filters and fill spline curve by read coverage within potential regions
-	//	@param rCover: raw read coverage or nullptr in case of frag coverage
-	//	@param rgns: potential regions
+	// Fills strand spline curves by read coverage within regions
+	//	@param rCover: raw strand read coverages
+	//	@param rgns: strand potential regions
 	//	@param splineBase: half-length of spliner moving window
-	void BuildSpline(const DataSet<TreatedCover>* rcover, const DataCoverRegions& rgns, fraglen splineBase = ReadSplineBASE);
+	void BuildSpline(const DataSet<TreatedCover>& rcover, const DataCoverRegions& rgns, fraglen splineBase = ReadSplineBASE);
+
+	// Fills strand spline curves by fragment coverage within regions
+	//	@param fCover: raw strand fragment coverages
+	//	@param rgns: total potential regions
+	//	@param splineBase: half-length of spliner moving window
+	void BuildSpline(const DataSet<TreatedCover>& fCover, const CoverRegions& rgns, fraglen splineBase)
+	{
+		StrandData(FWD).BuildSpline(false, fCover.StrandData(FWD), rgns, splineBase);
+		StrandData(RVS).BuildSpline(true, fCover.StrandData(RVS), rgns, splineBase);
+	}
+
 
 	// Calculates the deviation from the default average fragment length
-	float GetPeakPosDiff() const;
+	float GetPeakPosDiff() ;
 
 	// Resets non overlapping spline value
 	void DiscardNonOverlaps() { Data()->DiscardNonOverlaps(); }
@@ -1185,3 +1193,79 @@ using OBoundsValuesMap = OrderedData<BoundsValuesMap, FixWigWriterSet>;
 //	//OBoundsValuesMap(const ChromSizes& cSizes, BYTE dim, bool write, const TrackFields& fields)
 //	//	: OrderedData<BoundsValuesMap, FixWigWriterSet>(cSizes, dim, write, fields) {}
 //};
+
+/************************ Bezier2D ************************/
+using ipoint = pair<int, float>;
+
+// Bezier 2D curve
+// https://www.codeproject.com/Articles/25237/Bezier-Curves-Made-Simple
+static class Bezier2D
+{
+public:
+	static const BYTE MAX_POINT_CNT = 98;
+
+	// Performes Bezier interpolation and return the position of the maximum of the Bezier curve
+	//	@param pts: raw points
+	//	@param splinedPts: Bezier curve points
+	//	@returns: position of the maximum of the Bezier curve
+	static float GetSplineMaxPos(
+		const vector<ipoint>& pts, 
+		//vector<fpair>& splinedPts	// version with extern out Bezier curve
+		USHORT cntOutPts
+	)
+	{
+		const auto cntPts = BYTE(pts.size() - 1);	// number of input points minus 1
+		float	d = 0;								// distance
+		//const USHORT cntOutPts = splinedPts.size();	// version with extern out Bezier curve
+		float	step = 1.f / (cntOutPts - 1);
+		fpair summit{};
+	
+		// Calculate points on curve
+		for (UINT pInd = 0; pInd < cntOutPts; pInd++) {
+			//auto& sp = splinedPts[pInd];				// version with extern out Bezier curve
+			fpair sp{};		// spline point
+
+			if ((1.f - d) < 5e-6)
+				d = 1.f;
+			for (UINT i = 0; i < pts.size(); i++) {
+				float basis = Bernstein(cntPts, i, d);
+				auto& p = pts[i];
+				sp.first += basis * p.first;
+				sp.second += basis * p.second;
+			}
+			d += step;
+
+			printf("%.2f\t%.2f\n", sp.first, sp.second);
+			if (summit.second < sp.second)
+				//summit = sp;			// version with extern out Bezier curve
+				swap(summit, sp);
+		}
+		return summit.first;
+	}
+
+private:
+	static const double factorials[MAX_POINT_CNT + 1];	// factorials 'table'
+
+	// Calculate Bernstein basis
+	//	@param ptCnt: number of points
+	//	@param ptInd: point index
+	//	@param d: distance
+	//	@returns: Bernstein basis
+	static float Bernstein(BYTE ptCnt, BYTE ptInd, float d)
+	{
+		if (ptCnt > MAX_POINT_CNT)
+			throw range_error("Bezier2D: number of points " + to_string(ptCnt) + " is greater than " + to_string(MAX_POINT_CNT));
+		// Prevent problems with pow
+		float ti = !d && !ptInd ? 1.f : float(pow(d, ptInd));	// d^i
+		float xi = ptCnt == ptInd && d == 1.f ?					// (1 - d)^i
+			1.f :
+			float(pow((1 - d), (ptCnt - ptInd)));
+
+		double a1 = factorials[ptCnt];
+		double a2 = factorials[ptInd];
+		double a3 = factorials[ptCnt - ptInd];
+
+		return ti * xi * float(a1 / (a2 * a3));
+	}
+
+} bezier2D;

@@ -10,7 +10,11 @@ bool Glob::IsPE = false;
 bool Glob::FragLenUndef = true;
 readlen Glob::ReadLen = 0;
 fraglen Glob::FragLen = FragDefLEN;
- 
+#ifdef MY_DEBUG
+chrid	Glob::CurrChrom = Chrom::UnID;
+#endif
+BYTE	Glob::BinWidth = 1;
+
 //===== Verb
 
 const char* Verb::ValTitles[] = { "SL","RES","RT","DBG" };
@@ -39,7 +43,7 @@ void Verb::PrintMsg(eVerb level, const char* msg)
 
 void OSpecialWriter::WriteIncline(BYTE reverse, chrlen start, coviter& itStop)
 {
-	assert(_cID != Chrom::UnID);
+	assert(Glob::CurrChrom != Chrom::UnID);
 
 	const chrlen stop = itStop->first;
 	const int ptCnt = int(stop) - int(start);
@@ -49,7 +53,7 @@ void OSpecialWriter::WriteIncline(BYTE reverse, chrlen start, coviter& itStop)
 		start = stop;
 		--itStop;
 	}
-	(_writers->_files)[reverse]->WriteIncline(_cID, start, k * ptCnt, float(itStop->second) / ptCnt);
+	(_writers->_files)[reverse]->WriteIncline(Glob::CurrChrom, start, k * ptCnt, float(itStop->second) / ptCnt);
 }
 #endif
 
@@ -252,9 +256,10 @@ void TreatedCover::PushIncline(BYTE reverse, const TracedPosVal& posVal, Incline
 
 
 //===== CombCover
+
 void CombCover::SetUnsortedInput()
 {
-	_data->TotalData().SetUnsortedInput();
+	_data->TotalData().SetUnsortedInput();	// if no total data is defined, call method twice for the forward data
 	_data->StrandData(FWD).SetUnsortedInput();
 	_data->StrandData(RVS).SetUnsortedInput();
 }
@@ -277,32 +282,83 @@ void CombCover::FillExtRead(const Reads& reads)
 	}
 }
 
+//===== template
+
+
+template<typename T>
+/// <summary>
+/// Recursively marks as invalid forward/reversed regions that intersect not strictly pairwise,
+/// i.e. which are a linked chain
+/// </summary>
+/// <typeparam name="T">class over which polymorphic methods for working with a collection of regions are defined</typeparam>
+/// <param name="it">forward/reversed region iterators</param>
+/// <param name="itEnd">forward/reversed region and iterators</param>
+/// <returns>true if if forward or reversed end iterator is reached</returns>
+bool DiscardOverlapChain_(typename T::iterator it[2], typename T::const_iterator itEnd[2])
+{
+	BYTE s = T::End(it[R]) > T::End(it[L]);	// index of the left ended region: R - forward, L - reverse
+
+	if (T::Start(it[!s]) > T::End(it[s])) {
+		T::Discard(it[s]); it[s]++; return false;	// single region
+	}
+	if (++it[s] == itEnd[s])		return true;
+	if (!T::Accepted(it[s]))		return false;
+	if (T::End(it[!s]) < T::Start(it[s])) { it[!s]++; return false; }
+	T::Discard(prev(it[s]));
+	T::Discard(it[s]);
+	T::Discard(it[!s]);
+	return DiscardOverlapChain_<T>(it, itEnd);
+}
+
+template<typename T>
+/// <summary>
+/// Marks as invalid forward/reversed regions that intersect not strictly pairwise,
+/// i.e. which are a linked chain
+/// </summary>
+/// <typeparam name="T">class over which polymorphic methods for working with a collection of regions are defined</typeparam>
+/// <param name="rgns">forward/reversed regions</param>
+void DiscardMultiOverlapRegions(T rgns[2])
+{
+	typename T::const_iterator itEnd[2]{ rgns[R].end(), rgns[L].end() };
+	typename T::iterator it[2]{ rgns[R].begin(), rgns[L].begin() };
+
+	DiscardOverlapChain_<T>(it, itEnd);
+	while (it[R] != itEnd[R] && it[L] != itEnd[L])
+		if (!T::Accepted(it[R]))		it[R]++;
+		else if (!T::Accepted(it[L]))	it[L]++;
+		else if (DiscardOverlapChain_<T>(it, itEnd))	break;
+}
+
+#ifdef MY_DEBUG
+template<typename T>
+void CheckSingleOverlapping(const T rgns[2], fraglen minOverlapLen)
+{
+	chrlen numb = 0;
+	bool done = true;
+	typename T::const_iterator itEnd[2]{ rgns[R].end(), rgns[L].end() };
+	typename T::const_iterator it[2]{ rgns[R].begin(), rgns[L].begin() };
+
+	printf("Overlapping check:");
+	//printf("\n  N strand  start  -   end val accept");
+	while (it[R] != itEnd[R] && it[L] != itEnd[L]) {
+		BYTE s = T::End(it[R]) > T::End(it[L]);	// index of the left ended region: 0 - direct, 1 - reverse
+
+		if (T::Start(it[!s]) + minOverlapLen > T::End(it[s])) { it[s]++; continue; }
+		if (!T::Accepted(it[R]) ^ !T::Accepted(it[L])) {
+			printf("\n%3d FVD: %d-%d  %d, RVS: %d-%d  %d", ++numb,
+				T::Start(it[R]), T::End(it[R]), T::Accepted(it[R]),
+				T::Start(it[L]), T::End(it[L]), T::Accepted(it[L])
+			);
+			done = false;
+		}
+		it[R]++, it[L]++;
+	}
+	if (done)	printf(" done");
+	printf("\n");
+}
+#endif
+
 //===== CoverRegions
-
-bool CoverRegions::DiscardOverlapChain(Iter it[2], cIter itEnd[2])
-{
-	BYTE s = End(it[R]) > End(it[L]);	// index of the left ended region: R - forward, L - reverse
-
-	if (Start(it[!s]) > End(it[s]))	{ it[s]++;	return false; }
-	if (++it[s] == itEnd[s])					return true;
-	if (!Accepted(it[s]))						return false;
-	if (End(it[!s]) < Start(it[s]))	{ it[!s]++;	return false; }
-	Discard(prev(it[s]));
-	Discard(it[s]);
-	Discard(it[!s]);
-	return DiscardOverlapChain(it, itEnd);
-}
-
-void CoverRegions::DiscardMultiOverlapRegions(CoverRegions rgns[2])
-{
-	cIter itEnd[2]{ rgns[0].end(), rgns[1].end() };
-	Iter it[2]{ rgns[0].begin(), rgns[1].begin() };
-
-	while (it[0] != itEnd[0] && it[1] != itEnd[1])
-		if (!Accepted(it[0]))		it[0]++;
-		else if (!Accepted(it[1]))	it[1]++;
-		else if (DiscardOverlapChain(it, itEnd))	break;
-}
 
 // prints regions before and after selection
 template<typename T>
@@ -347,6 +403,9 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacit
 	chrlen	start = 0, end = 0;
 	coviter itStart, itEnd;
 
+	coval maxVal = 0;
+	chrlen maxPos = 0;
+
 	this->reserve(capacity);
 	for (auto it0 = cover.cbegin(), it = it0; it != cover.end(); it0 = it++)
 		if (it->second >= cutoff || it0->second >= cutoff) {	// look for summit
@@ -362,36 +421,110 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacit
 					if (val < it->second)
 						val = it->second;
 				this->emplace_back(itStart, itEnd, val);
+				if (maxVal < val) {	maxVal = val; maxPos = itStart->first; }
 			}
 			start = 0;
 		}
+	IGVlocus locus(Glob::CurrChrom);
+	printf("MAX: VAL: %d POS: %d\t%s\n", maxVal, maxPos, locus.Print(maxPos));
+}
+
+bool CoverRegions::SetTopPeakRegions(const DataSet<TreatedCover>& fragCover, coval cutoff)
+{
+	const USHORT TOP_RGNS_CNT = 1000;
+	const USHORT THRECHOLD_COEFF = 100;
+	const BYTE VAL_BAR_WIDTH = 1;
+	auto& cover = fragCover.TotalData();
+	const auto minLen = Glob::FragLen;	// empirical minLen obtained in tests
+	chrlen	start = 0, end = 0;
+	coviter itStart, itEnd;
+
+	coval maxVal = 0;
+
+	multimap<coval, coviter> peakFreq;	// peak frequency: number of peaks with the same max coverage
+
+	// *** fill peak frequency
+	for (auto it0 = cover.cbegin(), it = it0; it != cover.end(); it0 = it++)
+		if (it->second >= cutoff || it0->second >= cutoff) {	// look for summit
+			if (!start)
+				start = (itStart = it)->first;	// set after prev region processed only
+			end = (itEnd = it)->first;
+		}
+		else {
+			if (start && end - start > minLen) {
+				// find raw summit
+				coviter itPeak = itStart;
+				for (auto it = next(itStart); it != itEnd; it++)
+					if (itPeak->second < it->second)
+						itPeak = it;
+				//this->emplace_back(itStart, itEnd, val);
+				peakFreq.insert(pair<coval, coviter>(itPeak->second / VAL_BAR_WIDTH, itPeak));
+				if (maxVal < itPeak->second) { maxVal = itPeak->second; }
+			}
+			start = 0;
+		}
+
+	if(Glob::BinWidth)
+	{
+		printf("ROW PEAK FREQUENCY\n");
+		coval val = CHRLEN_MAX;
+		for (const auto& el : peakFreq)
+			if (val != el.first)	val = el.first, printf("%d\t%zu\n",val, peakFreq.count(val));
+	}
+
+	// *** set max peak frequency
+	UINT maxFreq = 0;
+	coval val = CHRLEN_MAX;
+	for (const auto& el : peakFreq)
+		if (val != el.first) {
+			auto freq = UINT(peakFreq.count(val = el.first));
+			if (maxFreq < freq)	
+				maxFreq = freq;
+			else break;
+		}
+
+
+	// *** fill regions of interest
+	auto maxfreq = maxFreq / THRECHOLD_COEFF;
+	this->reserve(TOP_RGNS_CNT + 1);
+	//const auto ext = 2 * Glob::FragLen / 3;
+	const auto ext = Glob::FragLen;
+	coval lowLimVal = 0;
+	UINT	lowLimFreq = 0;
+
+	for (auto it = prev(peakFreq.cend()); it != peakFreq.cbegin(); it--) {
+		if ((peakFreq.count(it->first) > maxfreq || size() > TOP_RGNS_CNT)	// strong cutting off - for reach coverage
+			&& (size() > TOP_RGNS_CNT / 2))									// weak cutting off - for peru coverage
+		{
+			if (Verb::Level(Verb::DBG)) {
+				it++;
+				lowLimVal = it->second->second;
+				lowLimFreq = UINT(peakFreq.count(it->first));
+			}
+			break;
+		}
+		// expand summit to the region of interest
+		auto& itPeak = it->second;
+		auto itStart = prev(itPeak);
+		for (auto start = itPeak->first - ext; itStart->first > start; itStart--);	// itStart
+		auto itEnd = next(itPeak);
+		for (auto end = itPeak->first + ext; itEnd->first < end; itEnd++);			// itEnd
+
+		emplace_back(itStart, itEnd, it->first);
+	}
+
+	sort(this->begin(), this->end(),
+		[](const CoverRegion& r1, const CoverRegion& r2) { return r1.Start() < r2.Start(); }
+	);
+	Verb::PrintMsgVar(Verb::DBG,
+		//"Top Peak Regions: count: %zu  cutoffVal: %d, maxVal: %d, cutoffFreq %u, maxFreq: %u\n", 
+		//size(), lowLimVal, maxVal, lowLimFreq, maxFreq);
+		"Top Peak Regions: count %zu,  ValRatio %.3f, valMax %d, FreqRatio %.3f, FreqMax %u\n",
+		size(), float(lowLimVal)/maxVal, maxVal, float(lowLimFreq)/ maxFreq, maxFreq);
+	return empty();
 }
 
 #ifdef MY_DEBUG
-void CoverRegions::CheckSingleOverlapping(const CoverRegions rgns[2], fraglen minOverlapLen)
-{
-	chrlen numb = 0;
-	bool done = true;
-	cIter itEnd[2]{ rgns[0].end(), rgns[1].end() };
-	cIter it[2]{ rgns[0].begin(), rgns[1].begin() };
-
-	printf("Overlapping check:");
-	while (it[0] != itEnd[0] && it[1] != itEnd[1]) {
-		BYTE s = End(it[0]) > End(it[1]);	// index of the left ended region: 0 - direct, 1 - reverse
-
-		if (Start(it[!s]) + minOverlapLen > End(it[s])) { it[s]++; continue; }
-		if (!Accepted(it[0]) ^ !Accepted(it[1])) {
-			printf("\n%3d FVD: %d-%d %3d %d, RVS: %d-%d %3d %d", ++numb,
-				Start(it[0]), End(it[0]), it[0]->value, Accepted(it[0]),
-				Start(it[1]), End(it[1]), it[1]->value, Accepted(it[1])
-			);
-			done = false;
-		}
-		it[0]++, it[1]++;
-	}
-	if(done)	printf(" done");
-	printf("\n");
-}
 
 const string distExt = ".dist";
 
@@ -422,15 +555,19 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 		StrandData(RVS).SetPotentialRegions(cover.StrandData(RVS), capacity, cutoff);
 
 		auto minOverlap = fraglen(0.7f * Glob::FragLen); // empirical minOverlap obtained in tests
-		DiscardNonOverlapRegions<CoverRegions>(Data(), minOverlap);
+		// In the working version, only strand regions are defined.
+		// However, for debugging purposes, total regions can also be defined.
+		// So we should call StrandData() instead of Data()
+		auto data = StrandData();
+		DiscardNonOverlapRegions<CoverRegions>(data, minOverlap);
 		if (noMultiOverl) {
-			CoverRegions::DiscardMultiOverlapRegions(Data());
+			DiscardMultiOverlapRegions<CoverRegions>(data);
 #ifdef MY_DEBUG
-			CoverRegions::CheckSingleOverlapping(Data(), minOverlap);
+			CheckSingleOverlapping<CoverRegions>(data, minOverlap);
 #endif
 		}
 		if (Verb::Level(Verb::DBG))
-			PrintRegionStats<CoverRegions>(Data(), cLen);
+			PrintRegionStats<CoverRegions>(data, cLen);
 	}
 	if (!Empty())	return false;
 	Verb::PrintMsg(Verb::CRIT, "No enriched regions found");
@@ -513,9 +650,13 @@ void Values::AddValues(const Values& vals)
 
 void Values::GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const
 {
+	/*
+	If the starting position is already a maximum, 
+	or ending position is a maximum (the "maximum-cut" case), it is ignored.
+	*/
 	float val0 = front();
 	bool increase = false;
-	USHORT equalCnt = 0;	// equal value counter
+	USHORT equalCnt = 0;	// count of equal values
 
 	for (auto it = next(begin()); it != end(); val0 = *it, it++, startPos++)
 		if (*it == val0)
@@ -524,7 +665,12 @@ void Values::GetMaxValPos(chrlen startPos, vector<chrlen>& pos) const
 			if (*it > val0)			// increase value
 				increase = true;
 			else if (increase) {	// decrease value
-				pos.push_back(startPos - equalCnt / 2);	// correct startPos for the 'flat' summit
+				if(equalCnt < 20)
+					/*
+					The length of flat summit is more than 10 means either a read anomaly
+					or an insignificant read clustering. Ignored.
+					*/
+					pos.push_back(startPos - equalCnt / 2);	// the centre of the 'flat' summit
 				increase = false;
 			}
 			equalCnt = 0;
@@ -569,8 +715,9 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 
 	printf("SPLINES %s\n", sStrandTITLES[reverse + 1]);
 	printf(" N  start\tend\tval\tIGV view\n");
+	chrlen i = 0;
 	for (const auto& x : *this) {
-		if (stopNumb && x.second.GrpNumb > stopNumb)	break;
+		//if (stopNumb && x.second.GrpNumb > stopNumb)	break;
 		if (x.second.MaxVal()) {
 			chrlen end = x.first + x.second.Length();
 			printf("%3d %d\t%d\t%2.2f\t%s\n",
@@ -580,13 +727,16 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 }
 #endif
 
-void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, const CoverRegion& rgn, fraglen splineBase)
+void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover& rCover, const CoverRegion& rgn, fraglen splineBase)
 {
+	/*
+	Both forward & reverse splines are built from left to right
+	*/
 	assert(Glob::ReadLen);
 	coviter it0;	// at the beginning the start it, then used as a variable
 	coviter itEnd;	// the end it
 	SSpliner<coval> spliner(CurveTYPE, splineBase);
-	chrlen pos = rgn.itStart->first - spliner.SilentLength();
+	chrlen pos = rgn.itStart->first - spliner.SilentLength() / 2;	// ??? half of SilentLength is a good git to the region start
 
 	/*
 	incrementing it0 (for forward cover) | itEnd (for reversed cover) is required 
@@ -595,24 +745,24 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 	*/
 
 	// *** set it0
-	if (rCover) {
-		// rgn iterators are fragment cover iterators. We should find position in the read cover
-		it0 = rCover->upper_bound(pos);
-		// increment it0 to smooth start the spline
-		if (reverse) {
-			if (!it0->second)	it0--;
-			if (it0 != rCover->begin())	it0--;
-		}
-	}
-	else
-		for (it0 = prev(rgn.itStart); it0->first > pos; it0--);
+	it0 = rCover.upper_bound(pos);		// find cover iterator for region start position
+	if (it0 != rCover.begin())	it0--;	// decrement it0 to smooth start the spline
+	//if (reverse) {
+	//	if (!it0->second)	it0--;
+	//	if (it0 != rCover.begin())	it0--;
+	//}
 
 	// *** set itEnd
 	pos = rgn.itEnd->first + spliner.SilentLength();
-	for (itEnd = it0, advance(itEnd, 10); itEnd->first < pos; itEnd++);	// 10 iterators is not enough for significant coverage in any case
-	// increment itEnd to smooth complete the spline
-	if (!reverse)
-		if (itEnd->second)	itEnd++;	// itEnd->second != 0 means that is not the last iterator
+	for (itEnd = it0, advance(itEnd, 10); itEnd != rCover.end() && itEnd->first < pos; itEnd++);	// 10 iterators is not enough for significant coverage in any case
+	if (itEnd == rCover.end())
+		itEnd--;
+	else {
+		// increment itEnd to smooth complete the spline
+		//if (itEnd->second)	itEnd++;	// itEnd->second != 0 means that is not the last iterator
+		if (next(itEnd) != rCover.end())	itEnd++;
+		if (next(itEnd) != rCover.end())	itEnd++;
+	}
 
 	// *** spline via covmap local copy, filtering unsignificant splines
 	chrlen newPos = 0;
@@ -627,9 +777,8 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 			vals.Clear();
 	};
 
-	pos = it0->first + 1;
-	auto it = next(it0);
-	for (; it != itEnd; it0++, it++) {	// loop through the cover
+	chrlen currPos = it0->first;// +1;
+	for (auto it = next(it0); /*it->first <= pos &&*/ it != itEnd; it0++, it++) {	// loop through the cover
 
 		// skip reads that do not form a continuous coverage with the main heap
 		if (lastZeroPos) {
@@ -637,19 +786,23 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 				// skip 2 duplicated reads or standalone read or contiguous single reads
 				if (!it->second) {
 					if (it0->second <= 2) {
-						if (++it == itEnd)	break;
+						if (++it == itEnd)	
+							break;
 						it0++;
 					}
 				}
 				// skip 2 overlapping reads
 				else if (it->second == 2) {
 					auto it1 = next(it);
-					if (it1 == itEnd)	break;
+					if (it1 == itEnd)	
+						break;
 					if (it1->second == 1) {
-						if (++it1 == itEnd)		break;
+						if (++it1 == itEnd)		
+							break;
 						if (!it1->second) {
 							it = it1;
-							if (++it == itEnd)	break;
+							if (++it == itEnd)	
+								break;
 							advance(it0, 3);
 						}
 					}
@@ -659,11 +812,11 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 		}
 
 		// treat other reads
-		for (; pos <= it->first; pos++) {			// loop through positions between iterators
+		for (; currPos <= it->first; currPos++) {		// loop through positions between iterators
 			float val = spliner.Push(it0->second);
 			if (val) {
 				if (!vals.Length())
-					newPos = spliner.CorrectX(pos);	// start new spline
+					newPos = spliner.CorrectX(currPos);	// start new spline
 				vals.AddValue(val);
 			}
 			else 
@@ -671,7 +824,10 @@ void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover* rCover, cons
 					addDecentRgn();	// end new spline
 		}
 
-		if (!it0->second)	lastZeroPos = it0->first;
+		if (spliner.CorrectX(currPos) > rgn.itEnd->first)// + spliner.SilentLength())
+			break;
+		if (!it0->second)
+			lastZeroPos = it0->first;
 	}
 	if (vals.Length())
 		addDecentRgn();
@@ -684,7 +840,7 @@ void ValuesMap::AddRegion(chrlen pos, Values& vals)
 	vals.Reserve();
 }
 
-void ValuesMap::BuildSpline(bool reverse, const TreatedCover* rCover, const CoverRegions& rgns, fraglen splineBase)
+void ValuesMap::BuildSpline(bool reverse, const TreatedCover& rCover, const CoverRegions& rgns, fraglen splineBase)
 {
 	for (const auto& rgn : rgns)
 		if (rgn.Accepted())
@@ -736,59 +892,122 @@ void ValuesMap::PrintStat(chrlen clen) const
 //===== DataValuesMap
 
 void DataValuesMap::BuildSpline(
-	const DataSet<TreatedCover>* rCover, const DataCoverRegions& rgns, fraglen splineBase)
+	const DataSet<TreatedCover>& rCover, const DataCoverRegions& rgns, fraglen splineBase)
 {
-	BYTE strand = !Glob::IsPE;	// TOTAL for PE or FWD for SE
-	StrandData(FWD).BuildSpline(
-		false,
-		rCover ? &rCover->StrandData(FWD) : nullptr,
-		rgns.StrandData(eStrand(strand)),
-		splineBase
-	);
-	StrandData(RVS).BuildSpline(
-		true,
-		rCover ? &rCover->StrandData(RVS) : nullptr,
-		rgns.StrandData(eStrand(2*strand)),
-		splineBase
-	);
+	const BYTE strand = !Glob::IsPE;	// TOTAL for PE or FWD for SE
+	StrandData(FWD).BuildSpline(false, rCover.StrandData(FWD), rgns.StrandData(eStrand(strand)), splineBase);
+	StrandData(RVS).BuildSpline(true, rCover.StrandData(RVS), rgns.StrandData(eStrand(2*strand)), splineBase);
 }
 
-float DataValuesMap::GetPeakPosDiff() const
+float DataValuesMap::GetPeakPosDiff() 
 {
-	auto& pData = StrandData(FWD);
-	auto& nData = StrandData(RVS);
-	assert(pData.size() == nData.size());
-	USHORT missed = 0;
+	/*
+	It is assumed that the regions listed have one peak of each strand.
+	However, a check is made to see if this is the case.
+	If not, the region is rejected for calculation.
+	*/
+	DiscardMultiOverlapRegions<ValuesMap>(StrandData());
+#ifdef MY_DEBUG
+	//CheckSingleOverlapping<ValuesMap>(StrandData(), 0);
+	IGVlocus locus(Glob::CurrChrom);
+#endif
+
+	auto& pData = StrandData(FWD);	// "positive"
+	auto& nData = StrandData(RVS);	// "negative"
+	USHORT rejected = 0;
 	vector<SHORT> diffs;
 	vector<chrlen> pPos, nPos;	// max positions in a positive, negative splines
 
-	// get the difference of the splines maximums
+	// get the difference of the splines maximum
 	diffs.reserve(pData.size());	// suppose one summit for the region's spline
 	pPos.reserve(2);
 	nPos.reserve(2);
 	for (auto itP = pData.begin(), itN = nData.begin(); itP != pData.end() && itN != nData.end(); itP++, itN++) {
-
+		while (!pData.Accepted(itP)) if (++itP == pData.end()) goto out; 
+		while (!nData.Accepted(itN)) if (++itN == nData.end()) goto out;
 		itP->second.GetMaxValPos(itP->first, pPos);
 		itN->second.GetMaxValPos(itN->first, nPos);
+		// peaks within each region
 		if (pPos.size() == nPos.size())
-			for (auto itP = pPos.begin(), itN = nPos.begin(); itP != pPos.end(); itP++, itN++)
-				diffs.push_back(SHORT(*itP - *itN));
-		else
-			missed++;		// just ignore splines with different max positions
+			for (auto itP = pPos.begin(), itN = nPos.begin(); itP != pPos.end(); itP++, itN++) {
+				diffs.push_back(SHORT(*itN - *itP));
+				//if (/*abs*/(SHORT(*itN - *itP)) <= 0)
+				//	printf("%d\t%d\t%4d\t%s\n", *itN, *itP, SHORT(*itN - *itP), locus.Print(*itN));
+			}
+		else {
+			rejected++;		// reject region with different peak count
+#ifdef MY_DEBUG
+			//printf("FWD %zu %s\t", pPos.size(), pPos.size() ? locus.Print(pPos[0]) : "\t\t\t");
+			//printf("RVS %zu %s\n", nPos.size(), nPos.size() ? locus.Print(nPos[0]) : "");
+#endif
+		}
 		pPos.clear();
 		nPos.clear();
 	}
-	if(Verb::Level(Verb::DBG))
-		if (missed)
-			printf("%4.1f%% rejected regions;\t", Percent(missed, pData.size()));
+out:if(Verb::Level(Verb::DBG))
+		if (rejected)
+			printf("%3d (%.0f%%) rejected regions;\t", rejected, Percent(rejected, pData.size()));
 		else
-			printf("\t\t\t");
+			printf("\t\t\t\t");
 
-	int sum0 = 0;
-	for (auto diff : diffs)
-		sum0 += diff;
+	// *** find most frequent value
+	float maxPos = 0;
+	//for(BYTE binW : {/*1,3,5,9,15,*/21})
+	for (BYTE binW : {1,3,5,9,15,21,31})
+	{
+		static const int8_t factors[]{ -1,1 };
+		// *** fill differences frequent value
+		map< short, USHORT> freq;	// bined differences - frequence
+		for (auto diff : diffs) {
+			short bin = (diff / binW) * binW + factors[diff > 0] * binW / 2;	// position in the middle of the bin
+			freq[bin]++;
+		}
+		printf("\n>>> BIN WIDTH %d\n", int(binW));
+		printf("DIFFS FREQUENCY DISTRIBUTION  size: %zu\n", freq.size());
+		for (auto f : freq)		printf("%d\t%d\n", f.first, f.second);
 
-	return float(sum0) / diffs.size();
+		// *** Bezier splined freq historgram
+
+		// ** cut off single frequency iterators at the edges
+		auto it0 = freq.begin();		// start it
+		auto it1 = prev(freq.end());	// end it
+		const auto minStep = USHORT((float(it1->first - it0->first) / freq.size()) * 2);
+		USHORT skipCnt = 0;
+
+		if (freq.size() > Bezier2D::MAX_POINT_CNT) {
+			for (auto it = next(it0);
+				it0->second == it->second && it->first - it0->first > minStep;
+				skipCnt++, it0++, it++);
+			for (auto it = prev(it1);
+				it1->second == it->second && it1->first - it->first > minStep;
+				skipCnt++, it1--, it--);
+
+			// ** trim the distribution on both sides until the number of points becomes acceptable for Bezier smoothing
+			while (freq.size() - skipCnt > Bezier2D::MAX_POINT_CNT) {
+				it0++;
+				it1--;
+				skipCnt += 2;
+			}
+		}
+		printf("count: %zu  minStep: %d  skipCnt: %d\n", freq.size() - skipCnt, minStep, skipCnt);
+			
+		// ** fill frequency buffer
+		vector<ipoint> pts;
+		USHORT cntPts = (it1->first - it0->first);
+		//vector<fpair> splinedPts(cntPts, { 0,0 });
+
+		pts.reserve(Bezier2D::MAX_POINT_CNT);
+		for (; it0 != freq.end(); it0++) {
+			pts.emplace_back(it0->first, it0->second);
+			if (it0 == it1)	break;
+		}
+
+		printf("BEZIER SPLINED DIFFS FREQUENCY  %d\n", cntPts);
+		maxPos = Bezier2D::GetSplineMaxPos(pts, cntPts);
+
+		printf("MAX POS: %.1f\n", maxPos);
+	}
+	return maxPos;
 }
 
 void DataValuesMap::Clear()
@@ -1947,3 +2166,108 @@ void FixWigWriterSet::WriteChromData(chrid cID, const BoundsValuesMap& set)
 			if (rvs.MaxVal())
 				WriteFixStepRange(cID, rvs.Start(), rvs);
 }
+
+//===== Bezier2D
+
+const double Bezier2D::factorials[] = {
+	1.,	// 0!
+	1.,
+	2.,	// 2!
+	6.,
+	24.,	// 4!
+	120.,
+	720.,	// 6!
+	5040.,
+	40320.,	// 8!
+	362880.,
+	3628800.,	// 10!
+	39916800.,
+	479001600.,	// 12!
+	6227020800.,
+	87178291200.,	// 14!
+	1307674368000.,
+	20922789888000.,	// 16!
+	355687428096000.,
+	6402373705728000.,	// 18!
+	121645100408832000.,
+	2432902008176640000.,	// 20!
+	51090942171709440000.,
+	1124000727777607680000.,	// 22!
+	25852016738884976640000.,
+	620448401733239439360000.,	// 24!
+	15511210043330985984000000.,
+	403291461126605635584000000.,	// 26!
+	10888869450418352160768000000.,
+	304888344611713860501504000000.,	// 28!
+	8841761993739701954543616000000.,
+	2.6525285981219105863630848e+32,	// 30!
+	8.22283865417792281772556288e+33,
+	2.6313083693369353016721801216e+35,	// 32!
+	8.68331761881188649551819440128e+36,
+	2.9523279903960414084761860964352e+38,	// 34!
+	1.0333147966386144929666651337523e+40,
+	3.7199332678990121746799944815084e+41,	// 36!
+	1.3763753091226345046315979581581e+43,
+	5.2302261746660111176000722410007e+44,	// 38!
+	2.0397882081197443358640281739903e+46,
+	8.1591528324789773434561126959612e+47,	// 40!
+	3.3452526613163807108170062053441e+49,
+	1.4050061177528798985431426062445e+51,	// 42!
+	6.0415263063373835637355132068514e+52,
+	2.6582715747884487680436258110146e+54,	// 44!
+	1.1962222086548019456196316149566e+56,
+	5.5026221598120889498503054288003e+57,	// 46!
+	2.5862324151116818064296435515361e+59,
+	1.2413915592536072670862289047373e+61,	// 48!
+	6.082818640342675608722521633213e+62,
+	3.0414093201713378043612608166065e+64,	// 50!
+	1.5511187532873822802242430164693e+66,
+	8.0658175170943878571660636856404e+67,	// 52!
+	4.2748832840600255642980137533894e+69,
+	2.3084369733924138047209274268303e+71,	// 54!
+	1.2696403353658275925965100847567e+73,
+	7.1099858780486345185404564746372e+74,	// 56!
+	4.0526919504877216755680601905432e+76,
+	2.3505613312828785718294749105151e+78,	// 58!
+	1.3868311854568983573793901972039e+80,
+	8.3209871127413901442763411832234e+81,	// 60!
+	5.0758021387722479880085681217663e+83,
+	3.1469973260387937525653122354951e+85,	// 62!
+	1.9826083154044400641161467083619e+87,
+	1.2688693218588416410343338933516e+89,	// 64!
+	8.2476505920824706667231703067855e+90,
+	5.4434493907744306400372924024784e+92,	// 66!
+	3.6471110918188685288249859096605e+94,
+	2.4800355424368305996009904185692e+96,	// 68!
+	1.7112245242814131137246833888127e+98,
+	1.1978571669969891796072783721689e+100,	// 70!
+	8.5047858856786231752116764423993e+101,
+	6.1234458376886086861524070385275e+103,	// 72!
+	4.4701154615126843408912571381251e+105,
+	3.3078854415193864122595302822125e+107,	// 74!
+	2.4809140811395398091946477116594e+109,
+	1.8854947016660502549879322608611e+111,	// 76!
+	1.4518309202828586963407078408631e+113,
+	1.1324281178206297831457521158732e+115,	// 78!
+	8.9461821307829752868514417153983e+116,
+	7.1569457046263802294811533723187e+118,	// 80!
+	5.7971260207473679858797342315781e+120,
+	4.753643337012841748421382069894e+122,	// 82!
+	3.9455239697206586511897471180121e+124,
+	3.3142401345653532669993875791301e+126,	// 84!
+	2.8171041143805502769494794422606e+128,
+	2.4227095383672732381765523203441e+130,	// 86!
+	2.1077572983795277172136005186994e+132,
+	1.8548264225739843911479684564555e+134,	// 88!
+	1.6507955160908461081216919262454e+136,
+	1.4857159644817614973095227336208e+138,	// 90!
+	1.352001527678402962551665687595e+140,
+	1.2438414054641307255475324325874e+142,	// 92!
+	1.1567725070816415747592051623062e+144,
+	1.0873661566567430802736528525679e+146,	// 94!
+	1.0329978488239059262599702099395e+148,
+	9.9167793487094968920957140154189e+149,	// 96!
+	9.6192759682482119853328425949564e+151,
+	9.4268904488832477456261857430572e+153,	// 98! : max possible value
+	// (!98)^2 = 8.8866263535246200177702174899954e+307, while max double value is 1.7976931348623158e+308
+};

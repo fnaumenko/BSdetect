@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 11/31/2024
+Last modified: 01/06/2025
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -11,6 +11,7 @@ Provides main functionality
 #include "Treatment.h"
 
 enum optValue {		// options id
+	oBIN,
 	oGEN,
 	oCHROM,
 	oDUP_LVL,
@@ -75,15 +76,20 @@ public:
 		, _saveCover(saveCover)
 		, _fragCovers(cSizes, 3-2*Glob::IsPE, saveCover, outFName + FNameFragExt, "fragment coverage")
 		, _readCovers(cSizes, 2, saveCover, outFName + FNameReadExt, "read coverage")
-		, _regions(cSizes, 2-Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
-		, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
+
+		//, _regions(cSizes, 2-Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
+		, _regions(cSizes, 3, saveInter, outFName + ".RGNS", "potential regions")
+		//, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
+		, _splines(cSizes, 3, saveInter, outFName + ".SPLINE", "read coverage spline")
+
 		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
 #ifdef MY_DEBUG
 		, _lineWriter(cSizes, 2, saveInter, outFName + ".LINE", "linear regression", DARK)
 		, _splineWriter(cSizes, 1, saveInter, outFName + ".FR_SPLINE", "fragment coverage spline")
 		, _outFName(outFName)
 #endif
-		, _bss(cSizes, 1, true, outFName + ".BSs", "called binding sites")
+		//, _bss(cSizes, 1, true, outFName + ".BSs", "called binding sites")
+		, _bss(cSizes, 1, false, outFName + ".BSs", "called binding sites")
 		, _fIdent(true)
 	{
 		if (Verb::Level(Verb::RT))
@@ -102,6 +108,7 @@ public:
 		file.Pass(*this);
 		_file = nullptr;
 	}
+
 
 	// Pre-covered data constructor
 	//	@param inFName: fragment coverage file name
@@ -179,7 +186,7 @@ public:
 		auto& rgn = _file->ItemRegion();
 		bool reverse = !_file->ItemStrand();
 
-		if (unsorted && _unsortNotSet) {
+		if (/*unsorted && */_unsortNotSet) {
 			_fragCovers.SetUnsortedInput();
 			_readCovers.SetUnsortedInput();
 			_unsortNotSet = false;
@@ -192,7 +199,7 @@ public:
 			Region frag;
 			const Read read(*_file);
 
-			if (_fIdent(read, frag))
+			if (_fIdent(read, _file->ReadLength(), frag))
 				_fragCovers.AddFrag(frag);
 		}
 		else {
