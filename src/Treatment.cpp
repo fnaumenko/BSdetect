@@ -951,63 +951,28 @@ out:if(Verb::Level(Verb::DBG))
 			printf("\t\t\t\t");
 
 	// *** find most frequent value
-	float maxPos = 0;
-	//for(BYTE binW : {/*1,3,5,9,15,*/21})
-	for (BYTE binW : {1,3,5,9,15,21,31})
+	fpair kp;
+	//float maxPos = 0;
+	for(BYTE binW : {15})
+	//for (BYTE binW : {3,5,9,15,21,31})
 	{
 		static const int8_t factors[]{ -1,1 };
 		// *** fill differences frequent value
-		map< short, USHORT> freq;	// bined differences - frequence
+		map<int, chrlen> freq;	// bined differences - frequence
 		for (auto diff : diffs) {
+			// signbit()?
 			short bin = (diff / binW) * binW + factors[diff > 0] * binW / 2;	// position in the middle of the bin
 			freq[bin]++;
 		}
+#ifdef PRINT
 		printf("\n>>> BIN WIDTH %d\n", int(binW));
 		printf("DIFFS FREQUENCY DISTRIBUTION  size: %zu\n", freq.size());
-		for (auto f : freq)		printf("%d\t%d\n", f.first, f.second);
-
-		// *** Bezier splined freq historgram
-
-		// ** cut off single frequency iterators at the edges
-		auto it0 = freq.begin();		// start it
-		auto it1 = prev(freq.end());	// end it
-		const auto minStep = USHORT((float(it1->first - it0->first) / freq.size()) * 2);
-		USHORT skipCnt = 0;
-
-		if (freq.size() > Bezier2D::MAX_POINT_CNT) {
-			for (auto it = next(it0);
-				it0->second == it->second && it->first - it0->first > minStep;
-				skipCnt++, it0++, it++);
-			for (auto it = prev(it1);
-				it1->second == it->second && it1->first - it->first > minStep;
-				skipCnt++, it1--, it--);
-
-			// ** trim the distribution on both sides until the number of points becomes acceptable for Bezier smoothing
-			while (freq.size() - skipCnt > Bezier2D::MAX_POINT_CNT) {
-				it0++;
-				it1--;
-				skipCnt += 2;
-			}
-		}
-		printf("count: %zu  minStep: %d  skipCnt: %d\n", freq.size() - skipCnt, minStep, skipCnt);
-			
-		// ** fill frequency buffer
-		vector<ipoint> pts;
-		USHORT cntPts = (it1->first - it0->first);
-		//vector<fpair> splinedPts(cntPts, { 0,0 });
-
-		pts.reserve(Bezier2D::MAX_POINT_CNT);
-		for (; it0 != freq.end(); it0++) {
-			pts.emplace_back(it0->first, it0->second);
-			if (it0 == it1)	break;
-		}
-
-		printf("BEZIER SPLINED DIFFS FREQUENCY  %d\n", cntPts);
-		maxPos = Bezier2D::GetSplineMaxPos(pts, cntPts);
-
-		printf("MAX POS: %.1f\n", maxPos);
+		for (const auto& f : freq)		printf("%d\t%u\n", f.first, f.second);
+#endif
+		kp = Bezier2D::GetKeyPoints(freq, 0.2);
+		printf("MAX POS: %.1f  HALF POS %.1f:\n", kp.first, kp.second);
 	}
-	return maxPos;
+	return kp.first;
 }
 
 void DataValuesMap::Clear()
@@ -2271,3 +2236,64 @@ const double Bezier2D::factorials[] = {
 	9.4268904488832477456261857430572e+153,	// 98! : max possible value
 	// (!98)^2 = 8.8866263535246200177702174899954e+307, while max double value is 1.7976931348623158e+308
 };
+
+void SetHalfSummitX(fpair& p0, fpair& p, fpair& summit, float& halfSummitX)
+{
+#ifdef PRINT
+	std::printf("%.2f\t%.2f\n", p.first, p.second);
+#endif
+	if (p.second >= summit.second)
+		p.swap(summit);
+	else {
+		if (p.second < summit.second / 2) {
+			if (!halfSummitX)
+				halfSummitX = p0.first + p0.second / (p.second + p0.second);
+		}
+		p.swap(p0);
+	}
+}
+
+fpair Bezier2D::GetKeyPoints(const map<int, chrlen>& pts, float cutoffThreshold)
+{
+	map<int, chrlen>::const_iterator it0;	// start it
+	map<int, chrlen>::const_iterator it1;	// end it
+	const auto ptCnt = Trim(pts, it0, it1, cutoffThreshold);
+
+	if (ptCnt > MAX_POINT_CNT)
+		throw range_error("Bezier2D: number of points " + to_string(ptCnt) + " is greater than maximum permissible " + to_string(MAX_POINT_CNT));
+	const USHORT outPtCnt = it1->first - it0->first;
+	const float	step = 1.f / (outPtCnt - 1);
+	float	d = 0;								// distance
+	fpair summit{};
+	fpair p0;
+	float halfSummitX = 0;
+
+#ifdef PRINT
+	printf("count: %u  skipCnt: %zu\n", ptCnt + 1, pts.size() - ptCnt - 1);
+	printf("BEZIER SPLINED DIFFS FREQUENCY  %d\n", outPtCnt);
+#endif
+	++it1;
+	// Calculate points on curve
+	for (UINT pInd = 0; pInd < outPtCnt; pInd++) {
+		if ((1.f - d) < 5e-6)
+			d = 1.f;
+		fpair p;		// interpolated point
+		BYTE i = 0;
+		for (auto it = it0; it != it1; it++) {
+			auto basis = Bernstein(ptCnt, i++, d);
+			p.first += basis * it->first;
+			p.second += basis * it->second;
+		}
+		d += step;
+
+		SetHalfSummitX(p0, p, summit, halfSummitX);
+#ifndef PRINT
+		if (halfSummitX)
+			break;
+#endif
+	}
+	return fpair(
+		summit.first,							// summit X-coord
+		halfSummitX
+	);
+}

@@ -1195,7 +1195,7 @@ using OBoundsValuesMap = OrderedData<BoundsValuesMap, FixWigWriterSet>;
 //};
 
 /************************ Bezier2D ************************/
-using ipoint = pair<int, float>;
+#define PRINT
 
 // Bezier 2D curve
 // https://www.codeproject.com/Articles/25237/Bezier-Curves-Made-Simple
@@ -1206,45 +1206,38 @@ public:
 
 	// Performes Bezier interpolation and return the position of the maximum of the Bezier curve
 	//	@param pts: raw points
-	//	@param splinedPts: Bezier curve points
+	//	@param outPtCnt: number of Bezier curve points
 	//	@returns: position of the maximum of the Bezier curve
-	static float GetSplineMaxPos(
-		const vector<ipoint>& pts, 
-		//vector<fpair>& splinedPts	// version with extern out Bezier curve
-		USHORT cntOutPts
-	)
-	{
-		const auto cntPts = BYTE(pts.size() - 1);	// number of input points minus 1
-		float	d = 0;								// distance
-		//const USHORT cntOutPts = splinedPts.size();	// version with extern out Bezier curve
-		float	step = 1.f / (cntOutPts - 1);
-		fpair summit{};
-	
-		// Calculate points on curve
-		for (UINT pInd = 0; pInd < cntOutPts; pInd++) {
-			//auto& sp = splinedPts[pInd];				// version with extern out Bezier curve
-			fpair sp{};		// spline point
-
-			if ((1.f - d) < 5e-6)
-				d = 1.f;
-			for (UINT i = 0; i < pts.size(); i++) {
-				float basis = Bernstein(cntPts, i, d);
-				auto& p = pts[i];
-				sp.first += basis * p.first;
-				sp.second += basis * p.second;
-			}
-			d += step;
-
-			printf("%.2f\t%.2f\n", sp.first, sp.second);
-			if (summit.second < sp.second)
-				//summit = sp;			// version with extern out Bezier curve
-				swap(summit, sp);
-		}
-		return summit.first;
-	}
+	static fpair GetKeyPoints(const map<int, chrlen>& pts, float cutoffThreshold);
 
 private:
 	static const double factorials[MAX_POINT_CNT + 1];	// factorials 'table'
+
+	static BYTE Trim(const map<int, chrlen>& pts, 
+		map<int, chrlen>::const_iterator& it0, 
+		map<int, chrlen>::const_iterator& it1,
+		float cutoffThreshold)
+	{
+		it0 = pts.begin();		// start it
+		it1 = prev(pts.end());	// end it
+		if (pts.size() <= 5)	return BYTE(pts.size());
+
+		// ** cut off single frequency iterators at the edges
+		// ** trim the distribution's 'tails'
+		// define max value
+		float maxVal = 0;
+		for (const auto& f : pts)
+			if (maxVal < f.second)
+				maxVal = f.second;
+
+		// trim entries with value less than cutoffThreshold of max value
+		maxVal *= cutoffThreshold;
+		while (it0->second < maxVal)	it0++;
+		it0--;
+		while (it1->second < maxVal)	it1--;
+		it1++;
+		return BYTE(distance(it0, it1));
+	}
 
 	// Calculate Bernstein basis
 	//	@param ptCnt: number of points
@@ -1253,8 +1246,6 @@ private:
 	//	@returns: Bernstein basis
 	static float Bernstein(BYTE ptCnt, BYTE ptInd, float d)
 	{
-		if (ptCnt > MAX_POINT_CNT)
-			throw range_error("Bezier2D: number of points " + to_string(ptCnt) + " is greater than " + to_string(MAX_POINT_CNT));
 		// Prevent problems with pow
 		float ti = !d && !ptInd ? 1.f : float(pow(d, ptInd));	// d^i
 		float xi = ptCnt == ptInd && d == 1.f ?					// (1 - d)^i
