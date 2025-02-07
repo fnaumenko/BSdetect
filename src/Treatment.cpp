@@ -970,7 +970,7 @@ out:if(Verb::Level(Verb::DBG))
 		freq.Print(cout);
 #endif
 		freq.CalcADParams(Distrib::LNORM, Distrib::INTERPOL);
-		freq.ADParamsPrint(cout, false, true);
+		freq.PrintADParams(cout, false, true);
 	}
 	return mode;
 }
