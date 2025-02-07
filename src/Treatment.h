@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 01/06/2025
+Last modified: 02/07/2025
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -1194,69 +1194,5 @@ using OBoundsValuesMap = OrderedData<BoundsValuesMap, FixWigWriterSet>;
 //	//	: OrderedData<BoundsValuesMap, FixWigWriterSet>(cSizes, dim, write, fields) {}
 //};
 
-/************************ Bezier2D ************************/
+/************************ Bezier2D_ ************************/
 #define PRINT
-
-// Bezier 2D curve
-// https://www.codeproject.com/Articles/25237/Bezier-Curves-Made-Simple
-static class Bezier2D
-{
-public:
-	static const BYTE MAX_POINT_CNT = 98;
-
-	// Performes Bezier interpolation and return the position of the maximum of the Bezier curve
-	//	@param pts: raw points
-	//	@param outPtCnt: number of Bezier curve points
-	//	@returns: position of the maximum of the Bezier curve
-	static fpair GetKeyPoints(const map<int, chrlen>& pts, float cutoffThreshold);
-
-private:
-	static const double factorials[MAX_POINT_CNT + 1];	// factorials 'table'
-
-	static BYTE Trim(const map<int, chrlen>& pts, 
-		map<int, chrlen>::const_iterator& it0, 
-		map<int, chrlen>::const_iterator& it1,
-		float cutoffThreshold)
-	{
-		it0 = pts.begin();		// start it
-		it1 = prev(pts.end());	// end it
-		if (pts.size() <= 5)	return BYTE(pts.size());
-
-		// ** cut off single frequency iterators at the edges
-		// ** trim the distribution's 'tails'
-		// define max value
-		float maxVal = 0;
-		for (const auto& f : pts)
-			if (maxVal < f.second)
-				maxVal = f.second;
-
-		// trim entries with value less than cutoffThreshold of max value
-		maxVal *= cutoffThreshold;
-		while (it0->second < maxVal)	it0++;
-		it0--;
-		while (it1->second < maxVal)	it1--;
-		it1++;
-		return BYTE(distance(it0, it1));
-	}
-
-	// Calculate Bernstein basis
-	//	@param ptCnt: number of points
-	//	@param ptInd: point index
-	//	@param d: distance
-	//	@returns: Bernstein basis
-	static float Bernstein(BYTE ptCnt, BYTE ptInd, float d)
-	{
-		// Prevent problems with pow
-		float ti = !d && !ptInd ? 1.f : float(pow(d, ptInd));	// d^i
-		float xi = ptCnt == ptInd && d == 1.f ?					// (1 - d)^i
-			1.f :
-			float(pow((1 - d), (ptCnt - ptInd)));
-
-		double a1 = factorials[ptCnt];
-		double a2 = factorials[ptInd];
-		double a3 = factorials[ptCnt - ptInd];
-
-		return ti * xi * float(a1 / (a2 * a3));
-	}
-
-} bezier2D;

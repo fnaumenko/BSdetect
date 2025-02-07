@@ -1,4 +1,5 @@
 #include "Treatment.h"
+#include "Distrib.h"
 #include <algorithm>
 
 //const float PI = 3.14159265F;
@@ -951,28 +952,27 @@ out:if(Verb::Level(Verb::DBG))
 			printf("\t\t\t\t");
 
 	// *** find most frequent value
-	fpair kp;
-	//float maxPos = 0;
+	float mode = 0;
 	for(BYTE binW : {15})
 	//for (BYTE binW : {3,5,9,15,21,31})
 	{
 		static const int8_t factors[]{ -1,1 };
 		// *** fill differences frequent value
-		map<int, chrlen> freq;	// bined differences - frequence
+		Distrib freq;
 		for (auto diff : diffs) {
 			// signbit()?
 			short bin = (diff / binW) * binW + factors[diff > 0] * binW / 2;	// position in the middle of the bin
-			freq[bin]++;
+			freq.IncrFreq(bin);
 		}
 #ifdef PRINT
 		printf("\n>>> BIN WIDTH %d\n", int(binW));
-		printf("DIFFS FREQUENCY DISTRIBUTION  size: %zu\n", freq.size());
-		for (const auto& f : freq)		printf("%d\t%u\n", f.first, f.second);
+		printf("DIFFS FREQUENCY DISTRIBUTION  size: %zu\n", freq.Size());
+		freq.Print(cout);
 #endif
-		kp = Bezier2D::GetKeyPoints(freq, 0.2);
-		printf("MAX POS: %.1f  HALF POS %.1f:\n", kp.first, kp.second);
+		freq.CalcADParams(Distrib::LNORM, Distrib::INTERPOL);
+		freq.ADParamsPrint(cout, false, true);
 	}
-	return kp.first;
+	return mode;
 }
 
 void DataValuesMap::Clear()
@@ -2130,170 +2130,4 @@ void FixWigWriterSet::WriteChromData(chrid cID, const BoundsValuesMap& set)
 		for (const auto& rvs : rvss.second)
 			if (rvs.MaxVal())
 				WriteFixStepRange(cID, rvs.Start(), rvs);
-}
-
-//===== Bezier2D
-
-const double Bezier2D::factorials[] = {
-	1.,	// 0!
-	1.,
-	2.,	// 2!
-	6.,
-	24.,	// 4!
-	120.,
-	720.,	// 6!
-	5040.,
-	40320.,	// 8!
-	362880.,
-	3628800.,	// 10!
-	39916800.,
-	479001600.,	// 12!
-	6227020800.,
-	87178291200.,	// 14!
-	1307674368000.,
-	20922789888000.,	// 16!
-	355687428096000.,
-	6402373705728000.,	// 18!
-	121645100408832000.,
-	2432902008176640000.,	// 20!
-	51090942171709440000.,
-	1124000727777607680000.,	// 22!
-	25852016738884976640000.,
-	620448401733239439360000.,	// 24!
-	15511210043330985984000000.,
-	403291461126605635584000000.,	// 26!
-	10888869450418352160768000000.,
-	304888344611713860501504000000.,	// 28!
-	8841761993739701954543616000000.,
-	2.6525285981219105863630848e+32,	// 30!
-	8.22283865417792281772556288e+33,
-	2.6313083693369353016721801216e+35,	// 32!
-	8.68331761881188649551819440128e+36,
-	2.9523279903960414084761860964352e+38,	// 34!
-	1.0333147966386144929666651337523e+40,
-	3.7199332678990121746799944815084e+41,	// 36!
-	1.3763753091226345046315979581581e+43,
-	5.2302261746660111176000722410007e+44,	// 38!
-	2.0397882081197443358640281739903e+46,
-	8.1591528324789773434561126959612e+47,	// 40!
-	3.3452526613163807108170062053441e+49,
-	1.4050061177528798985431426062445e+51,	// 42!
-	6.0415263063373835637355132068514e+52,
-	2.6582715747884487680436258110146e+54,	// 44!
-	1.1962222086548019456196316149566e+56,
-	5.5026221598120889498503054288003e+57,	// 46!
-	2.5862324151116818064296435515361e+59,
-	1.2413915592536072670862289047373e+61,	// 48!
-	6.082818640342675608722521633213e+62,
-	3.0414093201713378043612608166065e+64,	// 50!
-	1.5511187532873822802242430164693e+66,
-	8.0658175170943878571660636856404e+67,	// 52!
-	4.2748832840600255642980137533894e+69,
-	2.3084369733924138047209274268303e+71,	// 54!
-	1.2696403353658275925965100847567e+73,
-	7.1099858780486345185404564746372e+74,	// 56!
-	4.0526919504877216755680601905432e+76,
-	2.3505613312828785718294749105151e+78,	// 58!
-	1.3868311854568983573793901972039e+80,
-	8.3209871127413901442763411832234e+81,	// 60!
-	5.0758021387722479880085681217663e+83,
-	3.1469973260387937525653122354951e+85,	// 62!
-	1.9826083154044400641161467083619e+87,
-	1.2688693218588416410343338933516e+89,	// 64!
-	8.2476505920824706667231703067855e+90,
-	5.4434493907744306400372924024784e+92,	// 66!
-	3.6471110918188685288249859096605e+94,
-	2.4800355424368305996009904185692e+96,	// 68!
-	1.7112245242814131137246833888127e+98,
-	1.1978571669969891796072783721689e+100,	// 70!
-	8.5047858856786231752116764423993e+101,
-	6.1234458376886086861524070385275e+103,	// 72!
-	4.4701154615126843408912571381251e+105,
-	3.3078854415193864122595302822125e+107,	// 74!
-	2.4809140811395398091946477116594e+109,
-	1.8854947016660502549879322608611e+111,	// 76!
-	1.4518309202828586963407078408631e+113,
-	1.1324281178206297831457521158732e+115,	// 78!
-	8.9461821307829752868514417153983e+116,
-	7.1569457046263802294811533723187e+118,	// 80!
-	5.7971260207473679858797342315781e+120,
-	4.753643337012841748421382069894e+122,	// 82!
-	3.9455239697206586511897471180121e+124,
-	3.3142401345653532669993875791301e+126,	// 84!
-	2.8171041143805502769494794422606e+128,
-	2.4227095383672732381765523203441e+130,	// 86!
-	2.1077572983795277172136005186994e+132,
-	1.8548264225739843911479684564555e+134,	// 88!
-	1.6507955160908461081216919262454e+136,
-	1.4857159644817614973095227336208e+138,	// 90!
-	1.352001527678402962551665687595e+140,
-	1.2438414054641307255475324325874e+142,	// 92!
-	1.1567725070816415747592051623062e+144,
-	1.0873661566567430802736528525679e+146,	// 94!
-	1.0329978488239059262599702099395e+148,
-	9.9167793487094968920957140154189e+149,	// 96!
-	9.6192759682482119853328425949564e+151,
-	9.4268904488832477456261857430572e+153,	// 98! : max possible value
-	// (!98)^2 = 8.8866263535246200177702174899954e+307, while max double value is 1.7976931348623158e+308
-};
-
-void SetHalfSummitX(fpair& p0, fpair& p, fpair& summit, float& halfSummitX)
-{
-#ifdef PRINT
-	std::printf("%.2f\t%.2f\n", p.first, p.second);
-#endif
-	if (p.second >= summit.second)
-		p.swap(summit);
-	else {
-		if (p.second < summit.second / 2) {
-			if (!halfSummitX)
-				halfSummitX = p0.first + p0.second / (p.second + p0.second);
-		}
-		p.swap(p0);
-	}
-}
-
-fpair Bezier2D::GetKeyPoints(const map<int, chrlen>& pts, float cutoffThreshold)
-{
-	map<int, chrlen>::const_iterator it0;	// start it
-	map<int, chrlen>::const_iterator it1;	// end it
-	const auto ptCnt = Trim(pts, it0, it1, cutoffThreshold);
-
-	if (ptCnt > MAX_POINT_CNT)
-		throw range_error("Bezier2D: number of points " + to_string(ptCnt) + " is greater than maximum permissible " + to_string(MAX_POINT_CNT));
-	const USHORT outPtCnt = it1->first - it0->first;
-	const float	step = 1.f / (outPtCnt - 1);
-	float	d = 0;								// distance
-	fpair summit{};
-	fpair p0;
-	float halfSummitX = 0;
-
-#ifdef PRINT
-	printf("count: %u  skipCnt: %zu\n", ptCnt + 1, pts.size() - ptCnt - 1);
-	printf("BEZIER SPLINED DIFFS FREQUENCY  %d\n", outPtCnt);
-#endif
-	++it1;
-	// Calculate points on curve
-	for (UINT pInd = 0; pInd < outPtCnt; pInd++) {
-		if ((1.f - d) < 5e-6)
-			d = 1.f;
-		fpair p;		// interpolated point
-		BYTE i = 0;
-		for (auto it = it0; it != it1; it++) {
-			auto basis = Bernstein(ptCnt, i++, d);
-			p.first += basis * it->first;
-			p.second += basis * it->second;
-		}
-		d += step;
-
-		SetHalfSummitX(p0, p, summit, halfSummitX);
-#ifndef PRINT
-		if (halfSummitX)
-			break;
-#endif
-	}
-	return fpair(
-		summit.first,							// summit X-coord
-		halfSummitX
-	);
 }

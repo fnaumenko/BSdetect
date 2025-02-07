@@ -40,6 +40,7 @@ set(Header_Files
     ${BASIC_DIR}/OrderedData.h
     ${BASIC_DIR}/TxtFile.h
     ${BASIC_DIR}/spline.h
+    ${BASIC_DIR}/Distrib.h
     BSdetect.h
     Treatment.h
 )
@@ -52,6 +53,7 @@ set(Source_Files
     ${BASIC_DIR}/Options.cpp
     ${BASIC_DIR}/OrderedData.cpp
     ${BASIC_DIR}/TxtFile.cpp
+    ${BASIC_DIR}/Distrib.cpp
     BSdetect.cpp
     Treatment.cpp
 )
