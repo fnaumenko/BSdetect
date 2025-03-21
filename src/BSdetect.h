@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 01/06/2025
+Last modified: 03/21/2025
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -27,6 +27,7 @@ enum optValue {		// options id
 	oVERB,
 	oVERSION,
 	oHELP,
+	oHHELP,
 };
 
 //#define TIMING

@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 01/06/2025
+Last modified: 03/21/2025
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -54,6 +54,7 @@ Options::Option Options::List[] = {
 	{ 'V',"verbose",tOpt::NONE,	tENUM,	gOTHER, Verb::RT, Verb::CRIT, float(Verb::Size()), (char*)Verb::ValTitles, Verb::ValDescr },
 	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHelpVersion },
 	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHelpUsage },
+	{ HPH,	sHHelp,	tOpt::NONE,	tHHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHHelpUsage },
 };
 const BYTE Options::OptCount = ArrCnt(Options::List);
 
