@@ -17,7 +17,7 @@ Last modified: 02/07/2025
 using point = pair<chrlen, float>;
 using coviter = covmap::const_iterator;
 
-const fraglen	FragDefLEN = 200;
+const fraglen	FragDefLEN = 300;
 const coval		CUTOFF_STRAND_EXT_RGN = 5;
 const uint16_t	ReadSplineBASE = 10;	//half-length of moving window for reads spline
 
@@ -1193,6 +1193,3 @@ using OBoundsValuesMap = OrderedData<BoundsValuesMap, FixWigWriterSet>;
 //	//OBoundsValuesMap(const ChromSizes& cSizes, BYTE dim, bool write, const TrackFields& fields)
 //	//	: OrderedData<BoundsValuesMap, FixWigWriterSet>(cSizes, dim, write, fields) {}
 //};
-
-/************************ Bezier2D_ ************************/
-#define PRINT

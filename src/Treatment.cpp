@@ -2,6 +2,8 @@
 #include "Distrib.h"
 #include <algorithm>
 
+#define PRINT
+
 //const float PI = 3.14159265F;
 
 //const eCurveType CurveTYPE = eCurveType::SMOOTH;
@@ -953,7 +955,7 @@ out:if(Verb::Level(Verb::DBG))
 
 	// *** find most frequent value
 	float mode = 0;
-	for(BYTE binW : {15})
+	for(BYTE binW : {5, 9, 15, 21})
 	//for (BYTE binW : {3,5,9,15,21,31})
 	{
 		static const int8_t factors[]{ -1,1 };
@@ -967,7 +969,7 @@ out:if(Verb::Level(Verb::DBG))
 #ifdef PRINT
 		printf("\n>>> BIN WIDTH %d\n", int(binW));
 		printf("DIFFS FREQUENCY DISTRIBUTION  size: %zu\n", freq.Size());
-		freq.Print(cout);
+		//freq.Print(cout);
 #endif
 		freq.CalcADParams(Distrib::LNORM, Distrib::INTERPOL);
 		freq.PrintADParams(cout, false, true);

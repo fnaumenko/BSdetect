@@ -142,7 +142,7 @@ int main(int argc, char* argv[])
 			);
 			cout << LF;
 			file.GetNextItem();		// no need to check for empty sequence
-			Glob::SetPE(file.IsPaired());
+			//Glob::SetPE(file.IsPaired());
 
 			// detect BS
 			Detector bsd(
@@ -197,7 +197,9 @@ void Detector::CallBS(chrid cID)
 	if (Glob::FragLenUndef) {		// can be true for SE sequence only
 		Timer timer;
 		//auto peakDiff = short(round(GetPeakPosDiff(cID)));
-		auto peakDiff = GetPeakPosDiff(cID);
+		//auto peakDiff = GetPeakPosDiff(cID);
+		auto peakDiff = 0;
+
 		//fraglen mean = FragDefLEN + fraglen(round(peakDiff * FragDefLEN / (FragDefLEN - Glob::ReadLen)));
 		fraglen mean = FragDefLEN + fraglen(round(peakDiff));
 
@@ -215,8 +217,8 @@ void Detector::CallBS(chrid cID)
 		//Glob::FragLenUndef = false;
 		//timer.Stop();	cout << LF;
 	}
-	_fragCovers.WriteChrom(cID);		// !!! for debug
-	return;
+	_fragCovers.WriteChrom(cID, false);		// !!! for debug
+	//return;
 
 	Verb::PrintMsg(Verb::RT, "Locate binding sites\n");
 	if (regions.SetPotentialRegions(fragCovers, cLen, 3))
@@ -224,14 +226,18 @@ void Detector::CallBS(chrid cID)
 	regions.PrintScoreDistrib(_outFName + ".RGNS_discard", false);
 	//regions.PrintScoreDistrib(_outFName + ".RGNS_all", true);
 
-	splines.BuildSpline(readCovers, regions);	_regions.WriteChrom(cID);
+	//splines.BuildSpline(readCovers, regions);	_regions.WriteChrom(cID);
+	splines.BuildSpline(_fragCovers.ChromData(cID), regions, 100);	_regions.WriteChrom(cID);
+	_splines.WriteChrom(cID);
+	return;
 	splines.DiscardNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
 	splines.NumberGroups();
-	derivs.Set(splines);
+	//derivs.Set(splines);
 	_splines.WriteChrom(cID);
 	//derivs.Print(5002900);
-	//return;
+
+	return;
 	bss.Set(derivs, readCovers);	_readCovers.WriteChrom(cID); _derivs.WriteChrom(cID);
 	bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
