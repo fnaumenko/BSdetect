@@ -457,7 +457,7 @@ public:
 	void FillExtRead(const Reads& reads);
 };
 
-// chromosome freaquence counter
+// chromosome frequency counter
 using tChromsFreq = map<chrid, BYTE>;
 
 // Wrapper for initializing a coverage from a file
