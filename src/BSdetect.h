@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 03/21/2025
+Last modified: 03/22/2025
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -57,6 +57,13 @@ class Detector
 	FragIdent	_fIdent;	// needs only for input reading
 	Reads		_reads;		// may be filled for the first chromosome only, if fragment len is not defined
 	Timer		_timer;
+
+	void FillCover(CombCover& ccover, const string& baseName, tChromsFreq& chrFreq, eStrand strand)
+	{
+		CombCoverReader cover(
+			FS::CheckedFileName((baseName + sStrandEXT[strand] + FT::Ext(FT::BGRAPH)).c_str()),
+			_cSizes, ccover, chrFreq, strand);
+	}
 
 	// Calculates the deviation from the default average fragment length
 	//	@param cID: current chromosome's ID
@@ -150,27 +157,29 @@ public:
 
 			tChromsFreq	chrFreq;
 			_timer.Start();
-			// initialize covered data
-			CombCoverReader a(inFName, cSizes, _fragCovers, chrFreq, TOTAL);
+			// fill total _fragCovers
+			CombCoverReader cvrTotal(inFName, cSizes, _fragCovers, chrFreq, TOTAL);
 			if (!Glob::IsPE) {
-				string fCoverPos = baseName + FNameFragExt + sStrandEXT[FWD] + FT::Ext(FT::BGRAPH);
-				string fCoverNeg = baseName + FNameFragExt + sStrandEXT[RVS] + FT::Ext(FT::BGRAPH);
+				// fill strand _fragCovers
+				const string extBaseName = baseName + FNameFragExt;
+				FillCover(_fragCovers, extBaseName, chrFreq, FWD);
+				FillCover(_fragCovers, extBaseName, chrFreq, RVS);
 
-				CombCoverReader b(FS::CheckedFileName(fCoverPos.c_str()), cSizes, _fragCovers, chrFreq, FWD);
-				CombCoverReader c(FS::CheckedFileName(fCoverNeg.c_str()), cSizes, _fragCovers, chrFreq, RVS);
+				//const string fCoverFwd = baseName + FNameFragExt + sStrandEXT[FWD] + FT::Ext(FT::BGRAPH);
+				//const string fCoverRvs = baseName + FNameFragExt + sStrandEXT[RVS] + FT::Ext(FT::BGRAPH);
+
+				//CombCoverReader cvrFwd(FS::CheckedFileName(fCoverFwd.c_str()), cSizes, _fragCovers, chrFreq, FWD);
+				//CombCoverReader cvrRvs(FS::CheckedFileName(fCoverRvs.c_str()), cSizes, _fragCovers, chrFreq, RVS);
 			}
+			// fill strand _readCovers
 			baseName += FNameReadExt;
-			CombCoverReader b(
-				FS::CheckedFileName((baseName + sStrandEXT[FWD] + FT::Ext(FT::BGRAPH)).c_str()),
-				cSizes, _readCovers, chrFreq, FWD);
-			CombCoverReader c(
-				FS::CheckedFileName((baseName + sStrandEXT[RVS] + FT::Ext(FT::BGRAPH)).c_str()),
-				cSizes, _readCovers, chrFreq, RVS);
+			FillCover(_readCovers, baseName, chrFreq, FWD);
+			FillCover(_readCovers, baseName, chrFreq, RVS);
 
-			cSizes.TreateAll(false);
+			cSizes.TreatedAll(false);
 			BYTE dataCnt = Glob::IsPE ? 3 : 5;
 			for (const auto& c : chrFreq)
-				_cSizes.TreateChrom(c.first, c.second == dataCnt);	// all readers worked
+				_cSizes.TreatedChrom(c.first, c.second == dataCnt);	// all readers worked
 
 			_timer.Stop("Reading coverage: "); cout << LF;
 		}

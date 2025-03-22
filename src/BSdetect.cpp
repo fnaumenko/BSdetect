@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 03/21/2025
+Last modified: 03/22/2025
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -54,7 +54,7 @@ Options::Option Options::List[] = {
 	{ 'V',"verbose",tOpt::NONE,	tENUM,	gOTHER, Verb::RT, Verb::CRIT, float(Verb::Size()), (char*)Verb::ValTitles, Verb::ValDescr },
 	{ 'v',	sVers,	tOpt::NONE,	tVERS,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHelpVersion },
 	{ 'h',	sHelp,	tOpt::NONE,	tHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHelpUsage },
-	{ HPH,	sHHelp,	tOpt::NONE,	tHHELP,	gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHHelpUsage },
+	{ HPH,	sHHelp,	tOpt::HIDDEN,tHHELP,gOTHER,	NO_DEF, NO_VAL, 0, NULL, sHHelpUsage },
 };
 const BYTE Options::OptCount = ArrCnt(Options::List);
 
@@ -63,13 +63,19 @@ const Options::Usage Options::Usages[] = {	// content of 'Usage' variants in hel
 };
 const BYTE Options::UsageCount = ArrCnt(Options::Usages);
 
-//#include <limits>
+//void fstr(const char* a)
+//{
+//	const char* sample = "PE";
+//	auto res = strstr(a, sample);
+//	if (res)	cout << res << LF;
+//	else cout << "not found\n";
+//}
 
 /*****************************************/
 int main(int argc, char* argv[])
 {
-	//cout.setf(ios::fixed);
-	//cout << setprecision(1) << DBL_MAX << LF;
+	//fstr("_PE_");
+	//fstr("_pe_");
 	//return 0;
 	int fileInd = Options::Parse(argc, argv, ProgParam);
 	if (fileInd < 0)	return 1;		// wrong option or tip output
@@ -103,36 +109,9 @@ int main(int argc, char* argv[])
 		//	tfile.Print();	cout << LF;
 		//}
 		ChromSizes cSizes(gName, true);
-		//cSizes.Print();
-		//return 0;
 
-		// pre-covered data mode
-		if (ftype == FT::BGRAPH)
-		{
-			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
-			{	// check iName for pattern match
-				const char* msg = "invalid fragment coverage file name";
-				const char* pattName = strchr(iName, '_');
-				if (pattName) {
-					pattName++;
-					//if(*pattName != 'P' && *pattName != 'S')
-					//	Err(msg, iName).Throw();
-					Glob::SetPE(*pattName == 'P');
-				}
-				else
-					Err(msg, iName).Throw();
-			}
-
-			Detector bsd(
-				iName,
-				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
-				cSizes,
-				Options::GetBVal(oSAVE_INTER)
-			);
-		}
 		// main mode
-		else
-		{
+		if (ftype != FT::BGRAPH) {
 			RBedReader file(
 				iName,
 				&cSizes,
@@ -151,6 +130,24 @@ int main(int argc, char* argv[])
 				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
 				cSizes,
 				Options::GetBVal(oSAVE_COVER),
+				Options::GetBVal(oSAVE_INTER)
+			);
+		}
+		// pre-covered data mode
+		else {
+			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
+			{	// check iName for 'PE' pattern match
+				const char* pattName = strchr(iName, '_');
+				if (pattName)
+					Glob::SetPE(strstr(++pattName, "PE"));
+				else
+					Err("invalid fragment coverage file name", iName).Throw();
+			}
+
+			Detector bsd(
+				iName,
+				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
+				cSizes,
 				Options::GetBVal(oSAVE_INTER)
 			);
 		}
