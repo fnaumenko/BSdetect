@@ -149,39 +149,37 @@ public:
 		, _bss		 (cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
 	{
-		// preparing coverage data
+		// *** preparing coverage data
 		{
-			const char* pattName = strrchr(inFName, '_');
-			{
-				// check inFName
-				//auto xx = strrchr(inFName, DOT) - pattName;
-				//string fragExt(pattName, strrchr(inFName, DOT) - pattName);
-				//if (fragExt != FNameFragExt)
-				if (string(pattName, strrchr(inFName, DOT) - pattName) != FNameFragExt)
-					Err("only fragment coverage file is permissible", inFName).Throw();
-			}
+			const char* pattName = strrchr(inFName, USCORE);	// the presence of USCORE has already been checked
+			// check inFName for the presence of '_frag'
+			if (string(pattName, strrchr(inFName, DOT) - pattName) != FNameFragExt)
+				Err("only fragment coverage file is permissible", inFName).Throw();
+
 			string baseName(inFName,  pattName - inFName);
 			tChromsFreq	chrFreq;
+			BYTE dataCnt = 3;
+
 			_timer.Start();
 			CombCoverReader cvr(inFName, cSizes, _fragCovers, chrFreq, TOTAL);	// fill total _fragCovers
 			if (!Glob::IsPE) {
 				const string extBaseName = baseName + FNameFragExt;
 				FillStrandCover(_fragCovers, extBaseName, chrFreq, FWD);
 				FillStrandCover(_fragCovers, extBaseName, chrFreq, RVS);
+				dataCnt += 2;
 			}
-			//baseName += FNameReadExt;
-			//FillStrandCover(_readCovers, baseName, chrFreq, FWD);
-			//FillStrandCover(_readCovers, baseName, chrFreq, RVS);
-
-			cSizes.TreatedAll(false);
-			//BYTE dataCnt = Glob::IsPE ? 3 : 5;
-			BYTE dataCnt = 1;
+			baseName += FNameReadExt;
+			FillStrandCover(_readCovers, baseName, chrFreq, FWD);
+			FillStrandCover(_readCovers, baseName, chrFreq, RVS);
+			
+			// ** set treated chroms
+			_cSizes.TreatedAll(false);
 			for (const auto& c : chrFreq)	// there're chroms represented in input Bedgraph only 
 				_cSizes.TreatedChrom(c.first, c.second == dataCnt);	// all active readers
 
 			_timer.Stop("Reading coverage: "); cout << LF;
 		}
-		// treatment
+		// *** treatment
 		for(const auto& c : _cSizes)
 			if(c.second.Treated)
 				CallBS(c.first);

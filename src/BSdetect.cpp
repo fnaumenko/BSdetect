@@ -137,7 +137,7 @@ int main(int argc, char* argv[])
 		else {
 			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
 			{	// check iName for 'PE' pattern match
-				const char* pattName = strchr(iName, '_');
+				const char* pattName = strchr(iName, USCORE);
 				if (pattName)
 					Glob::SetPE(strstr(++pattName, "PE"));
 				else
