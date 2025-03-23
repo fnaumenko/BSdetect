@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 02/07/2025
+Last modified: 03/23/2025
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -457,14 +457,11 @@ public:
 	void FillExtRead(const Reads& reads);
 };
 
-// chromosome frequency counter
-using tChromsFreq = map<chrid, BYTE>;
-
 // Wrapper for initializing a coverage from a file
 class CombCoverReader
 {
 	CombCover&	 _cover;
-	tChromsFreq& _chrFreq;
+	tChromsOccurrs& _chrReadOccurs;	// chromosomes reading occurrences
 	eStrand		 _strand;
 	UniBedReader _file;
 
@@ -473,16 +470,16 @@ public:
 	//	@param fName[in]: file name
 	//	@param cSizes[in]: chrom sizes
 	//	@param cover[out]: coverage to initialize
-	//	@param chrFreq[out]: chromosome reading frequency
+	//	@param chrReadOccurs[out]: chromosome reading occurrences
 	//	@param strand[in]: strand
 	CombCoverReader(
 		const char* fName,
 		ChromSizes& cSizes,
 		CombCover& cover,
-		tChromsFreq& chrFreq,
+		tChromsOccurrs& chrReadOccurs,
 		eStrand strand
 	)
-		: _cover(cover), _chrFreq(chrFreq), _strand(strand)
+		: _cover(cover), _chrReadOccurs(chrReadOccurs), _strand(strand)
 		, _file(fName, FT::eType::BGRAPH, &cSizes,
 			4,						// number of 'score' filed
 			0,						// number of additional duplicates allowed
@@ -508,7 +505,7 @@ public:
 	//	@param nextcID: next chrom ID
 	void operator()(chrid cID, chrlen cLen, size_t cnt, chrid nextcID) {
 		_cover.SetChrom(nextcID);
-		_chrFreq[nextcID]++;
+		_chrReadOccurs[nextcID]++;
 	}
 
 	// Closes last chrom

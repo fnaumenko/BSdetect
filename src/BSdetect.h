@@ -2,7 +2,7 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 03/22/2025
+Last modified: 03/23/2025
 -------------------------
 Provides main functionality
 ***********************************************************/
@@ -61,13 +61,13 @@ class Detector
 	// Fills read/frag coverage by Bedgraph file
 	//	@param cover: filled read/frag coverage
 	//	@param baseName: common parth of Bedgraph file's name
-	//	@param chrFreq: chrom frequency counter
+	//	@param chrReadOccurs: chroms reading occurrences
 	//	@param strand: strand
-	void FillStrandCover(CombCover& cover, const string& baseName, tChromsFreq& chrFreq, eStrand strand)
+	void FillStrandCover(CombCover& cover, const string& baseName, tChromsOccurrs& chrReadOccurs, eStrand strand)
 	{
 		CombCoverReader ccr(
 			FS::CheckedFileName((baseName + sStrandEXT[strand] + FT::Ext(FT::BGRAPH)).c_str()),
-			_cSizes, cover, chrFreq, strand);
+			_cSizes, cover, chrReadOccurs, strand);
 	}
 
 	// Calculates the deviation from the default average fragment length
@@ -157,25 +157,25 @@ public:
 				Err("only fragment coverage file is permissible", inFName).Throw();
 
 			string baseName(inFName,  pattName - inFName);
-			tChromsFreq	chrFreq;
-			BYTE dataCnt = 3;
+			tChromsOccurrs chrReadOccurs;	// chromosome reading occurrences
+			BYTE occursCnt = 3;				// count of reading operations
 
 			_timer.Start();
-			CombCoverReader cvr(inFName, cSizes, _fragCovers, chrFreq, TOTAL);	// fill total _fragCovers
+			CombCoverReader cvr(inFName, cSizes, _fragCovers, chrReadOccurs, TOTAL);	// fill total _fragCovers
 			if (!Glob::IsPE) {
 				const string extBaseName = baseName + FNameFragExt;
-				FillStrandCover(_fragCovers, extBaseName, chrFreq, FWD);
-				FillStrandCover(_fragCovers, extBaseName, chrFreq, RVS);
-				dataCnt += 2;
+				FillStrandCover(_fragCovers, extBaseName, chrReadOccurs, FWD);
+				FillStrandCover(_fragCovers, extBaseName, chrReadOccurs, RVS);
+				occursCnt += 2;
 			}
 			baseName += FNameReadExt;
-			FillStrandCover(_readCovers, baseName, chrFreq, FWD);
-			FillStrandCover(_readCovers, baseName, chrFreq, RVS);
+			FillStrandCover(_readCovers, baseName, chrReadOccurs, FWD);
+			FillStrandCover(_readCovers, baseName, chrReadOccurs, RVS);
 			
-			// ** set treated chroms
-			_cSizes.TreatedAll(false);
-			for (const auto& c : chrFreq)	// there're chroms represented in input Bedgraph only 
-				_cSizes.TreatedChrom(c.first, c.second == dataCnt);	// all active readers
+			// Generally speaking, the input data are independent of each other,
+			// so they may contain mismatched chromosomes.
+			// We set as treated only the chromosomes common to all input data.
+			_cSizes.SetTreated(chrReadOccurs, occursCnt);
 
 			_timer.Stop("Reading coverage: "); cout << LF;
 		}
