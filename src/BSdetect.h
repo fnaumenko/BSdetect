@@ -58,11 +58,16 @@ class Detector
 	Reads		_reads;		// may be filled for the first chromosome only, if fragment len is not defined
 	Timer		_timer;
 
-	void FillCover(CombCover& ccover, const string& baseName, tChromsFreq& chrFreq, eStrand strand)
+	// Fills read/frag coverage by Bedgraph file
+	//	@param cover: filled read/frag coverage
+	//	@param baseName: common parth of Bedgraph file's name
+	//	@param chrFreq: chrom frequency counter
+	//	@param strand: strand
+	void FillStrandCover(CombCover& cover, const string& baseName, tChromsFreq& chrFreq, eStrand strand)
 	{
-		CombCoverReader cover(
+		CombCoverReader ccr(
 			FS::CheckedFileName((baseName + sStrandEXT[strand] + FT::Ext(FT::BGRAPH)).c_str()),
-			_cSizes, ccover, chrFreq, strand);
+			_cSizes, cover, chrFreq, strand);
 	}
 
 	// Calculates the deviation from the default average fragment length
@@ -144,46 +149,37 @@ public:
 		, _bss		 (cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
 		, _fIdent(true)
 	{
-		// preparing coverage data
+		// *** preparing coverage data
 		{
-			const char* pattName = strrchr(inFName, '_');
-			{
-				// check inFName
-				string fragExt(pattName, strrchr(inFName, DOT) - pattName);
-				if (fragExt != FNameFragExt)
-					Err("only fragment coverage file is permissible", inFName).Throw();
-			}
+			const char* pattName = strrchr(inFName, USCORE);	// the presence of USCORE has already been checked
+			// check inFName for the presence of '_frag'
+			if (string(pattName, strrchr(inFName, DOT) - pattName) != FNameFragExt)
+				Err("only fragment coverage file is permissible", inFName).Throw();
+
 			string baseName(inFName,  pattName - inFName);
-
 			tChromsFreq	chrFreq;
+			BYTE dataCnt = 3;
+
 			_timer.Start();
-			// fill total _fragCovers
-			CombCoverReader cvrTotal(inFName, cSizes, _fragCovers, chrFreq, TOTAL);
+			CombCoverReader cvr(inFName, cSizes, _fragCovers, chrFreq, TOTAL);	// fill total _fragCovers
 			if (!Glob::IsPE) {
-				// fill strand _fragCovers
 				const string extBaseName = baseName + FNameFragExt;
-				FillCover(_fragCovers, extBaseName, chrFreq, FWD);
-				FillCover(_fragCovers, extBaseName, chrFreq, RVS);
-
-				//const string fCoverFwd = baseName + FNameFragExt + sStrandEXT[FWD] + FT::Ext(FT::BGRAPH);
-				//const string fCoverRvs = baseName + FNameFragExt + sStrandEXT[RVS] + FT::Ext(FT::BGRAPH);
-
-				//CombCoverReader cvrFwd(FS::CheckedFileName(fCoverFwd.c_str()), cSizes, _fragCovers, chrFreq, FWD);
-				//CombCoverReader cvrRvs(FS::CheckedFileName(fCoverRvs.c_str()), cSizes, _fragCovers, chrFreq, RVS);
+				FillStrandCover(_fragCovers, extBaseName, chrFreq, FWD);
+				FillStrandCover(_fragCovers, extBaseName, chrFreq, RVS);
+				dataCnt += 2;
 			}
-			// fill strand _readCovers
 			baseName += FNameReadExt;
-			FillCover(_readCovers, baseName, chrFreq, FWD);
-			FillCover(_readCovers, baseName, chrFreq, RVS);
-
-			cSizes.TreatedAll(false);
-			BYTE dataCnt = Glob::IsPE ? 3 : 5;
-			for (const auto& c : chrFreq)
-				_cSizes.TreatedChrom(c.first, c.second == dataCnt);	// all readers worked
+			FillStrandCover(_readCovers, baseName, chrFreq, FWD);
+			FillStrandCover(_readCovers, baseName, chrFreq, RVS);
+			
+			// ** set treated chroms
+			_cSizes.TreatedAll(false);
+			for (const auto& c : chrFreq)	// there're chroms represented in input Bedgraph only 
+				_cSizes.TreatedChrom(c.first, c.second == dataCnt);	// all active readers
 
 			_timer.Stop("Reading coverage: "); cout << LF;
 		}
-		// treatment
+		// *** treatment
 		for(const auto& c : _cSizes)
 			if(c.second.Treated)
 				CallBS(c.first);
