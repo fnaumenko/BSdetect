@@ -2,13 +2,15 @@
 callDist.h (c) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 All rights reserved.
 -------------------------
-Last modified: 03/23/2025
+Last modified: 04/04/2025
 -------------------------
 Provides main functionality
 ***********************************************************/
 
 #pragma once
 #include "Treatment.h"
+
+//#define TIMING
 
 enum optValue {		// options id
 	oBIN,
@@ -18,6 +20,7 @@ enum optValue {		// options id
 	oFRAG_LEN,
 	oSAVE_COVER,
 	oSAVE_INTER,
+	oSAVE_SPLINE,
 	oALARM,
 	oREAD_LEN,
 	oSINGLE_CHROM,
@@ -30,7 +33,67 @@ enum optValue {		// options id
 	oHHELP,
 };
 
-//#define TIMING
+const char* FragCoverDescr	= "fragment coverage";
+const char* ReadCoverDescr	= "read coverage";
+const char* FragSplineDescr = "fragment coverage spline";
+const char* ReadSplineDescr = "read coverage spline";
+const char* RegionsDescr	= "potential regions";
+const char* DerivDescr		= "derivative of read coverage spline";
+const char* RegressionDescr = "linear regression";
+const char* BS_Descr		= "called binding sites";
+
+const string FragSplineExt	= ".FR_SPLINE";
+const string ReadSplineExt	= ".SPLINE";
+const string RegionsExt		= ".RGNS";
+const string DerivExt		= ".DERIV";
+const string RegressionExt	= ".LINE";
+const string BS_Ext			= ".BSs";
+
+// Class for constructing a spline of an input Bedgraph file
+class Spliner
+{
+	ChromSizes&		_cSizes;
+	CombCover		_fragCovers;			// extended reads cover to find frag Mean
+	OCoverRegions	_regions;
+	OValuesMap		_splines;
+
+	void BuildSpline(chrid cID)
+	{
+		DataSet<TreatedCover>& fragCovers = _fragCovers.ChromData(cID);
+		DataCoverRegions& regions = static_cast<DataCoverRegions&>(_regions.ChromData(cID));
+
+		if (regions.SetPotentialRegions(fragCovers, _cSizes[cID], 3))
+			return;
+
+		(static_cast<DataValuesMap&>(_splines.ChromData(cID))).
+			BuildSpline(fragCovers, regions, 30);
+		_splines.WriteChrom(cID);
+	}
+
+public:
+	Spliner(
+		const char* inFName,
+		const string& outFName,
+		ChromSizes& cSizes,
+		bool saveInter
+	)
+		: _cSizes(cSizes)
+		, _fragCovers(cSizes, 1, false, strEmpty, NULL)
+		, _regions(cSizes, 1, saveInter, outFName + RegionsExt, RegionsDescr)
+		, _splines(cSizes, 1, true, outFName + ReadSplineExt, FragSplineDescr)
+	{
+		// *** preparing coverage data
+		{
+			tChromsOccurrs	chrReadOccurs;
+			CombCoverReader cvr(inFName, cSizes, _fragCovers, chrReadOccurs, TOTAL);
+			_cSizes.SetTreated(chrReadOccurs, 1);
+		}
+		// *** treatment
+		for (const auto& c : _cSizes)
+			if (c.second.Treated)
+				BuildSpline(c.first);
+	}
+};
 
 // BS detector
 class Detector
@@ -58,18 +121,6 @@ class Detector
 	Reads		_reads;		// may be filled for the first chromosome only, if fragment len is not defined
 	Timer		_timer;
 
-	// Fills read/frag coverage by Bedgraph file
-	//	@param cover: filled read/frag coverage
-	//	@param baseName: common parth of Bedgraph file's name
-	//	@param chrReadOccurs: chroms reading occurrences
-	//	@param strand: strand
-	void FillStrandCover(CombCover& cover, const string& baseName, tChromsOccurrs& chrReadOccurs, eStrand strand)
-	{
-		CombCoverReader ccr(
-			FS::CheckedFileName((baseName + sStrandEXT[strand] + FT::Ext(FT::BGRAPH)).c_str()),
-			_cSizes, cover, chrReadOccurs, strand);
-	}
-
 	// Calculates the deviation from the default average fragment length
 	//	@param cID: current chromosome's ID
 	//	@returns: deviation from the default average fragment length
@@ -87,22 +138,21 @@ public:
 	Detector(RBedReader& file, const string& outFName, ChromSizes& cSizes, bool saveCover, bool saveInter)
 		: _cSizes(cSizes)
 		, _saveCover(saveCover)
-		, _fragCovers(cSizes, 3-2*Glob::IsPE, saveCover, outFName + FNameFragExt, "fragment coverage")
-		, _readCovers(cSizes, 2, saveCover, outFName + FNameReadExt, "read coverage")
+		, _fragCovers(cSizes, 3-2*Glob::IsPE, saveCover, outFName + FNameFragExt, FragCoverDescr)
+		, _readCovers(cSizes, 2, saveCover, outFName + FNameReadExt, ReadCoverDescr)
 
-		//, _regions(cSizes, 2-Glob::IsPE, saveInter, outFName + ".RGNS", "potential regions")
-		, _regions(cSizes, 3, saveInter, outFName + ".RGNS", "potential regions")
-		//, _splines(cSizes, 2, saveInter, outFName + ".SPLINE", "read coverage spline")
-		, _splines(cSizes, 3, saveInter, outFName + ".SPLINE", "read coverage spline")
+		//, _regions(cSizes, 2-Glob::IsPE, saveInter, outFName + RegionsExt, RegionsDescr)
+		, _regions(cSizes, 3, saveInter, outFName + RegionsExt, RegionsDescr)
+		//, _splines(cSizes, 2, saveInter, outFName + ReadSplineExt, ReadSplineDescr)
+		, _splines(cSizes, 3, saveInter, outFName + ReadSplineExt, ReadSplineDescr)
 
-		, _derivs(cSizes, 2, saveInter, outFName + ".DERIV", "derivative of read coverage spline")
+		, _derivs(cSizes, 2, saveInter, outFName + DerivExt, DerivDescr)
 #ifdef MY_DEBUG
-		, _lineWriter(cSizes, 2, saveInter, outFName + ".LINE", "linear regression", DARK)
-		, _splineWriter(cSizes, 1, saveInter, outFName + ".FR_SPLINE", "fragment coverage spline")
+		, _lineWriter(cSizes, 2, saveInter, outFName + RegressionExt, RegressionDescr, DARK)
+		, _splineWriter(cSizes, 1, saveInter, outFName + FragSplineExt, FragSplineDescr)
 		, _outFName(outFName)
 #endif
-		//, _bss(cSizes, 1, true, outFName + ".BSs", "called binding sites")
-		, _bss(cSizes, 1, false, outFName + ".BSs", "called binding sites")
+		, _bss(cSizes, 1, false, outFName + BS_Ext, BS_Descr)
 		, _fIdent(true)
 	{
 		if (Verb::Level(Verb::RT))
@@ -136,17 +186,17 @@ public:
 	)
 		: _cSizes(cSizes)
 		, _saveCover(false)
-		, _fragCovers(cSizes,3-2*Glob::IsPE, false, outFName + FNameFragExt, "fragment coverage")
-		, _readCovers(cSizes,	2,			 false,	outFName + FNameReadExt, "read coverage")
-		, _regions	 (cSizes,2-Glob::IsPE,saveInter,outFName + ".RGNS"	, "potential regions")
-		, _splines	 (cSizes,	2,	saveInter,	outFName + ".SPLINE", "read coverage spline")
-		, _derivs	 (cSizes,	2,	saveInter,	outFName + ".DERIV"	, "derivative of read coverage spline")
+		, _fragCovers(cSizes,3-2*Glob::IsPE, false, outFName + FNameFragExt,	FragCoverDescr)
+		, _readCovers(cSizes,	2,			 false,	outFName + FNameReadExt,	ReadCoverDescr)
+		, _regions	 (cSizes,2-Glob::IsPE,saveInter,outFName + RegionsExt,		RegionsDescr)
+		, _splines	 (cSizes,	2,	saveInter,		outFName + ReadSplineExt,	ReadSplineDescr)
+		, _derivs	 (cSizes,	2,	saveInter,		outFName + DerivExt,		DerivDescr)
 #ifdef MY_DEBUG
-		, _lineWriter(cSizes,	2,	saveInter,	outFName + ".LINE"	, "linear regression", DARK)
-		, _splineWriter(cSizes,	1,	saveInter,	outFName + ".FR_SPLINE", "fragment coverage spline")
+		, _lineWriter(cSizes,	2,	saveInter,	outFName + RegressionExt, RegressionDescr, DARK)
+		, _splineWriter(cSizes,	1,	saveInter,	outFName + FragSplineExt, FragSplineDescr)
 		, _outFName(outFName)
 #endif
-		, _bss		 (cSizes,	1,	true,		outFName + ".BSs"	, "called binding sites")
+		, _bss		 (cSizes,	1,	true, outFName + BS_Ext, BS_Descr)
 		, _fIdent(true)
 	{
 		// *** preparing coverage data
@@ -159,18 +209,29 @@ public:
 			string baseName(inFName,  pattName - inFName);
 			tChromsOccurrs chrReadOccurs;	// chromosome reading occurrences
 			BYTE occursCnt = 3;				// count of reading operations
+			// Fills read/frag coverage by Bedgraph file
+			//	@param cover: filled read/frag coverage
+			//	@param baseName: common parth of Bedgraph file's name
+			auto fillStrandsCover = [this, &chrReadOccurs](CombCover& cover, const string& baseName)
+			{
+				auto fillStrandCover = [this, &chrReadOccurs](CombCover& cover, const string& baseName, eStrand strand)
+				{
+					CombCoverReader ccr(
+						FS::CheckedFileName((baseName + sStrandEXT[strand] + FT::Ext(FT::BGRAPH)).c_str()),
+						_cSizes, cover, chrReadOccurs, strand);
+				};
+
+				fillStrandCover(cover, baseName, FWD);
+				fillStrandCover(cover, baseName, RVS);
+			};
 
 			_timer.Start();
 			CombCoverReader cvr(inFName, cSizes, _fragCovers, chrReadOccurs, TOTAL);	// fill total _fragCovers
 			if (!Glob::IsPE) {
-				const string extBaseName = baseName + FNameFragExt;
-				FillStrandCover(_fragCovers, extBaseName, chrReadOccurs, FWD);
-				FillStrandCover(_fragCovers, extBaseName, chrReadOccurs, RVS);
+				fillStrandsCover(_fragCovers, baseName + FNameFragExt);
 				occursCnt += 2;
 			}
-			baseName += FNameReadExt;
-			FillStrandCover(_readCovers, baseName, chrReadOccurs, FWD);
-			FillStrandCover(_readCovers, baseName, chrReadOccurs, RVS);
+			fillStrandsCover(_readCovers, baseName + FNameReadExt);
 			
 			// Generally speaking, the input data are independent of each other,
 			// so they may contain mismatched chromosomes.

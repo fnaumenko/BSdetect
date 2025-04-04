@@ -2,7 +2,7 @@
 Treatment.h
 Provides support for binding sites discovery
 Fedor Naumenko (fedor.naumenko@gmail.com)
-Last modified: 03/23/2025
+Last modified: 04/04/2025
 ***********************************************************/
 #pragma once
 #include "common.h"
@@ -12,7 +12,7 @@ Last modified: 03/23/2025
 #include "CrossRgns.h"
 #include "Spline.h"
 
-#define MY_DEBUG
+//#define MY_DEBUG
 
 using point = pair<chrlen, float>;
 using coviter = covmap::const_iterator;
@@ -576,7 +576,7 @@ public:
 class DataCoverRegions : public DataSet<CoverRegions>
 {
 public:
-	// Fills the instance by potential regions of extended SE read coverage
+	// Fills the instance by potential regions of extended SE read or PE frag coverage
 	//	@param cover: fragment coverage
 	//	@param cLen: length of chromosome
 	//	@param cutoff: fragment coverage cut off value
@@ -669,9 +669,9 @@ public:
 class DataValuesMap : public DataSet<ValuesMap>
 {
 public:
-	// Fills strand spline curves by read coverage within regions
-	//	@param rCover: raw strand read coverages
-	//	@param rgns: strand potential regions
+	// Fills total or strand spline curves by read coverage within regions
+	//	@param rCover: raw total or strand read coverages
+	//	@param rgns: total or strand potential regions
 	//	@param splineBase: half-length of spliner moving window
 	void BuildSpline(const DataSet<TreatedCover>& rcover, const DataCoverRegions& rgns, fraglen splineBase = ReadSplineBASE);
 

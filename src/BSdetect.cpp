@@ -3,7 +3,7 @@ BSdetect is designed to deconvolve real Binding Sites in NGS alignment
 
 Copyright (C) 2021 Fedor Naumenko (fedor.naumenko@gmail.com)
 -------------------------
-Last modified: 03/22/2025
+Last modified: 04/04/2025
 -------------------------
 
 This program is free software. It is distributed in the hope that it will be useful,
@@ -43,6 +43,7 @@ Options::Option Options::List[] = {
 	{ 'f',"fr-len",	tOpt::NONE,	tINT,	gOTHER, 0, 50, 1000, NULL, "mean fragment length for SE sequence [AUTO]" },
 	{ 's',"save-cover",tOpt::NONE,tENUM,gOTHER,	FALSE,	NO_VAL,	0, NULL, "save coverage" },
 	{ 'i',"save-inter",tOpt::HIDDEN,tENUM,gOTHER,FALSE,	NO_VAL,	0, NULL, "save intermediate data" },
+	{ HPH,"spline",	tOpt::HIDDEN,tENUM,gOTHER,FALSE,	NO_VAL,	0, NULL, "save input spline" },
 	{ 'w', "warn",	tOpt::HIDDEN,tENUM,	gOTHER, FALSE,	NO_VAL, 0, NULL, "print each read ambiguity, if they exist" },
 	{ 'R',"rd-len",	tOpt::HIDDEN,	tINT,	gOTHER, 50, 20, 1000, NULL,
 	"fixed length of output read, or mean length of variable reads" },
@@ -63,20 +64,18 @@ const Options::Usage Options::Usages[] = {	// content of 'Usage' variants in hel
 };
 const BYTE Options::UsageCount = ArrCnt(Options::Usages);
 
-//void fstr(const char* a)
-//{
-//	const char* sample = "PE";
-//	auto res = strstr(a, sample);
-//	if (res)	cout << res << LF;
-//	else cout << "not found\n";
-//}
+void CheckForPEbyFileName(const char* fName)
+{
+	const char* pattName = strchr(fName, USCORE);
+	if (pattName)
+		Glob::SetPE(strstr(++pattName, "PE"));
+	else
+		Err("invalid input fragment coverage file name", fName).Throw();
+}
 
 /*****************************************/
 int main(int argc, char* argv[])
 {
-	//fstr("_PE_");
-	//fstr("_pe_");
-	//return 0;
 	int fileInd = Options::Parse(argc, argv, ProgParam);
 	if (fileInd < 0)	return 1;		// wrong option or tip output
 	int ret = 0;						// main() return code
@@ -88,9 +87,7 @@ int main(int argc, char* argv[])
 	Timer timer;
 	try {
 		const char* iName = FS::CheckedFileName(argv[fileInd]);	// input name
-		const char* oName = Options::GetSVal(oOUTFILE);			// output name
 		const char* gName = Options::GetSVal(oGEN);				// chrom sizes
-
 #ifdef MY_DEBUG
 		TreatedCover::WriteDelim = true;
 #endif
@@ -98,20 +95,19 @@ int main(int argc, char* argv[])
 		Verb::Set(Options::GetUIVal(oVERB));
 		Glob::SetFragLen(Options::GetIVal(oFRAG_LEN));
 
-		Glob::BinWidth = BYTE(Options::GetIVal(oBIN));
+		Glob::BinWidth = BYTE(Options::GetIVal(oBIN));	// TODO: temporary?
 
 
 		auto ftype = FT::GetType(iName);
 		if (!gName && ftype != FT::BAM)
 			Err(Options::OptionToStr(oGEN) + " is required while input file is not BAM", iName).Throw();
-		//{
-		//	TabReader tfile("\\Documents\\Prof\\Bioinfo\\Data\\test\\cmd_fastqn.txt");
-		//	tfile.Print();	cout << LF;
-		//}
 		ChromSizes cSizes(gName, true);
 
-		// main mode
+		auto oName = FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName);
+
+		// *** main mode
 		if (ftype != FT::BGRAPH) {
+			// ** check input alignment fo PE mode
 			RBedReader file(
 				iName,
 				&cSizes,
@@ -124,33 +120,19 @@ int main(int argc, char* argv[])
 			file.GetNextItem();		// no need to check for empty sequence
 			Glob::SetPE(file.IsPaired());
 
-			// detect BS
-			Detector bsd(
-				file,
-				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
-				cSizes,
-				Options::GetBVal(oSAVE_COVER),
-				Options::GetBVal(oSAVE_INTER)
-			);
+			// ** detect BS
+			Detector bsd(file, oName, cSizes, Options::GetBVal(oSAVE_COVER), Options::GetBVal(oSAVE_INTER));
 		}
-		// pre-covered data mode
-		else {
-			Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
-			{	// check iName for 'PE' pattern match
-				const char* pattName = strchr(iName, USCORE);
-				if (pattName)
-					Glob::SetPE(strstr(++pattName, "PE"));
-				else
-					Err("invalid fragment coverage file name", iName).Throw();
-			}
+		// *** pre-covered data mode
+		else
+			if (Options::Assigned(oSAVE_SPLINE))	// ** detect and save input BG file spline
+				Spliner spl(iName, oName, cSizes, Options::GetBVal(oSAVE_INTER));
+			else {									// ** find BS using pre-covered files
+				Glob::ReadLen = Options::GetUIVal(oREAD_LEN);
+				CheckForPEbyFileName(iName);
 
-			Detector bsd(
-				iName,
-				FS::ComposeFileName(Options::GetSVal(oOUTFILE), iName),
-				cSizes,
-				Options::GetBVal(oSAVE_INTER)
-			);
-		}
+				Detector bsd(iName, oName, cSizes, Options::GetBVal(oSAVE_INTER));
+			}
 	}
 	catch (const Err& e) { ret = 1; cerr << e.what() << endl; }
 	catch (const exception& e) { ret = 1; cerr << e.what() << endl; }
@@ -219,9 +201,10 @@ void Detector::CallBS(chrid cID)
 	Verb::PrintMsg(Verb::RT, "Locate binding sites\n");
 	if (regions.SetPotentialRegions(fragCovers, cLen, 3))
 		return;
+#ifdef MY_DEBUG
 	regions.PrintScoreDistrib(_outFName + ".RGNS_discard", false);
 	//regions.PrintScoreDistrib(_outFName + ".RGNS_all", true);
-
+#endif
 	splines.BuildSpline(readCovers, regions);	_regions.WriteChrom(cID);
 	splines.DiscardNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
@@ -231,10 +214,10 @@ void Detector::CallBS(chrid cID)
 	//derivs.Print(5002900);
 	//return;
 	bss.Set(derivs, readCovers);	_readCovers.WriteChrom(cID); _derivs.WriteChrom(cID);
-	bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
+	//bss.Print(cID, _outFName + ".BSS_dump0.txt", false);
 	bss.Refine();
 	//return;
-	bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
+	//bss.Print(cID, _outFName + ".BSS_dump1.txt", false);
 	//bss.SetScore(fragCovers);		
 	_fragCovers.WriteChrom(cID);
 #ifdef MY_DEBUG

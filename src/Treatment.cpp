@@ -425,8 +425,10 @@ void CoverRegions::SetPotentialRegions(const TreatedCover& cover, chrlen capacit
 			}
 			start = 0;
 		}
+#ifdef MY_DEBUG
 	IGVlocus locus(Glob::CurrChrom);
 	printf("MAX: VAL: %d POS: %d\t%s\n", maxVal, maxPos, locus.Print(maxPos));
+#endif
 }
 
 bool CoverRegions::SetTopPeakRegions(const DataSet<TreatedCover>& fragCover, coval cutoff)
@@ -548,9 +550,8 @@ void CoverRegions::PrintScoreDistrib(const string& fname, bool all) const
 bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, chrlen cLen, coval cutoff, bool noMultiOverl)
 {
 	chrlen capacity = cLen / (Glob::FragLen * 100);
-	if (Glob::IsPE)
-		TotalData().SetPotentialRegions(cover.TotalData(), capacity, cutoff * 2);
-	else {
+	
+	if (HasStrands()) {
 		StrandData(FWD).SetPotentialRegions(cover.StrandData(FWD), capacity, cutoff);
 		StrandData(RVS).SetPotentialRegions(cover.StrandData(RVS), capacity, cutoff);
 
@@ -569,6 +570,10 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 		if (Verb::Level(Verb::DBG))
 			PrintRegionStats<CoverRegions>(data, cLen);
 	}
+	else
+		// this case is applicable to the PE mode or to the construction of a spline for the input file
+		TotalData().SetPotentialRegions(cover.TotalData(), capacity, cutoff * (1 + Glob::IsPE));
+
 	if (!Empty())	return false;
 	Verb::PrintMsg(Verb::CRIT, "No enriched regions found");
 	return true;
@@ -578,7 +583,8 @@ bool DataCoverRegions::SetPotentialRegions(const DataSet<TreatedCover>& cover, c
 void DataCoverRegions::PrintScoreDistrib(const string& fname, bool all) const
 {
 
-	if (Glob::IsPE)
+	//if (Glob::IsPE)
+	if (!Strands())
 		TotalData().PrintScoreDistrib(fname, all);
 	else {
 		StrandData(FWD).PrintScoreDistrib(fname + sStrandEXT[FWD], all);
@@ -729,10 +735,11 @@ void ValuesMap::Print(chrid cID, BYTE reverse, chrlen stopNumb) const
 
 void ValuesMap::BuildRegionSpline(bool reverse, const TreatedCover& rCover, const CoverRegion& rgn, fraglen splineBase)
 {
+	// TODO: is 'reverse' needed?
 	/*
 	Both forward & reverse splines are built from left to right
 	*/
-	assert(Glob::ReadLen);
+	//assert(Glob::ReadLen);	// TODO: is this needed?
 	coviter it0;	// at the beginning the start it, then used as a variable
 	coviter itEnd;	// the end it
 	SSpliner<coval> spliner(CurveTYPE, splineBase);
@@ -894,9 +901,14 @@ void ValuesMap::PrintStat(chrlen clen) const
 void DataValuesMap::BuildSpline(
 	const DataSet<TreatedCover>& rCover, const DataCoverRegions& rgns, fraglen splineBase)
 {
-	const BYTE strand = !Glob::IsPE;	// TOTAL for PE or FWD for SE
-	StrandData(FWD).BuildSpline(false, rCover.StrandData(FWD), rgns.StrandData(eStrand(strand)), splineBase);
-	StrandData(RVS).BuildSpline(true, rCover.StrandData(RVS), rgns.StrandData(eStrand(2*strand)), splineBase);
+	if (HasStrands()) {
+		// TODO: check for PE: is it needed?
+		const BYTE strand = !Glob::IsPE;	// TOTAL for PE or FWD for SE
+		StrandData(FWD).BuildSpline(false, rCover.StrandData(FWD), rgns.StrandData(eStrand(strand)), splineBase);
+		StrandData(RVS).BuildSpline(true, rCover.StrandData(RVS), rgns.StrandData(eStrand(2 * strand)), splineBase);
+	}
+	else
+		StrandData(TOTAL).BuildSpline(false, rCover.StrandData(TOTAL), rgns.StrandData(TOTAL), splineBase);
 }
 
 float DataValuesMap::GetPeakPosDiff() 
