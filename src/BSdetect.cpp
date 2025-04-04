@@ -205,7 +205,7 @@ void Detector::CallBS(chrid cID)
 #ifdef MY_DEBUG
 	regions.PrintScoreDistrib(_outFName + ".RGNS_discard", false);
 	//regions.PrintScoreDistrib(_outFName + ".RGNS_all", true);
-
+#endif
 	splines.BuildSpline(readCovers, regions);	_regions.WriteChrom(cID);
 	splines.DiscardNonOverlaps();
 	if (Verb::Level(Verb::DBG))		splines.PrintStat(cLen);
