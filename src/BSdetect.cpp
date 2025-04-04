@@ -195,7 +195,6 @@ void Detector::CallBS(chrid cID)
 		//_reads.Clear();
 		//regions.Clear();
 		//Glob::FragLenUndef = false;
-		//timer.Stop();	cout << LF;
 	}
 	_fragCovers.WriteChrom(cID, false);		// !!! for debug
 	//return;
